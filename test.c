@@ -24,15 +24,42 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <time.h>
+#include <math.h>
 #include <SDL.h>
 
 #include "tilemap.h"
 #include "synth.h"
 
+#define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 /* initial settings */
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (640)
 #define WINDOW_HEIGHT   (480)
+#define CAT_RATE        (33)
+#define CAT_VELOCITY    (7)
+#define CAT_ANIM_DIV    (3)
+#define BG_R (47)
+#define BG_G (17)
+#define BG_B (49)
+#define SPRITE_SCALE (2.0)
+
+#define TEST_SPRITESHEET   "cat.bmp"
+#define TEST_SPRITE_WIDTH  (32)
+#define TEST_SPRITE_HEIGHT (32)
+const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
+                                                2, 3};
+#define TEST_RESTING_X (0)
+#define TEST_RESTING_Y (0)
+#define TEST_ANIM0_X   (0)
+#define TEST_ANIM0_Y   (1)
+#define TEST_ANIM1_X   (1)
+#define TEST_ANIM1_Y   (1)
+
+typedef enum {
+    CAT_RESTING,
+    CAT_ANIM0,
+    CAT_ANIM1
+} CatState;
 
 int initialize_video(SDL_Window **win,
                      SDL_Renderer **renderer,
@@ -188,6 +215,79 @@ error:
     return(-1);
 }
 
+int tileset_from_bmp(LayerList *ll,
+                     const char *filename,
+                     unsigned int tw,
+                     unsigned int th) {
+    SDL_Surface *surface;
+    int tileset;
+
+    surface = SDL_LoadBMP(filename);
+    if(surface == NULL) {
+        fprintf(stderr, "Failed to load %s.\n", filename);
+        return(-1);
+    }
+    if(SDL_LockSurface(surface) < 0) {
+        fprintf(stderr, "Failed to lock surface.\n");
+        SDL_FreeSurface(surface);
+        return(-1);
+    }
+
+    tileset = tilemap_add_tileset(ll,
+                                  surface,
+                                  tw, th);
+    SDL_FreeSurface(surface);
+    return(tileset);
+}
+
+/* i don't knwo what i'm doing */
+double angle_from_xy(double x, double y) {
+    if(x == 0.0) {
+        if(y < 0.0) {
+            return(M_PI);
+        } else if(y >= 0.0) {
+            return(0.0);
+        }
+    } else if(y == 0.0) {
+        if(x < 0.0) {
+            return(M_PI * 0.5);
+        } else if(x > 0.0) {
+            return(M_PI * 1.5);
+        }
+    } else if(x > 0.0 && y > 0.0) {
+        if(x < y) {
+            return((M_PI * 2.0) - tan(x / y));
+        } else {
+            return((M_PI * 1.5) + tan(y / x));
+        }
+    } else if(x < 0.0 && y > 0.0) {
+        x = -x;
+        if(x < y) {
+            return(tan(x / y));
+        } else {
+            return((M_PI * 0.5) - tan(y / x));
+        }
+    } else if(x > 0.0 && y < 0.0) {
+        y = -y;
+        if(x < y) {
+            return(M_PI + tan(x / y));
+        } else {
+            return((M_PI * 1.5) - tan(y / x));
+        }
+    }
+
+    x = -x;
+    y = -y;
+    if(x < y) {
+        return(M_PI - tan(x / y));
+    }
+    return((M_PI * 0.5) + tan(y / x));
+}
+
+double radian_to_degree(double radian) {
+    return(radian / (M_PI * 2) * 360.0);
+}
+
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
     FILE *out = priv;
@@ -210,6 +310,16 @@ int main(int argc, char **argv) {
     int running;
     int mouseCaptured = 0;
     unsigned int mouseReleaseCombo = 0;
+    int tileset;
+    int tilemap;
+    int catlayer;
+    int mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
+    int mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
+    int catx = mousex;
+    int caty = mousey;
+    Uint32 nextMotion = SDL_GetTicks() + CAT_RATE;
+    CatState catState = CAT_ANIM0;
+    int animCounter = 0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -247,10 +357,81 @@ int main(int argc, char **argv) {
     /* seed random */
     srand(time(NULL));
 
+    /* init stuff */
+
+    /* load the spritesheet */
+    tileset = tileset_from_bmp(ll,
+                               TEST_SPRITESHEET,
+                               TEST_SPRITE_WIDTH,
+                               TEST_SPRITE_HEIGHT);
+    if(tileset < 0) {
+        fprintf(stderr, "Failed to load spritesheet.\n");
+        goto error_synth;
+    }
+    /* create a single tile map (sprite) */
+    tilemap = tilemap_add_tilemap(ll, 2, 2);
+    if(tilemap < 0) {
+        fprintf(stderr, "Failed to make tilemap.\n");
+        goto error_synth;
+    }
+    /* assign the spritesheet to the sprite */
+    if(tilemap_set_tilemap_tileset(ll, tilemap, tileset) < 0) {
+        fprintf(stderr, "Failed to apply tileset to tilemap.\n");
+        goto error_synth;
+    }
+    /* set up its map for the first time (not likely necessary in this case
+     * since it's probably already 0, but for demonstration purposes) */
+    if(tilemap_set_tilemap_map(ll, tilemap, 
+                               0, 0, /* start x and y for destination rectangle */
+                               2, /* row width for source rectangle */
+                               2, 2, /* size of rectangle */
+                               TEST_SPRITESHEET_VALUES, /* the values of the
+                                                           map rect */
+                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES)
+                               /* number of values to expect */
+                               ) < 0) {
+        fprintf(stderr, "Failed to set tilemap map.\n");
+        goto error_synth;
+    }
+    /* update/"render out" the tilemap for the first time */
+    if(tilemap_update_tilemap(ll, tilemap,
+                              0, 0, /* start rectangle to update */
+                              2, 2) /* update rectangle size */ < 0) {
+        fprintf(stderr, "Failed to update tilemap.\n");
+        goto error_synth;
+    }
+    /* add the tilemap to a layer */
+    catlayer = tilemap_add_layer(ll, tilemap);
+    if(catlayer < 0) {
+        fprintf(stderr, "Failed to create cat layer.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_window(ll, catlayer,
+                                TEST_SPRITE_WIDTH,
+                                TEST_SPRITE_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set layer window.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_scroll_pos(ll, catlayer,
+                                    TEST_ANIM0_X * TEST_SPRITE_WIDTH,
+                                    TEST_ANIM0_Y * TEST_SPRITE_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set layer scroll pos.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_rotation_center(ll, catlayer,
+                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
+                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set layer rotation center.\n");
+        goto error_synth;
+    }
+    tilemap_set_layer_scale(ll, catlayer, SPRITE_SCALE, SPRITE_SCALE);
+
     running = 1;
     while(running) {
         /* clear the display, otherwise it'll show flickery garbage */
-        if(SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE) < 0) {
+        if(SDL_SetRenderDrawColor(renderer,
+                                  BG_R, BG_G, BG_B,
+                                  SDL_ALPHA_OPAQUE) < 0) {
             fprintf(stderr, "Failed to set render draw color.\n");
             goto error_synth;
         } 
@@ -305,23 +486,41 @@ int main(int argc, char **argv) {
 
             /* handle inputs */
             switch(lastEvent.type) {
+                SDL_KeyboardEvent *key;
+                SDL_MouseMotionEvent *motion;
                 case SDL_QUIT:
                     running = 0;
                     continue;
                 case SDL_KEYDOWN:
+                    key = (SDL_KeyboardEvent *)&lastEvent;
                     /* suppress repeat events */
-                    if(((SDL_KeyboardEvent *)&lastEvent)->repeat) {
+                    if(key->repeat) {
                         continue;
                     }
                     break;
                 case SDL_KEYUP:
-                    if(((SDL_KeyboardEvent *)&lastEvent)->repeat) {
+                    key = (SDL_KeyboardEvent *)&lastEvent;
+                    if(key->repeat) {
                         continue;
                     }
                     break;
                 case SDL_MOUSEMOTION:
+                    motion = (SDL_MouseMotionEvent *)&lastEvent;
+                    mousex = motion->x;
+                    mousey = motion->y;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
+                    if(catState == CAT_RESTING) {
+                        catState = CAT_ANIM0;
+                    } else {
+                        catState = CAT_RESTING;
+                        if(tilemap_set_layer_scroll_pos(ll, catlayer,
+                                                        TEST_RESTING_X * TEST_SPRITE_WIDTH,
+                                                        TEST_RESTING_Y * TEST_SPRITE_HEIGHT) < 0) {
+                            fprintf(stderr, "Failed to set layer scroll pos.\n");
+                            goto error_synth;
+                        }
+                    }
                     break;
                 case SDL_MOUSEBUTTONUP:
                     break;
@@ -337,6 +536,69 @@ int main(int argc, char **argv) {
         }
 
         /* frame stuff */
+        Uint32 thisTick = SDL_GetTicks();
+        if(thisTick >= nextMotion) {
+            nextMotion += CAT_RATE;
+            if(catState != CAT_RESTING) {
+                int motionx = mousex - catx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
+                int motiony = mousey - caty - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
+                if(tilemap_set_layer_rotation(ll, catlayer,
+                                              radian_to_degree(angle_from_xy(motionx, motiony))) < 0) {
+                    fprintf(stderr, "Failed to set layer rotation.\n");
+                    goto error_synth;
+                }
+                
+                if(motionx < -CAT_VELOCITY) {
+                    catx -= CAT_VELOCITY;
+                } else if(motionx > CAT_VELOCITY) {
+                    catx += CAT_VELOCITY;
+                } else {
+                    catx += motionx;
+                }
+                if(motiony < -CAT_VELOCITY) {
+                    caty -= CAT_VELOCITY;
+                } else if(motiony > CAT_VELOCITY) {
+                    caty += CAT_VELOCITY;
+                } else {
+                    caty += motiony;
+                }
+                if(catState == CAT_ANIM0) {
+                    animCounter++;
+                    if(animCounter >= CAT_ANIM_DIV) {
+                        catState = CAT_ANIM1;
+                        animCounter = 0;
+                        if(tilemap_set_layer_scroll_pos(ll, catlayer,
+                                                        TEST_ANIM1_X * TEST_SPRITE_WIDTH,
+                                                        TEST_ANIM1_Y * TEST_SPRITE_HEIGHT) < 0) {
+                            fprintf(stderr, "Failed to set layer scroll pos.\n");
+                            goto error_synth;
+                        }
+                    }
+                } else {
+                    animCounter++;
+                    if(animCounter >= CAT_ANIM_DIV) {
+                        catState = CAT_ANIM0;
+                        animCounter = 0;
+                        if(tilemap_set_layer_scroll_pos(ll, catlayer,
+                                                        TEST_ANIM0_X * TEST_SPRITE_WIDTH,
+                                                        TEST_ANIM0_Y * TEST_SPRITE_HEIGHT) < 0) {
+                            fprintf(stderr, "Failed to set layer scroll pos.\n");
+                            goto error_synth;
+                        }
+                    }
+                }
+            }
+        }
+
+        if(tilemap_set_layer_pos(ll, catlayer,
+                                 catx, caty) < 0) {
+            fprintf(stderr, "Failed to set cat position.\n");
+            goto error_synth;
+        }
+        if(tilemap_draw_layer(ll, catlayer) < 0) {
+            fprintf(stderr, "Failed to draw cat layer.\n");
+            goto error_synth;
+        }
 
         SDL_RenderPresent(renderer);
     }

@@ -36,10 +36,8 @@
 #define TILEMAP_BLENDMODE_MUL   (3)
 #define TILEMAP_BLENDMODE_SUB   (4)
 
-/* not sure what to use..., opengl driver on here shows ARGB
- * as the texture format, and on little endian it should be
- * arranged as 0xBBGGRRAA.  No idea how much this differs
- * across various computers.. */
+/* comment that was here doesn't matter, this is just for creating colormod
+ * values which are converted to what they should be internally */
 #define TILEMAP_BMASK (0xFF000000)
 #define TILEMAP_BSHIFT (24)
 #define TILEMAP_GMASK (0x00FF0000)
@@ -63,10 +61,7 @@ LayerList *layerlist_new(SDL_Renderer *renderer,
 void layerlist_free(LayerList *ll);
 
 int tilemap_add_tileset(LayerList *ll,
-                        void *pixels,
-                        unsigned int w,
-                        unsigned int h,
-                        unsigned int pitch,
+                        SDL_Surface *surface,
                         unsigned int tw,
                         unsigned int th);
 int tilemap_free_tileset(LayerList *ll, unsigned int index);
@@ -132,6 +127,10 @@ int tilemap_set_layer_scale(LayerList *ll,
                             unsigned int index,
                             double scale_x,
                             double scale_y);
+int tilemap_set_layer_rotation_center(LayerList *ll,
+                                      unsigned int index,
+                                      int x,
+                                      int y);
 int tilemap_set_layer_rotation(LayerList *ll,
                                unsigned int index,
                                double angle);

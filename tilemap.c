@@ -66,6 +66,7 @@ typedef struct {
     int h;
     double scale_x;
     double scale_y;
+    SDL_Point center;
     double angle;
     Uint32 colormod;
     SDL_BlendMode blendMode;
@@ -207,19 +208,18 @@ void layerlist_free(LayerList *ll) {
 }
 
 int tilemap_add_tileset(LayerList *ll,
-                        void *pixels,
-                        unsigned int w,
-                        unsigned int h,
-                        unsigned int pitch,
+                        SDL_Surface *surface,
                         unsigned int tw,
                         unsigned int th) {
     Tileset *temp;
-    SDL_Surface *surface, *surface2;
+    SDL_Surface *surface2;
     SDL_Texture *tex;
     unsigned int i, j;
     unsigned int maxx, maxy;
     unsigned int texw, texh;
     SDL_Rect src, dest;
+    unsigned int w = surface->w;
+    unsigned int h = surface->h;
 
     /* tiles should at least be 1x1 */
     if(tw == 0 || th == 0) {
@@ -236,21 +236,6 @@ int tilemap_add_tileset(LayerList *ll,
     maxx = w / tw;
     maxy = h / th;
 
-    /* create the surface */
-    surface = SDL_CreateRGBSurfaceFrom(pixels,
-                                        w,
-                                        h,
-                                        32,
-                                        pitch,
-                                        TILEMAP_RMASK,
-                                        TILEMAP_GMASK,
-                                        TILEMAP_BMASK,
-                                        TILEMAP_AMASK);
-    if(surface == NULL) {
-        LOG_PRINTF(ll, "Failed to create surface.\n");
-        return(-1);
-    }
-
     /* make sure the texture ends up being a power of two */
     texw = find_power_of_two(w);
     texh = find_power_of_two(h);
@@ -259,23 +244,21 @@ int tilemap_add_tileset(LayerList *ll,
                                         texw,
                                         texh,
                                         32,
-                                        TILEMAP_RMASK,
-                                        TILEMAP_GMASK,
-                                        TILEMAP_BMASK,
-                                        TILEMAP_AMASK);
+                                        surface->format->Rmask,
+                                        surface->format->Gmask,
+                                        surface->format->Bmask,
+                                        surface->format->Amask);
         if(surface2 == NULL) {
             LOG_PRINTF(ll, "Failed to create power of two surface.\n");
-            SDL_FreeSurface(surface);
             return(-1);
         }
         src.x = 0; src.y = 0; src.w = surface->w; src.h = surface->h;
         dest.x = 0; dest.y = 0; dest.w = surface2->w; dest.h = surface2->h;
         if(SDL_BlitSurface(surface, &src, surface2, &dest) < 0) {
             LOG_PRINTF(ll, "Failed to copy to power of two surface.\n");
-            SDL_FreeSurface(surface);
             SDL_FreeSurface(surface2);
+            return(-1);
         }
-        SDL_FreeSurface(surface);
         surface = surface2;
     }
 
@@ -283,10 +266,14 @@ int tilemap_add_tileset(LayerList *ll,
     tex = SDL_CreateTextureFromSurface(ll->renderer, surface);
     if(tex == NULL) {
         LOG_PRINTF(ll, "Failed to create texture from surface.\n");
-        SDL_FreeSurface(surface);
+        if(surface == surface2) {
+            SDL_FreeSurface(surface);
+        }
         return(-1);
     }
-    SDL_FreeSurface(surface);
+    if(surface == surface2) {
+        SDL_FreeSurface(surface);
+    }
 
     /* make values overwrite existing values */
     if(SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE) < 0) {
@@ -925,6 +912,8 @@ int tilemap_add_layer(LayerList *ll,
         ll->layer[0].scroll_y = 0;
         ll->layer[0].scale_x = 1.0;
         ll->layer[0].scale_y = 1.0;
+        ll->layer[0].center.x = 0;
+        ll->layer[0].center.y = 0;
         ll->layer[0].angle = 0.0;
         ll->layer[0].colormod = TILEMAP_COLOR(255, 255, 255, 255);
         ll->layer[0].blendMode = SDL_BLENDMODE_BLEND;
@@ -943,6 +932,8 @@ int tilemap_add_layer(LayerList *ll,
             ll->layer[i].scroll_y = 0;
             ll->layer[i].scale_x = 1.0;
             ll->layer[i].scale_y = 1.0;
+            ll->layer[i].center.x = 0;
+            ll->layer[i].center.y = 0;
             ll->layer[i].angle = 0.0;
             ll->layer[i].colormod = TILEMAP_COLOR(255, 255, 255, 255);
             ll->layer[i].blendMode = SDL_BLENDMODE_BLEND;
@@ -968,6 +959,8 @@ int tilemap_add_layer(LayerList *ll,
     ll->layer[i].scroll_y = 0;
     ll->layer[i].scale_x = 1.0;
     ll->layer[i].scale_y = 1.0;
+    ll->layer[i].center.x = 0;
+    ll->layer[i].center.y = 0;
     ll->layer[i].angle = 0.0;
     ll->layer[i].colormod = TILEMAP_COLOR(255, 255, 255, 255);
     ll->layer[i].blendMode = SDL_BLENDMODE_BLEND;
@@ -1095,6 +1088,19 @@ int tilemap_set_layer_scale(LayerList *ll,
 
     ll->layer[index].scale_x = scale_x;
     ll->layer[index].scale_y = scale_y;
+
+    return(0);
+}
+
+int tilemap_set_layer_rotation_center(LayerList *ll, unsigned int index, int x, int y) {
+    if(index >= ll->layersmem ||
+       ll->layer[index].tilemap == -1) {
+        LOG_PRINTF(ll, "Invalid layer index.\n");
+        return(-1);
+    }
+
+    ll->layer[index].center.x = x;
+    ll->layer[index].center.y = y;
 
     return(0);
 }
@@ -1278,7 +1284,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
                             &src,
                             &dest,
                             layer->angle,
-                            &ZEROZERO,
+                            &(layer->center),
                             SDL_FLIP_NONE) < 0) {
             LOG_PRINTF(ll, "Failed to render layer.\n");
             return(-1);
