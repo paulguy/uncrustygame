@@ -33,10 +33,12 @@
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 /* initial settings */
 #define WINDOW_TITLE    "UnCrustyGame Test"
-#define WINDOW_WIDTH    (640)
-#define WINDOW_HEIGHT   (480)
-#define CAT_RATE        (33)
-#define CAT_VELOCITY    (7)
+#define WINDOW_WIDTH    (1024)
+#define WINDOW_HEIGHT   (768)
+#define CAT_FPS         (30)
+#define CAT_RATE        (1000 / CAT_FPS)
+#define CAT_VELOCITY    (5)
+#define CAT_TURN_SPEED  (M_PI * 2 / CAT_FPS)
 #define CAT_ANIM_DIV    (3)
 #define BG_R (47)
 #define BG_G (17)
@@ -256,36 +258,46 @@ double angle_from_xy(double x, double y) {
         }
     } else if(x > 0.0 && y > 0.0) {
         if(x < y) {
-            return((M_PI * 2.0) - tan(x / y));
+            return((M_PI * 2.0) - atan(x / y));
         } else {
-            return((M_PI * 1.5) + tan(y / x));
+            return((M_PI * 1.5) + atan(y / x));
         }
     } else if(x < 0.0 && y > 0.0) {
         x = -x;
         if(x < y) {
-            return(tan(x / y));
+            return(atan(x / y));
         } else {
-            return((M_PI * 0.5) - tan(y / x));
+            return((M_PI * 0.5) - atan(y / x));
         }
     } else if(x > 0.0 && y < 0.0) {
         y = -y;
         if(x < y) {
-            return(M_PI + tan(x / y));
+            return(M_PI + atan(x / y));
         } else {
-            return((M_PI * 1.5) - tan(y / x));
+            return((M_PI * 1.5) - atan(y / x));
         }
     }
 
     x = -x;
     y = -y;
     if(x < y) {
-        return(M_PI - tan(x / y));
+        return(M_PI - atan(x / y));
     }
-    return((M_PI * 0.5) + tan(y / x));
+    return((M_PI * 0.5) + atan(y / x));
 }
 
 double radian_to_degree(double radian) {
     return(radian / (M_PI * 2) * 360.0);
+}
+
+double velocity_from_xy(double x, double y) {
+    return(sqrt(pow(x, 2) + pow(y, 2)));
+}
+
+/* still have no idea */
+void xy_from_angle(double *x, double *y, double angle) {
+    *x = -sin(angle);
+    *y = cos(angle);
 }
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
@@ -315,11 +327,12 @@ int main(int argc, char **argv) {
     int catlayer;
     int mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
     int mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
-    int catx = mousex;
-    int caty = mousey;
+    double catx = mousex;
+    double caty = mousey;
     Uint32 nextMotion = SDL_GetTicks() + CAT_RATE;
     CatState catState = CAT_ANIM0;
     int animCounter = 0;
+    double catAngle = 0.0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -540,28 +553,43 @@ int main(int argc, char **argv) {
         if(thisTick >= nextMotion) {
             nextMotion += CAT_RATE;
             if(catState != CAT_RESTING) {
-                int motionx = mousex - catx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
-                int motiony = mousey - caty - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
-                if(tilemap_set_layer_rotation(ll, catlayer,
-                                              radian_to_degree(angle_from_xy(motionx, motiony))) < 0) {
-                    fprintf(stderr, "Failed to set layer rotation.\n");
-                    goto error_synth;
+                double motionx = mousex - catx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
+                double motiony = mousey - caty - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
+                double velocity = velocity_from_xy(motionx, motiony);
+                if(velocity >= 1.0) {
+                    double angle = angle_from_xy(motionx, motiony);
+                    double angleDiff;
+                    if(catAngle > M_PI && angle < catAngle - M_PI) {
+                        angle += M_PI * 2;
+                    } else if(catAngle < M_PI && angle > catAngle + M_PI) {
+                        angle -= M_PI * 2;
+                    }
+                    angleDiff = catAngle - angle;
+                    if(angleDiff > CAT_TURN_SPEED) {
+                        angleDiff = CAT_TURN_SPEED;
+                    } else if(angleDiff < -CAT_TURN_SPEED) {
+                        angleDiff = -CAT_TURN_SPEED;
+                    }
+                    catAngle -= angleDiff;
+                    if(catAngle < 0.0) {
+                        catAngle += M_PI * 2;
+                    } else if(catAngle >= M_PI * 2) {
+                        catAngle -= M_PI * 2;
+                    }
+                    if(tilemap_set_layer_rotation(ll, catlayer,
+                                                  radian_to_degree(catAngle)) < 0) {
+                        fprintf(stderr, "Failed to set layer rotation.\n");
+                        goto error_synth;
+                    }
+                    
+                    if(velocity > CAT_VELOCITY) {
+                        velocity = CAT_VELOCITY;
+                    }
+                    xy_from_angle(&motionx, &motiony, catAngle);
+                    catx += motionx * velocity;
+                    caty += motiony * velocity;
                 }
-                
-                if(motionx < -CAT_VELOCITY) {
-                    catx -= CAT_VELOCITY;
-                } else if(motionx > CAT_VELOCITY) {
-                    catx += CAT_VELOCITY;
-                } else {
-                    catx += motionx;
-                }
-                if(motiony < -CAT_VELOCITY) {
-                    caty -= CAT_VELOCITY;
-                } else if(motiony > CAT_VELOCITY) {
-                    caty += CAT_VELOCITY;
-                } else {
-                    caty += motiony;
-                }
+
                 if(catState == CAT_ANIM0) {
                     animCounter++;
                     if(animCounter >= CAT_ANIM_DIV) {
