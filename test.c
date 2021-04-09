@@ -37,21 +37,33 @@
 #define WINDOW_HEIGHT   (768)
 #define CAT_FPS         (30)
 #define CAT_RATE        (1000 / CAT_FPS)
-#define CAT_VELOCITY    (5)
+#define CAT_VELOCITY    (5.0)
 #define CAT_TURN_SPEED  (M_PI * 2 / CAT_FPS)
 #define CAT_ANIM_DIV    (3)
 #define BG_R (47)
 #define BG_G (17)
 #define BG_B (49)
 #define SPRITE_SCALE (2.0)
+#define ZZZ_TRANSLUCENCY (192)
+#define ZZZ_AMP          (10)
+#define ZZZ_CYCLE_SPEED  (M_PI * 2 / CAT_FPS / 3)
+#define ZZZ_COLOR_BIAS   (128)
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
 #define TEST_SPRITE_HEIGHT (32)
 const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
                                                 2, 3};
+#define C_OPAQUE TILEMAP_COLOR(255, 255, 255, 255)
+#define C_TRANSL TILEMAP_COLOR(255, 255, 255, ZZZ_TRANSLUCENCY)
+const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
+    C_OPAQUE, C_TRANSL,
+    C_OPAQUE, C_OPAQUE
+};
 #define TEST_RESTING_X (0)
 #define TEST_RESTING_Y (0)
+#define TEST_ZZZ_X     (1)
+#define TEST_ZZZ_Y     (0)
 #define TEST_ANIM0_X   (0)
 #define TEST_ANIM0_Y   (1)
 #define TEST_ANIM1_X   (1)
@@ -300,6 +312,25 @@ void xy_from_angle(double *x, double *y, double angle) {
     *y = cos(angle);
 }
 
+unsigned int color_from_angle(double angle, unsigned int bias) {
+    if(angle >= 0 && angle < (M_PI * 2.0) / 3.0) {
+        return(TILEMAP_COLOR(255 - (unsigned int)(angle / ((M_PI * 2.0) / 3.0) * (255.0 - bias)),
+                             (unsigned int)(angle / ((M_PI * 2.0) / 3.0) * (255.0 - bias)) + bias,
+                             bias, 255));
+    } else if(angle >= (M_PI * 2.0) / 3.0 &&
+       angle < (M_PI * 2.0) / 3.0 * 2.0) {
+        return(TILEMAP_COLOR(bias,
+                             255 - (unsigned int)((angle - ((M_PI * 2.0) / 3.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)),
+                             (unsigned int)((angle - ((M_PI * 2.0) / 3.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)) + bias,
+                             255));
+
+    }
+    return(TILEMAP_COLOR((unsigned int)((angle - ((M_PI * 2.0) / 3.0 * 2.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)) + bias,
+                         bias,
+                         255 - (unsigned int)((angle - ((M_PI * 2.0) / 3.0 * 2.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)),
+                         255));
+}
+
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
     FILE *out = priv;
@@ -333,6 +364,8 @@ int main(int argc, char **argv) {
     CatState catState = CAT_ANIM0;
     int animCounter = 0;
     double catAngle = 0.0;
+    int zzzlayer;
+    double zzzcycle = 0.0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -381,7 +414,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to load spritesheet.\n");
         goto error_synth;
     }
-    /* create a single tile map (sprite) */
+    /* create the tilemap */
     tilemap = tilemap_add_tilemap(ll, 2, 2);
     if(tilemap < 0) {
         fprintf(stderr, "Failed to make tilemap.\n");
@@ -406,6 +439,18 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set tilemap map.\n");
         goto error_synth;
     }
+    /* apply color modifications, arguments are basically identical to setting
+     * the tilemap map */
+    if(tilemap_set_tilemap_attr_colormod(ll, tilemap,
+                                         0, 0,
+                                         2,
+                                         2, 2,
+                                         TEST_SPRITESHEET_COLORMOD,
+                                         ARRAY_COUNT(TEST_SPRITESHEET_COLORMOD)
+                                        ) < 0) {
+        fprintf(stderr, "Failed to set tilemap colormod.\n");
+        goto error_synth;
+    }
     /* update/"render out" the tilemap for the first time */
     if(tilemap_update_tilemap(ll, tilemap,
                               0, 0, /* start rectangle to update */
@@ -419,26 +464,28 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to create cat layer.\n");
         goto error_synth;
     }
+    /* make the tilemap window the size of a single sprite */
     if(tilemap_set_layer_window(ll, catlayer,
                                 TEST_SPRITE_WIDTH,
                                 TEST_SPRITE_HEIGHT) < 0) {
         fprintf(stderr, "Failed to set layer window.\n");
         goto error_synth;
     }
-    if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                    TEST_ANIM0_X * TEST_SPRITE_WIDTH,
-                                    TEST_ANIM0_Y * TEST_SPRITE_HEIGHT) < 0) {
-        fprintf(stderr, "Failed to set layer scroll pos.\n");
-        goto error_synth;
-    }
+    /* make the rotation center in the center of the sprite so it rotates
+     * about where it aims for the cursor */
     if(tilemap_set_layer_rotation_center(ll, catlayer,
                                          TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
                                          TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
         fprintf(stderr, "Failed to set layer rotation center.\n");
         goto error_synth;
     }
-    tilemap_set_layer_scale(ll, catlayer, SPRITE_SCALE, SPRITE_SCALE);
+    /* Makes the sprite more visible without me having to draw a larger sprite */
+    if(tilemap_set_layer_scale(ll, catlayer, SPRITE_SCALE, SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set layer scale.\n");
+        goto error_synth;
+    }
 
+    /* ##### MAIN LOOP ##### */
     running = 1;
     while(running) {
         /* clear the display, otherwise it'll show flickery garbage */
@@ -510,6 +557,14 @@ int main(int argc, char **argv) {
                     if(key->repeat) {
                         continue;
                     }
+
+                    if(key->keysym.sym == SDLK_q) {
+                        running = 0;
+                    } else if(key->keysym.sym == SDLK_e) {
+                        /* simulate an error, which will only only free the
+                         * whole layerlist, testing possible memory leaks */ 
+                        goto error_synth;
+                    }
                     break;
                 case SDL_KEYUP:
                     key = (SDL_KeyboardEvent *)&lastEvent;
@@ -525,11 +580,39 @@ int main(int argc, char **argv) {
                 case SDL_MOUSEBUTTONDOWN:
                     if(catState == CAT_RESTING) {
                         catState = CAT_ANIM0;
+                        if(tilemap_free_layer(ll, zzzlayer) < 0) {
+                            fprintf(stderr, "Failed to free ZZZ layer.\n");
+                            goto error_synth;
+                        }
                     } else {
                         catState = CAT_RESTING;
                         if(tilemap_set_layer_scroll_pos(ll, catlayer,
                                                         TEST_RESTING_X * TEST_SPRITE_WIDTH,
                                                         TEST_RESTING_Y * TEST_SPRITE_HEIGHT) < 0) {
+                            fprintf(stderr, "Failed to set layer scroll pos.\n");
+                            goto error_synth;
+                        }
+
+                        zzzlayer = tilemap_add_layer(ll, tilemap);
+                        if(zzzlayer < 0) {
+                            fprintf(stderr, "Failed to create ZZZ layer.\n");
+                            goto error_synth;
+                        }
+                        if(tilemap_set_layer_window(ll, zzzlayer,
+                                                    TEST_SPRITE_WIDTH,
+                                                    TEST_SPRITE_HEIGHT) < 0) {
+                            fprintf(stderr, "Failed to set layer window.\n");
+                            goto error_synth;
+                        }
+                        if(tilemap_set_layer_scale(ll, zzzlayer,
+                                                   SPRITE_SCALE,
+                                                   SPRITE_SCALE) < 0) {
+                            fprintf(stderr, "Failed to set layer scale.\n");
+                            goto error_synth;
+                        }
+                        if(tilemap_set_layer_scroll_pos(ll, zzzlayer,
+                                                        TEST_ZZZ_X * TEST_SPRITE_WIDTH,
+                                                        TEST_ZZZ_Y * TEST_SPRITE_HEIGHT) < 0) {
                             fprintf(stderr, "Failed to set layer scroll pos.\n");
                             goto error_synth;
                         }
@@ -615,6 +698,25 @@ int main(int argc, char **argv) {
                         }
                     }
                 }
+            } else { /* CAT_RESTING */
+                if(tilemap_set_layer_pos(ll, zzzlayer,
+                                     catx + TEST_SPRITE_WIDTH,
+                                     caty - TEST_SPRITE_HEIGHT + 
+                                     (sin(zzzcycle) * ZZZ_AMP)) < 0) {
+                    fprintf(stderr, "Failed to set ZZZ position.\n");
+                    goto error_synth;
+                }
+                if(tilemap_set_layer_colormod(ll, zzzlayer,
+                                              color_from_angle(zzzcycle,
+                                                               ZZZ_COLOR_BIAS)) < 0) {
+                    fprintf(stderr, "Failed to set ZZZ colormod.\n");
+                    goto error_synth;
+                }
+
+                zzzcycle += ZZZ_CYCLE_SPEED;
+                if(zzzcycle > M_PI * 2) {
+                    zzzcycle -= M_PI * 2;
+                }
             }
         }
 
@@ -627,11 +729,22 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Failed to draw cat layer.\n");
             goto error_synth;
         }
+        if(catState == CAT_RESTING) {
+            if(tilemap_draw_layer(ll, zzzlayer) < 0) {
+                fprintf(stderr, "Failed to draw ZZZ layer.\n");
+                goto error_synth;
+            }
+        }
 
         SDL_RenderPresent(renderer);
     }
 
     synth_free(s);
+
+    /* test cleanup functions */
+    tilemap_free_layer(ll, catlayer);
+    tilemap_free_tilemap(ll, tilemap);
+    tilemap_free_tileset(ll, tileset);
     layerlist_free(ll);
 
     SDL_DestroyWindow(win);

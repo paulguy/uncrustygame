@@ -46,10 +46,10 @@
 #define TILEMAP_RSHIFT (8)
 #define TILEMAP_AMASK (0x000000FF)
 #define TILEMAP_ASHIFT (0)
-#define TILEMAP_COLOR(CR, CG, CB, CA) ((CR << TILEMAP_RSHIFT) | \
-                                       (CG << TILEMAP_GSHIFT) | \
-                                       (CB << TILEMAP_BSHIFT) | \
-                                       (CA << TILEMAP_ASHIFT))
+#define TILEMAP_COLOR(CR, CG, CB, CA) (((CR) << TILEMAP_RSHIFT) | \
+                                       ((CG) << TILEMAP_GSHIFT) | \
+                                       ((CB) << TILEMAP_BSHIFT) | \
+                                       ((CA) << TILEMAP_ASHIFT))
 
 typedef struct LayerList_t LayerList;
 typedef void (*layerlist_log_cb_t)(void *priv, const char *fmt, ...);
