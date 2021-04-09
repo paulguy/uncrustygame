@@ -1,0 +1,15 @@
+UnCrustyGame - Making the useful components from crustygame actually useful
+
+BUILDING:
+make
+
+BUILDING TEST CASE:
+make -F Makefile.test
+
+RUNNING TEST CASE:
+./test.sh
+
+mouse position - where the cat will chase
+click          - toggle cat mode
+q              - quit
+e              - simulate error quit
