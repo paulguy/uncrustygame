@@ -853,7 +853,7 @@ int main(int argc, char **argv) {
                         goto error_synth;
                     }
                     
-                    velocity = find_cat_velocity(velocity, angle,
+                    velocity = find_cat_velocity(velocity, catAngle,
                                                  catx, caty,
                                                  winwidth, winheight);
                     xy_from_angle(&motionx, &motiony, catAngle);

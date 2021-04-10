@@ -10,6 +10,8 @@ RUNNING TEST CASE:
 ./test.sh
 
 mouse position - where the cat will chase
-click          - toggle cat mode
+left click     - toggle cat mode
+right click    - teleport cat
 q              - quit
 e              - simulate error quit
+f              - toggle fullscreen
