@@ -32,8 +32,8 @@
 
 /* initial settings */
 #define WINDOW_TITLE    "UnCrustyGame Test"
-#define WINDOW_WIDTH    (1024)
-#define WINDOW_HEIGHT   (768)
+#define WINDOW_WIDTH    (1280)
+#define WINDOW_HEIGHT   (720)
 #define SPRITE_SCALE    (2.0)
 #define BG_R (47)
 #define BG_G (17)
@@ -43,6 +43,7 @@
 #define CAT_VELOCITY   (5.0)
 #define CAT_TURN_SPEED (M_PI * 2 / CAT_FPS)
 #define CAT_ANIM_DIV   (6)
+#define CAT_OFFSCREEN_DIST_FACTOR (0.1)
 #define ZZZ_TRANSLUCENCY (128)
 #define ZZZ_AMP          (10)
 #define ZZZ_CYCLE_SPEED  (M_PI * 2 / CAT_FPS / 3)
@@ -180,7 +181,7 @@ int initialize_video(SDL_Window **win,
                             SDL_WINDOWPOS_UNDEFINED,
                             WINDOW_WIDTH,
                             WINDOW_HEIGHT,
-                            0);
+                            SDL_WINDOW_RESIZABLE);
     if(*win == NULL) {
         fprintf(stderr, "Failed to create SDL window.\n");
         goto error;
@@ -320,8 +321,9 @@ void xy_from_angle(double *x, double *y, double angle) {
     *y = cos(angle);
 }
 
-#define COLORDIV ((M_PI * 2.0) / 6.0)
 unsigned int color_from_angle(double angle, unsigned int bias) {
+    const double COLORDIV = ((M_PI * 2.0) / 6.0);
+
     if(angle >= 0.0 && angle < COLORDIV) {
         return(TILEMAP_COLOR(255,
                              bias,
@@ -369,7 +371,121 @@ unsigned int color_from_angle(double angle, unsigned int bias) {
                          255,
                          255));
 }
-#undef COLORDIV
+
+double find_cat_velocity(double curdist, double angle, int catx, int caty, int winwidth, int winheight) {
+    if(catx < 0) {
+        if(caty < 0) {
+            if(angle > M_PI * 1.5 && angle <= M_PI * 1.75) {
+                double distance = sqrt(pow(-catx, 2) + pow(-caty, 2));
+                return(SCALE(angle,
+                             M_PI * 1.5, M_PI * 1.75,
+                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else if(angle > M_PI * 1.75 && angle <= M_PI * 2.0) {
+                double distance = sqrt(pow(-catx, 2) + pow(-caty, 2));
+                return(SCALEINV(angle,
+                                M_PI * 1.75, M_PI * 2.0,
+                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else {
+                return(CAT_VELOCITY);
+            }
+        } else if(caty > winheight) {
+            if(angle > M_PI && angle <= M_PI * 1.25) {
+                double distance = sqrt(pow(-catx, 2) + pow(caty - winheight, 2));
+                return(SCALE(angle,
+                             M_PI, M_PI * 1.25,
+                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else if(angle > M_PI * 1.25 && angle <= M_PI * 1.5) {
+                double distance = sqrt(pow(-catx, 2) + pow(caty - winheight, 2));
+                return(SCALEINV(angle,
+                                M_PI * 1.25, M_PI * 1.5,
+                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else {
+                return(CAT_VELOCITY);
+            }
+        } else {
+            if(angle > M_PI && angle <= M_PI * 1.5) {
+                return(SCALE(angle,
+                             M_PI, M_PI * 1.5,
+                             CAT_VELOCITY, -catx * CAT_OFFSCREEN_DIST_FACTOR));
+            } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
+                return(SCALEINV(angle,
+                                M_PI * 1.5, M_PI * 2.0,
+                                CAT_VELOCITY, -catx * CAT_OFFSCREEN_DIST_FACTOR));
+            } else {
+                return(CAT_VELOCITY);
+            }
+        }
+    } else if(catx > winwidth) { 
+        if(caty < 0) {
+            if(angle > 0 && angle <= M_PI * 0.25) {
+                double distance = sqrt(pow(catx - winwidth, 2) + pow(-caty, 2));
+                return(SCALE(angle,
+                             0, M_PI * 0.25,
+                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else if(angle > M_PI * 0.25 && angle <= M_PI * 0.5) {
+                double distance = sqrt(pow(catx - winwidth, 2) + pow(-caty, 2));
+                return(SCALEINV(angle,
+                                M_PI * 0.25, M_PI * 0.5,
+                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else {
+                return(CAT_VELOCITY);
+            }
+        } else if(caty > winheight) {
+            if(angle > M_PI * 0.5 && angle <= M_PI * 0.75) {
+                double distance = sqrt(pow(catx - winwidth, 2) + pow(caty - winheight, 2));
+                return(SCALE(angle,
+                             M_PI * 0.5, M_PI * 0.75,
+                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else if(angle > M_PI * 0.75 && angle <= M_PI) {
+                double distance = sqrt(pow(catx - winwidth, 2) + pow(caty - winheight, 2));
+                return(SCALEINV(angle,
+                                M_PI * 0.75, M_PI,
+                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+            } else {
+                return(CAT_VELOCITY);
+            }
+        } else {
+            if(angle > 0 && angle <= M_PI * 0.5) {
+                return(SCALE(angle,
+                             0, M_PI * 0.5,
+                             CAT_VELOCITY, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR));
+            } else if(angle > M_PI * 0.5 && angle <= M_PI) {
+                return(SCALEINV(angle,
+                                M_PI * 0.5, M_PI,
+                                CAT_VELOCITY, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR));
+            } else {
+                return(CAT_VELOCITY);
+            }
+        }
+    } else if(caty < 0) {
+        if(angle > 0 && angle <= M_PI * 0.5) {
+            return(SCALEINV(angle,
+                         0, M_PI * 0.5,
+                         CAT_VELOCITY, -caty * CAT_OFFSCREEN_DIST_FACTOR));
+        } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
+            return(SCALEINV(angle,
+                            M_PI * 1.5, M_PI,
+                            CAT_VELOCITY, -caty * CAT_OFFSCREEN_DIST_FACTOR));
+        } else {
+            return(CAT_VELOCITY);
+        }
+    } else if(caty > winheight) {
+        if(angle > M_PI * 0.5 && angle <= M_PI) {
+            return(SCALE(angle,
+                         M_PI * 0.5, M_PI,
+                         CAT_VELOCITY, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR));
+        } else if(angle > M_PI && angle <= M_PI * 1.5) {
+            return(SCALEINV(angle,
+                            M_PI, M_PI * 1.5,
+                            CAT_VELOCITY, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR));
+        } else {
+            return(CAT_VELOCITY);
+        }
+    } else if(curdist > CAT_VELOCITY) {
+        return(CAT_VELOCITY);
+    }
+    return(curdist);
+}
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -406,6 +522,9 @@ int main(int argc, char **argv) {
     double catAngle = 0.0;
     int zzzlayer;
     double zzzcycle = 0.0;
+    int fullscreen = 0;
+    int winwidth = WINDOW_WIDTH;
+    int winheight = WINDOW_HEIGHT;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -588,6 +707,8 @@ int main(int argc, char **argv) {
             switch(lastEvent.type) {
                 SDL_KeyboardEvent *key;
                 SDL_MouseMotionEvent *motion;
+                SDL_MouseButtonEvent *click;
+                SDL_WindowEvent *winEv;
                 case SDL_QUIT:
                     running = 0;
                     continue;
@@ -604,6 +725,20 @@ int main(int argc, char **argv) {
                         /* simulate an error, which will only only free the
                          * whole layerlist, testing possible memory leaks */ 
                         goto error_synth;
+                    } else if(key->keysym.sym == SDLK_f) {
+                        if(fullscreen) {
+                            if(SDL_SetWindowFullscreen(win, 0) < 0) {
+                                fprintf(stderr, "Failed to make window windowed.\n");
+                            } else {
+                                fullscreen = !fullscreen;
+                            }
+                        } else {
+                            if(SDL_SetWindowFullscreen(win, SDL_WINDOW_FULLSCREEN_DESKTOP) < 0) {
+                                fprintf(stderr, "Failed to make window full screen.\n");
+                            } else {
+                                fullscreen = !fullscreen;
+                            }
+                        }
                     }
                     break;
                 case SDL_KEYUP:
@@ -618,47 +753,60 @@ int main(int argc, char **argv) {
                     mousey = motion->y;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
-                    if(catState == CAT_RESTING) {
-                        catState = CAT_ANIM0;
-                        if(tilemap_free_layer(ll, zzzlayer) < 0) {
-                            fprintf(stderr, "Failed to free ZZZ layer.\n");
-                            goto error_synth;
-                        }
-                    } else {
-                        catState = CAT_RESTING;
-                        if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                                        TEST_RESTING_X * TEST_SPRITE_WIDTH,
-                                                        TEST_RESTING_Y * TEST_SPRITE_HEIGHT) < 0) {
-                            fprintf(stderr, "Failed to set layer scroll pos.\n");
-                            goto error_synth;
-                        }
+                    click = (SDL_MouseButtonEvent *)&lastEvent;
+                    if(click->button == 1) {
+                        if(catState == CAT_RESTING) {
+                            catState = CAT_ANIM0;
+                            if(tilemap_free_layer(ll, zzzlayer) < 0) {
+                                fprintf(stderr, "Failed to free ZZZ layer.\n");
+                                goto error_synth;
+                            }
+                        } else {
+                            catState = CAT_RESTING;
+                            if(tilemap_set_layer_scroll_pos(ll, catlayer,
+                                                            TEST_RESTING_X * TEST_SPRITE_WIDTH,
+                                                            TEST_RESTING_Y * TEST_SPRITE_HEIGHT) < 0) {
+                                fprintf(stderr, "Failed to set layer scroll pos.\n");
+                                goto error_synth;
+                            }
 
-                        zzzlayer = tilemap_add_layer(ll, tilemap);
-                        if(zzzlayer < 0) {
-                            fprintf(stderr, "Failed to create ZZZ layer.\n");
-                            goto error_synth;
+                            zzzlayer = tilemap_add_layer(ll, tilemap);
+                            if(zzzlayer < 0) {
+                                fprintf(stderr, "Failed to create ZZZ layer.\n");
+                                goto error_synth;
+                            }
+                            if(tilemap_set_layer_window(ll, zzzlayer,
+                                                        TEST_SPRITE_WIDTH,
+                                                        TEST_SPRITE_HEIGHT) < 0) {
+                                fprintf(stderr, "Failed to set layer window.\n");
+                                goto error_synth;
+                            }
+                            if(tilemap_set_layer_scale(ll, zzzlayer,
+                                                       SPRITE_SCALE,
+                                                       SPRITE_SCALE) < 0) {
+                                fprintf(stderr, "Failed to set layer scale.\n");
+                                goto error_synth;
+                            }
+                            if(tilemap_set_layer_scroll_pos(ll, zzzlayer,
+                                                            TEST_ZZZ_X * TEST_SPRITE_WIDTH,
+                                                            TEST_ZZZ_Y * TEST_SPRITE_HEIGHT) < 0) {
+                                fprintf(stderr, "Failed to set layer scroll pos.\n");
+                                goto error_synth;
+                            }
                         }
-                        if(tilemap_set_layer_window(ll, zzzlayer,
-                                                    TEST_SPRITE_WIDTH,
-                                                    TEST_SPRITE_HEIGHT) < 0) {
-                            fprintf(stderr, "Failed to set layer window.\n");
-                            goto error_synth;
-                        }
-                        if(tilemap_set_layer_scale(ll, zzzlayer,
-                                                   SPRITE_SCALE,
-                                                   SPRITE_SCALE) < 0) {
-                            fprintf(stderr, "Failed to set layer scale.\n");
-                            goto error_synth;
-                        }
-                        if(tilemap_set_layer_scroll_pos(ll, zzzlayer,
-                                                        TEST_ZZZ_X * TEST_SPRITE_WIDTH,
-                                                        TEST_ZZZ_Y * TEST_SPRITE_HEIGHT) < 0) {
-                            fprintf(stderr, "Failed to set layer scroll pos.\n");
-                            goto error_synth;
-                        }
+                    } else if(click->button == 3) {
+                        catx = mousex;
+                        caty = mousey;
                     }
                     break;
                 case SDL_MOUSEBUTTONUP:
+                    break;
+                case SDL_WINDOWEVENT:
+                    winEv = (SDL_WindowEvent *)&lastEvent;
+                    if(winEv->event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                        winwidth = winEv->data1;
+                        winheight = winEv->data2;
+                    }
                     break;
                 default:
                     break;
@@ -705,9 +853,9 @@ int main(int argc, char **argv) {
                         goto error_synth;
                     }
                     
-                    if(velocity > CAT_VELOCITY) {
-                        velocity = CAT_VELOCITY;
-                    }
+                    velocity = find_cat_velocity(velocity, angle,
+                                                 catx, caty,
+                                                 winwidth, winheight);
                     xy_from_angle(&motionx, &motiony, catAngle);
                     catx += motionx * velocity;
                     caty += motiony * velocity;
