@@ -30,24 +30,26 @@
 #include "tilemap.h"
 #include "synth.h"
 
-#define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 /* initial settings */
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (1024)
 #define WINDOW_HEIGHT   (768)
-#define CAT_FPS         (30)
-#define CAT_RATE        (1000 / CAT_FPS)
-#define CAT_VELOCITY    (5.0)
-#define CAT_TURN_SPEED  (M_PI * 2 / CAT_FPS)
-#define CAT_ANIM_DIV    (3)
+#define SPRITE_SCALE    (2.0)
 #define BG_R (47)
 #define BG_G (17)
 #define BG_B (49)
-#define SPRITE_SCALE (2.0)
-#define ZZZ_TRANSLUCENCY (192)
+#define CAT_FPS        (60)
+#define CAT_RATE       (1000 / CAT_FPS)
+#define CAT_VELOCITY   (5.0)
+#define CAT_TURN_SPEED (M_PI * 2 / CAT_FPS)
+#define CAT_ANIM_DIV   (6)
+#define ZZZ_TRANSLUCENCY (128)
 #define ZZZ_AMP          (10)
 #define ZZZ_CYCLE_SPEED  (M_PI * 2 / CAT_FPS / 3)
-#define ZZZ_COLOR_BIAS   (128)
+#define ZZZ_COLOR_BIAS   (64)
+/* from bottom-left */
+#define ZZZ_POS_X        (0.75)
+#define ZZZ_POS_Y        (0.75)
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
@@ -68,6 +70,12 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_ANIM0_Y   (1)
 #define TEST_ANIM1_X   (1)
 #define TEST_ANIM1_Y   (1)
+
+#define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
+#define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
+    ((((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))) + (DMIN))
+#define SCALEINV(VAL, SMIN, SMAX, DMIN, DMAX) \
+    ((DMAX) - (((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))))
 
 typedef enum {
     CAT_RESTING,
@@ -312,24 +320,56 @@ void xy_from_angle(double *x, double *y, double angle) {
     *y = cos(angle);
 }
 
+#define COLORDIV ((M_PI * 2.0) / 6.0)
 unsigned int color_from_angle(double angle, unsigned int bias) {
-    if(angle >= 0 && angle < (M_PI * 2.0) / 3.0) {
-        return(TILEMAP_COLOR(255 - (unsigned int)(angle / ((M_PI * 2.0) / 3.0) * (255.0 - bias)),
-                             (unsigned int)(angle / ((M_PI * 2.0) / 3.0) * (255.0 - bias)) + bias,
-                             bias, 255));
-    } else if(angle >= (M_PI * 2.0) / 3.0 &&
-       angle < (M_PI * 2.0) / 3.0 * 2.0) {
-        return(TILEMAP_COLOR(bias,
-                             255 - (unsigned int)((angle - ((M_PI * 2.0) / 3.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)),
-                             (unsigned int)((angle - ((M_PI * 2.0) / 3.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)) + bias,
+    if(angle >= 0.0 && angle < COLORDIV) {
+        return(TILEMAP_COLOR(255,
+                             bias,
+                             (unsigned int)SCALEINV(angle,
+                                                    0.0, COLORDIV,
+                                                    (double)bias, 255.0),
                              255));
-
+    } else if(angle >= COLORDIV &&
+       angle < COLORDIV * 2.0) {
+        return(TILEMAP_COLOR(255,
+                             (unsigned int)SCALE(angle,
+                                                 COLORDIV, COLORDIV * 2.0,
+                                                 (double)bias, 255.0),
+                             bias,
+                             255));
+    } else if(angle >= COLORDIV * 2.0 &&
+       angle < COLORDIV * 3.0) {
+        return(TILEMAP_COLOR((unsigned int)SCALEINV(angle,
+                                                    COLORDIV * 2.0, COLORDIV * 3.0,
+                                                    (double)bias, 255.0),
+                             255,
+                             bias,
+                             255));
+    } else if(angle >= COLORDIV * 3.0 &&
+       angle < COLORDIV * 4.0) {
+        return(TILEMAP_COLOR(bias,
+                             255,
+                             (unsigned int)SCALE(angle,
+                                                 COLORDIV * 3.0, COLORDIV * 4.0,
+                                                 (double)bias, 255.0),
+                             255));
+    } else if(angle >= COLORDIV * 4.0 &&
+       angle < COLORDIV * 5.0) {
+        return(TILEMAP_COLOR(bias,
+                             (unsigned int)SCALEINV(angle,
+                                                    COLORDIV * 4.0, COLORDIV * 5.0,
+                                                    (double)bias, 255.0),
+                             255,
+                             255));
     }
-    return(TILEMAP_COLOR((unsigned int)((angle - ((M_PI * 2.0) / 3.0 * 2.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)) + bias,
+    return(TILEMAP_COLOR((unsigned int)SCALE(angle,
+                                             COLORDIV * 5.0, COLORDIV * 6.0,
+                                             (double)bias, 255.0),
                          bias,
-                         255 - (unsigned int)((angle - ((M_PI * 2.0) / 3.0 * 2.0)) / ((M_PI * 2.0) / 3.0) * (255.0 - bias)),
+                         255,
                          255));
 }
+#undef COLORDIV
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -700,8 +740,8 @@ int main(int argc, char **argv) {
                 }
             } else { /* CAT_RESTING */
                 if(tilemap_set_layer_pos(ll, zzzlayer,
-                                     catx + TEST_SPRITE_WIDTH,
-                                     caty - TEST_SPRITE_HEIGHT + 
+                                     catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
+                                     caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
                                      (sin(zzzcycle) * ZZZ_AMP)) < 0) {
                     fprintf(stderr, "Failed to set ZZZ position.\n");
                     goto error_synth;
@@ -714,7 +754,7 @@ int main(int argc, char **argv) {
                 }
 
                 zzzcycle += ZZZ_CYCLE_SPEED;
-                if(zzzcycle > M_PI * 2) {
+                if(zzzcycle >= M_PI * 2) {
                     zzzcycle -= M_PI * 2;
                 }
             }
