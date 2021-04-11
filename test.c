@@ -379,12 +379,14 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
                 double distance = sqrt(pow(-catx, 2) + pow(-caty, 2));
                 return(SCALE(angle,
                              M_PI * 1.5, M_PI * 1.75,
-                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else if(angle > M_PI * 1.75 && angle <= M_PI * 2.0) {
                 double distance = sqrt(pow(-catx, 2) + pow(-caty, 2));
                 return(SCALEINV(angle,
                                 M_PI * 1.75, M_PI * 2.0,
-                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else {
                 return(CAT_VELOCITY);
             }
@@ -393,12 +395,14 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
                 double distance = sqrt(pow(-catx, 2) + pow(caty - winheight, 2));
                 return(SCALE(angle,
                              M_PI, M_PI * 1.25,
-                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else if(angle > M_PI * 1.25 && angle <= M_PI * 1.5) {
                 double distance = sqrt(pow(-catx, 2) + pow(caty - winheight, 2));
                 return(SCALEINV(angle,
                                 M_PI * 1.25, M_PI * 1.5,
-                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else {
                 return(CAT_VELOCITY);
             }
@@ -406,11 +410,13 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
             if(angle > M_PI && angle <= M_PI * 1.5) {
                 return(SCALE(angle,
                              M_PI, M_PI * 1.5,
-                             CAT_VELOCITY, -catx * CAT_OFFSCREEN_DIST_FACTOR));
+                             0, -catx * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
                 return(SCALEINV(angle,
                                 M_PI * 1.5, M_PI * 2.0,
-                                CAT_VELOCITY, -catx * CAT_OFFSCREEN_DIST_FACTOR));
+                                0, -catx * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else {
                 return(CAT_VELOCITY);
             }
@@ -421,12 +427,14 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
                 double distance = sqrt(pow(catx - winwidth, 2) + pow(-caty, 2));
                 return(SCALE(angle,
                              0, M_PI * 0.25,
-                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else if(angle > M_PI * 0.25 && angle <= M_PI * 0.5) {
                 double distance = sqrt(pow(catx - winwidth, 2) + pow(-caty, 2));
                 return(SCALEINV(angle,
                                 M_PI * 0.25, M_PI * 0.5,
-                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else {
                 return(CAT_VELOCITY);
             }
@@ -435,12 +443,14 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
                 double distance = sqrt(pow(catx - winwidth, 2) + pow(caty - winheight, 2));
                 return(SCALE(angle,
                              M_PI * 0.5, M_PI * 0.75,
-                             CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else if(angle > M_PI * 0.75 && angle <= M_PI) {
                 double distance = sqrt(pow(catx - winwidth, 2) + pow(caty - winheight, 2));
                 return(SCALEINV(angle,
                                 M_PI * 0.75, M_PI,
-                                CAT_VELOCITY, distance * CAT_OFFSCREEN_DIST_FACTOR));
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else {
                 return(CAT_VELOCITY);
             }
@@ -448,11 +458,13 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
             if(angle > 0 && angle <= M_PI * 0.5) {
                 return(SCALE(angle,
                              0, M_PI * 0.5,
-                             CAT_VELOCITY, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR));
+                             0, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else if(angle > M_PI * 0.5 && angle <= M_PI) {
                 return(SCALEINV(angle,
                                 M_PI * 0.5, M_PI,
-                                CAT_VELOCITY, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR));
+                                0, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR)
+                       + CAT_VELOCITY);
             } else {
                 return(CAT_VELOCITY);
             }
@@ -461,11 +473,13 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
         if(angle > 0 && angle <= M_PI * 0.5) {
             return(SCALEINV(angle,
                          0, M_PI * 0.5,
-                         CAT_VELOCITY, -caty * CAT_OFFSCREEN_DIST_FACTOR));
+                         0, -caty * CAT_OFFSCREEN_DIST_FACTOR)
+                   + CAT_VELOCITY);
         } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
             return(SCALEINV(angle,
                             M_PI * 1.5, M_PI,
-                            CAT_VELOCITY, -caty * CAT_OFFSCREEN_DIST_FACTOR));
+                            0, -caty * CAT_OFFSCREEN_DIST_FACTOR)
+                   + CAT_VELOCITY);
         } else {
             return(CAT_VELOCITY);
         }
@@ -473,11 +487,13 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
         if(angle > M_PI * 0.5 && angle <= M_PI) {
             return(SCALE(angle,
                          M_PI * 0.5, M_PI,
-                         CAT_VELOCITY, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR));
+                         0, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR)
+                   + CAT_VELOCITY);
         } else if(angle > M_PI && angle <= M_PI * 1.5) {
             return(SCALEINV(angle,
                             M_PI, M_PI * 1.5,
-                            CAT_VELOCITY, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR));
+                            0, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR)
+                   + CAT_VELOCITY);
         } else {
             return(CAT_VELOCITY);
         }

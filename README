@@ -4,7 +4,7 @@ BUILDING:
 make
 
 BUILDING TEST CASE:
-make -F Makefile.test
+make -f Makefile.test
 
 RUNNING TEST CASE:
 ./test.sh
