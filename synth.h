@@ -6,6 +6,7 @@ typedef void (*synth_log_cb_t)(void *priv, const char *fmt, ...);
 
 /* most common formats */
 typedef enum {
+    SYNTH_TYPE_INVALID,
     SYNTH_TYPE_U8,
     SYNTH_TYPE_S16,
     SYNTH_TYPE_F32,
