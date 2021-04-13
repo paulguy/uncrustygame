@@ -84,6 +84,16 @@ typedef enum {
     CAT_ANIM1
 } CatState;
 
+typedef struct {
+    Synth *s;
+    int fragments;
+    int activePlayer;
+    int centerBuffer;
+    int centerPlayer;
+    int silence;
+    int meow1, meow2, cat_activation, purr;
+} AudioState;
+
 int initialize_video(SDL_Window **win,
                      SDL_Renderer **renderer,
                      Uint32 *format) {
@@ -558,6 +568,178 @@ void vprintf_cb(void *priv, const char *fmt, ...) {
 }
 
 int audio_frame_cb(void *priv) {
+    AudioState *as = (AudioState *)priv;
+    int playerRet;
+
+    /* check for underrun and enlarge the fragment size in the hopes of
+     * settling on the minimum necessary number of fragments and avoid crackles
+     */
+    if(synth_has_underrun(as->s)) {
+        /* disable the synth before doing fragment operations */
+        if(synth_set_enabled(as->s, 0) < 0) {
+            fprintf(stderr, "Failed to stop synth.\n");
+            return(-1);
+        }
+        /* try to increase the fragments count by 1 */
+        if(synth_set_fragments(as->s, as->fragments + 1) < 0) {
+            fprintf(stderr, "Failed to set fragments, disabling.\n");
+            return(-1);
+        }
+        as->fragments++;
+        /* free the reference for the center buffer */
+        if(synth_free_player(as->s, as->centerPlayer) < 0) {
+            fprintf(stderr, "Failed to free center channel player.\n");
+            return(-1);
+        }
+        /* release all the other references for the center buffer ...,
+         * use channel 0 as a safe bet for existing */
+        if(synth_set_player_output_buffer(as->s, as->meow1, 0) < 0) {
+            fprintf(stderr, "failed to set meow1 output to channel 0.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->meow2, 0) < 0) {
+            fprintf(stderr, "failed to set meow2 output to channel 0.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->cat_activation, 0) < 0) {
+            fprintf(stderr, "failed to set cat_activation output to channel 0.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->purr, 0) < 0) {
+            fprintf(stderr, "failed to set purr output to channel 0.\n");
+            return(-1);
+        }
+        /* finally free the buffer */
+        if(synth_free_buffer(as->s, as->centerBuffer) < 0) {
+            fprintf(stderr, "Failed to free center channel buffer.\n");
+            return(-1);
+        }
+        /* also free the silence buffer then recreate it */
+        if(synth_free_buffer(as->s, as->silence) < 0) {
+            fprintf(stderr, "Failed to free silence buffer.\n");
+            return(-1);
+        }
+        as->silence = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
+        if(as->silence < 0) {
+            fprintf(stderr, "Failed to expand silence buffer.\n");
+            return(-1);
+        }
+        /* then create the buffer with the new fragment size, which represents
+         * the largest possible request, hopefullly */
+        as->centerBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
+        if(as->centerBuffer < 0) {
+            fprintf(stderr, "Failed to expand center buffer.\n");
+            return(-1);
+        }
+        as->centerPlayer = synth_add_player(as->s, as->centerBuffer);
+        if(as->centerPlayer < 0) {
+            fprintf(stderr, "Failed to recreate expanded center player.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_mode(as->s, as->centerPlayer, SYNTH_OUTPUT_REPLACE) < 0) {
+            fprintf(stderr, "Failed to set center channel output mode.\n");
+            return(-1);
+        }
+        /* repoint all the players back to the new center channel buffer */
+        if(synth_set_player_output_buffer(as->s, as->meow1, as->centerBuffer) < 0) {
+            fprintf(stderr, "failed to set meow1 output to center.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->meow2, as->centerBuffer) < 0) {
+            fprintf(stderr, "failed to set meow2 output to center.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->cat_activation, as->centerBuffer) < 0) {
+            fprintf(stderr, "failed to set cat_activation output to center.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->purr, as->centerBuffer) < 0) {
+            fprintf(stderr, "failed to set purr output to center.\n");
+            return(-1);
+        }
+ 
+        /* re-enable the synth.  I don't entirely remember how this works but
+         * this function may be called again recursively so make sure nothing
+         * else happens between this and returning. */
+        if(synth_set_enabled(as->s, 1) < 0) {
+            /* if it is recursive, allow the error to fall through, but don't
+             * print something that might end up spammy */
+            return(-1);
+        }
+        /* don't try to generate audio that'll just be crackles anyway */
+        return(0);
+    }
+
+    /* check to see if there's an active player set and if so, try to run it.
+     * Simply monophonic playback for the sake of demonstration, but additional
+     * calls to run will "mix" together in to their output buffers, or the final
+     * audio output, if that's the mode which is set for that player. */
+    if(as->activePlayer >= 0) {
+        /* clear center channel buffer from last frame, positions are reset to 0
+         * on buffer set */
+        if(synth_set_player_input_buffer(as->s, as->centerPlayer, as->silence) < 0) {
+            fprintf(stderr, "Failed to set center player buffer to silence.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->centerPlayer, as->centerBuffer) < 0) {
+            fprintf(stderr, "Failed to set center player buffer to center channel.\n");
+            return(-1);
+        }
+        if(synth_run_player(as->s, as->centerPlayer, synth_get_samples_needed(as->s)) < 0) {
+            fprintf(stderr, "Failed to clear center channel buffer.\n");
+            return(-1);
+        }
+        /* reset the buffer output pos to 0 */
+        if(synth_set_player_output_buffer_pos(as->s, as->activePlayer, 0) < 0) {
+            fprintf(stderr, "Failed to set output buffer pos.\n");
+            return(-1);
+        }
+        playerRet = synth_run_player(as->s, as->activePlayer, synth_get_samples_needed(as->s));
+        if(playerRet < 0) {
+            fprintf(stderr, "Failed to play active player.\n");
+            return(-1);
+        } else if(playerRet == 0) {
+            as->activePlayer = -1;
+        }
+        /* play out the center channel to both channels */
+        if(synth_set_player_input_buffer(as->s, as->centerPlayer, as->centerBuffer) < 0) {
+            fprintf(stderr, "Failed to set center player input to center channel.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->centerPlayer, 0) < 0) {
+            fprintf(stderr, "Failed to set center player output to left channel.\n");
+            return(-1);
+        }
+        if(synth_run_player(as->s, as->centerPlayer, synth_get_samples_needed(as->s)) < 0) {
+            fprintf(stderr, "Failed to output to left channel.\n");
+            return(-1);
+        }
+        if(synth_set_player_input_buffer_pos(as->s, as->centerPlayer, 0) < 0) {
+            fprintf(stderr, "Failed to reset center player output pos.\n");
+            return(-1);
+        }
+        if(synth_set_player_output_buffer(as->s, as->centerPlayer, 1) < 0) {
+            fprintf(stderr, "Failed to set center player output to right channel.\n");
+            return(-1);
+        }
+        if(synth_run_player(as->s, as->centerPlayer, synth_get_samples_needed(as->s)) < 0) {
+            fprintf(stderr, "Failed to output to right channel.\n");
+            return(-1);
+        }
+    }
+
+    return(0);
+}
+
+int play_sound(AudioState *as, int player) {
+    /* reset the buffer position to start */
+    if(synth_set_player_input_buffer_pos(as->s, player, 0.0) < 0) {
+        fprintf(stderr, "Failed to reset player input buffer pos.\n");
+        return(-1);
+    }
+
+    as->activePlayer = player;
+
     return(0);
 }
 
@@ -588,7 +770,7 @@ int main(int argc, char **argv) {
     int winwidth = WINDOW_WIDTH;
     int winheight = WINDOW_HEIGHT;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
-    int meow1, meow2, cat_activation, purr;
+    AudioState audioState;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -615,7 +797,7 @@ int main(int argc, char **argv) {
 
     /* initialize the audio */
     s = synth_new(audio_frame_cb,
-                  NULL,
+                  &audioState,
                   vprintf_cb,
                   stderr);
     if(s == NULL) {
@@ -708,6 +890,29 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
+    /* set up an initial center channel to be 1 fragment long, which is to be
+     * resized on underruns, also a silence buffer to clear the center channel
+     * between frames */
+    /* the import type is ignored when creating empty buffers. */
+    audioState.silence = synth_add_buffer(s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(s));
+    if(audioState.silence < 0) {
+        fprintf(stderr, "Failed to create silence buffer.\n");
+        goto error_synth;
+    }
+    audioState.centerBuffer = synth_add_buffer(s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(s));
+    if(audioState.centerBuffer < 0) {
+        fprintf(stderr, "Failed to create center buffer.\n");
+        goto error_synth;
+    }
+    audioState.centerPlayer = synth_add_player(s, audioState.centerBuffer);
+    if(audioState.centerPlayer < 0) {
+        fprintf(stderr, "Failed to create center player.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_output_mode(s, audioState.centerPlayer, SYNTH_OUTPUT_REPLACE) < 0) {
+        fprintf(stderr, "Failed to set center channel output mode.\n");
+        goto error_synth;
+    }
     /* load the sound effects and create players for them, as they may
      * eventually each have different parameters for volume balance or
      * whatever else */
@@ -716,9 +921,17 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to load meow1.wav.\n");
         goto error_synth;
     }
-    meow1 = synth_add_player(s, meow1_buf);
-    if(meow1 < 0) {
+    audioState.meow1 = synth_add_player(s, meow1_buf);
+    if(audioState.meow1 < 0) {
         fprintf(stderr, "Failed to create meow1 player.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_output_buffer(s, audioState.meow1, audioState.centerBuffer) < 0) {
+        fprintf(stderr, "failed to set meow1 output buffer.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_speed(s, audioState.meow1, 8000.0 / (float)synth_get_rate(s)) < 0) {
+        fprintf(stderr, "Failed to set meow1 speed.\n");
         goto error_synth;
     }
     meow2_buf = synthbuffer_from_wav(s, "meow2.wav");
@@ -726,9 +939,17 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to load meow2.wav.\n");
         goto error_synth;
     }
-    meow2 = synth_add_player(s, meow2_buf);
-    if(meow2 < 0) {
+    audioState.meow2 = synth_add_player(s, meow2_buf);
+    if(audioState.meow2 < 0) {
         fprintf(stderr, "Failed to create meow2 player.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_output_buffer(s, audioState.meow2, audioState.centerBuffer) < 0) {
+        fprintf(stderr, "failed to set meow2 output buffer.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_speed(s, audioState.meow2, 8000.0 / (float)synth_get_rate(s)) < 0) {
+        fprintf(stderr, "Failed to set meow2 speed.\n");
         goto error_synth;
     }
     cat_activation_buf = synthbuffer_from_wav(s, "cat_activation.wav");
@@ -736,9 +957,17 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to load cat_activation.wav.\n");
         goto error_synth;
     }
-    cat_activation = synth_add_player(s, cat_activation_buf);
-    if(cat_activation < 0) {
+    audioState.cat_activation = synth_add_player(s, cat_activation_buf);
+    if(audioState.cat_activation < 0) {
         fprintf(stderr, "Failed to create cat_activation player.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_output_buffer(s, audioState.cat_activation, audioState.centerBuffer) < 0) {
+        fprintf(stderr, "failed to set cat_activatin output buffer.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_speed(s, audioState.cat_activation, 8000.0 / (float)synth_get_rate(s)) < 0) {
+        fprintf(stderr, "Failed to set cat_activation speed.\n");
         goto error_synth;
     }
     purr_buf = synthbuffer_from_wav(s, "purr.wav");
@@ -746,9 +975,33 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to load purr.wav.\n");
         goto error_synth;
     }
-    purr = synth_add_player(s, purr_buf);
-    if(purr < 0) {
+    audioState.purr = synth_add_player(s, purr_buf);
+    if(audioState.purr < 0) {
         fprintf(stderr, "Failed to create purr player.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_output_buffer(s, audioState.purr, audioState.centerBuffer) < 0) {
+        fprintf(stderr, "failed to set purr output buffer.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_speed(s, audioState.purr, 8000.0 / (float)synth_get_rate(s)) < 0) {
+        fprintf(stderr, "Failed to set purr speed.\n");
+        goto error_synth;
+    }
+
+
+    /* initialize the state for the first time and enable the synthesizer
+     * to start calling the synth callback and play audio, if any */
+    audioState.s = s;
+    audioState.fragments = 1;
+    audioState.activePlayer = -1;
+    /* fragments need to be set so the output buffer will have been initialized */
+    if(synth_set_fragments(s, 1) < 0) {
+        fprintf(stderr, "Failed to set fragments.\n");
+        goto error_synth;
+    }
+    if(synth_set_enabled(s, 1) < 0) {
+        fprintf(stderr, "Failed to enable synth.\n");
         goto error_synth;
     }
 
@@ -847,6 +1100,8 @@ int main(int argc, char **argv) {
                                 fullscreen = !fullscreen;
                             }
                         }
+                    } else if(key->keysym.sym == SDLK_1) {
+                        play_sound(&audioState, audioState.meow1);
                     }
                     break;
                 case SDL_KEYUP:

@@ -840,6 +840,10 @@ int synth_add_buffer(Synth *s,
 }
 
 int synth_free_buffer(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        LOG_PRINTF(s, "Can't free output buffers.\n");
+        return(-1);
+    }
     index -= s->channels;
 
     if(index > s->buffersmem ||
@@ -997,8 +1001,7 @@ int synth_free_player(Synth *s, unsigned int index) {
 int synth_set_player_input_buffer(Synth *s,
                                   unsigned int index,
                                   unsigned int inBuffer) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1026,8 +1029,7 @@ int synth_set_player_input_buffer(Synth *s,
 int synth_set_player_input_buffer_pos(Synth *s,
                                       unsigned int index,
                                       float inPos) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1040,8 +1042,7 @@ int synth_set_player_input_buffer_pos(Synth *s,
 int synth_set_player_output_buffer(Synth *s,
                                    unsigned int index,
                                    unsigned int outBuffer) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1072,8 +1073,7 @@ int synth_set_player_output_buffer(Synth *s,
 int synth_set_player_output_buffer_pos(Synth *s,
                                        unsigned int index,
                                        unsigned int outPos) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1086,8 +1086,7 @@ int synth_set_player_output_buffer_pos(Synth *s,
 int synth_set_player_output_mode(Synth *s,
                                  unsigned int index,
                                  SynthOutputOperation outOp) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1109,8 +1108,7 @@ int synth_set_player_output_mode(Synth *s,
 int synth_set_player_volume_mode(Synth *s,
                                  unsigned int index,
                                  SynthVolumeMode volMode) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1132,8 +1130,7 @@ int synth_set_player_volume_mode(Synth *s,
 int synth_set_player_volume(Synth *s,
                             unsigned int index,
                             float volume) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1146,8 +1143,7 @@ int synth_set_player_volume(Synth *s,
 int synth_set_player_volume_source(Synth *s,
                                    unsigned int index,
                                    unsigned int volBuffer) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1175,8 +1171,7 @@ int synth_set_player_volume_source(Synth *s,
 int synth_set_player_mode(Synth *s,
                           unsigned int index,
                           SynthPlayerMode mode) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1200,8 +1195,7 @@ int synth_set_player_mode(Synth *s,
 int synth_set_player_loop_start(Synth *s,
                                 unsigned int index,
                                 unsigned int loopStart) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1223,8 +1217,7 @@ int synth_set_player_loop_start(Synth *s,
 int synth_set_player_loop_end(Synth *s,
                               unsigned int index,
                               unsigned int loopEnd) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1246,8 +1239,7 @@ int synth_set_player_loop_end(Synth *s,
 int synth_set_player_phase_source(Synth *s,
                                    unsigned int index,
                                    unsigned int phaseBuffer) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1275,8 +1267,7 @@ int synth_set_player_phase_source(Synth *s,
 int synth_set_player_speed_mode(Synth *s,
                                 unsigned int index,
                                 SynthSpeedMode speedMode) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1298,8 +1289,7 @@ int synth_set_player_speed_mode(Synth *s,
 int synth_set_player_speed(Synth *s,
                            unsigned int index,
                            float speed) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1312,8 +1302,7 @@ int synth_set_player_speed(Synth *s,
 int synth_set_player_speed_source(Synth *s,
                                   unsigned int index,
                                   unsigned int speedBuffer) {
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1357,8 +1346,7 @@ int synth_run_player(Synth *s,
     float loopLen;
     float lastInPos;
 
-    if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+    if(index > s->playersmem) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -1380,6 +1368,9 @@ int synth_run_player(Synth *s,
     todo = reqSamples;
     if(p->mode == SYNTH_MODE_ONCE &&
        p->speedMode == SYNTH_SPEED_CONSTANT) {
+        if(p->inPos >= i->size) {
+            return(0);
+        }
         if(p->volMode == SYNTH_VOLUME_CONSTANT &&
            p->outOp == SYNTH_OUTPUT_REPLACE) {
             todo = MIN(todo, os - p->outPos);
