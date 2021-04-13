@@ -15,4 +15,4 @@ right click    - teleport cat
 q              - quit
 e              - simulate error quit
 f              - toggle fullscreen
-1              - play meow sample
+1,2,3,4        - play various cat sounds

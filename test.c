@@ -1102,6 +1102,12 @@ int main(int argc, char **argv) {
                         }
                     } else if(key->keysym.sym == SDLK_1) {
                         play_sound(&audioState, audioState.meow1);
+                    } else if(key->keysym.sym == SDLK_2) {
+                        play_sound(&audioState, audioState.meow2);
+                    } else if(key->keysym.sym == SDLK_3) {
+                        play_sound(&audioState, audioState.cat_activation);
+                    } else if(key->keysym.sym == SDLK_4) {
+                        play_sound(&audioState, audioState.purr);
                     }
                     break;
                 case SDL_KEYUP:
