@@ -34,6 +34,7 @@
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (1280)
 #define WINDOW_HEIGHT   (720)
+#define DEFAULT_RATE    (48000)
 #define SPRITE_SCALE    (2.0)
 #define BG_R (47)
 #define BG_G (17)
@@ -44,6 +45,7 @@
 #define CAT_TURN_SPEED (M_PI * 2 / CAT_FPS)
 #define CAT_ANIM_DIV   (6)
 #define CAT_OFFSCREEN_DIST_FACTOR (0.1)
+#define CAT_IDLE_MEOW    (2000) /* milliseconds */
 #define ZZZ_TRANSLUCENCY (128)
 #define ZZZ_AMP          (10)
 #define ZZZ_CYCLE_SPEED  (M_PI * 2 / CAT_FPS / 3)
@@ -559,6 +561,13 @@ int synthbuffer_from_wav(Synth *s, const char *filename) {
     return(sb);
 }
 
+float volume_from_db(float db) {
+    if(db < 0.0) {
+        return(powf(10.0, db / 10.0));
+    }
+    return(1.0 / powf(10.0, -db / 10.0));
+}
+
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
     FILE *out = priv;
@@ -771,6 +780,7 @@ int main(int argc, char **argv) {
     int winheight = WINDOW_HEIGHT;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     AudioState audioState;
+    unsigned int catIdleTime = 0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -799,7 +809,9 @@ int main(int argc, char **argv) {
     s = synth_new(audio_frame_cb,
                   &audioState,
                   vprintf_cb,
-                  stderr);
+                  stderr,
+                  DEFAULT_RATE,
+                  2);
     if(s == NULL) {
         fprintf(stderr, "Failed to create synth.\n");
         goto error_ll;
@@ -952,6 +964,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set meow2 speed.\n");
         goto error_synth;
     }
+    if(synth_set_player_volume(s, audioState.meow2, volume_from_db(-3)) < 0) {
+        fprintf(stderr, "Failed to set meow2 volume.\n");
+        goto error_synth;
+    }
     cat_activation_buf = synthbuffer_from_wav(s, "cat_activation.wav");
     if(cat_activation_buf < 0) {
         fprintf(stderr, "Failed to load cat_activation.wav.\n");
@@ -968,6 +984,10 @@ int main(int argc, char **argv) {
     }
     if(synth_set_player_speed(s, audioState.cat_activation, 8000.0 / (float)synth_get_rate(s)) < 0) {
         fprintf(stderr, "Failed to set cat_activation speed.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_volume(s, audioState.cat_activation, volume_from_db(-12)) < 0) {
+        fprintf(stderr, "failed to set cat_activation volume.\n");
         goto error_synth;
     }
     purr_buf = synthbuffer_from_wav(s, "purr.wav");
@@ -988,7 +1008,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set purr speed.\n");
         goto error_synth;
     }
-
+    if(synth_set_player_volume(s, audioState.purr, volume_from_db(-2)) < 0) {
+        fprintf(stderr, "failed to set purr volume.\n");
+        goto error_synth;
+    }
+    if(synth_set_player_mode(s, audioState.purr, SYNTH_MODE_LOOP) < 0) {
+        fprintf(stderr, "Failed to set purr to looping.\n");
+        goto error_synth;
+    }
 
     /* initialize the state for the first time and enable the synthesizer
      * to start calling the synth callback and play audio, if any */
@@ -1130,6 +1157,8 @@ int main(int argc, char **argv) {
                                 fprintf(stderr, "Failed to free ZZZ layer.\n");
                                 goto error_synth;
                             }
+
+                            play_sound(&audioState, audioState.cat_activation);
                         } else {
                             catState = CAT_RESTING;
                             if(tilemap_set_layer_scroll_pos(ll, catlayer,
@@ -1162,6 +1191,8 @@ int main(int argc, char **argv) {
                                 fprintf(stderr, "Failed to set layer scroll pos.\n");
                                 goto error_synth;
                             }
+                            
+                            play_sound(&audioState, audioState.purr);
                         }
                     } else if(click->button == 3) {
                         catx = mousex;
@@ -1190,13 +1221,22 @@ int main(int argc, char **argv) {
 
         /* frame stuff */
         Uint32 thisTick = SDL_GetTicks();
-        if(thisTick >= nextMotion) {
+        while(thisTick >= nextMotion) {
             nextMotion += CAT_RATE;
             if(catState != CAT_RESTING) {
                 double motionx = mousex - catx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
                 double motiony = mousey - caty - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
                 double velocity = velocity_from_xy(motionx, motiony);
                 if(velocity >= 1.0) {
+                    if(catIdleTime >= CAT_IDLE_MEOW) {
+                        if(rand() % 2 == 1) {
+                            play_sound(&audioState, audioState.meow1);
+                        } else {
+                            play_sound(&audioState, audioState.meow2);
+                        }
+                    }
+                    catIdleTime = 0;
+
                     double angle = angle_from_xy(motionx, motiony);
                     double angleDiff;
                     if(catAngle > M_PI && angle < catAngle - M_PI) {
@@ -1228,6 +1268,8 @@ int main(int argc, char **argv) {
                     xy_from_angle(&motionx, &motiony, catAngle);
                     catx += motionx * velocity;
                     caty += motiony * velocity;
+                } else {
+                    catIdleTime += CAT_RATE;
                 }
 
                 if(catState == CAT_ANIM0) {
@@ -1275,6 +1317,8 @@ int main(int argc, char **argv) {
                     zzzcycle -= M_PI * 2;
                 }
             }
+
+            thisTick = SDL_GetTicks();
         }
 
         if(tilemap_set_layer_pos(ll, catlayer,

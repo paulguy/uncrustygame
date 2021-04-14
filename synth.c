@@ -409,7 +409,9 @@ void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
 Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                  void *synth_frame_priv,
                  synth_log_cb_t synth_log_cb,
-                 void *synth_log_priv) {
+                 void *synth_log_priv,
+                 unsigned int rate,
+                 unsigned int channels) {
     SDL_AudioSpec desired, obtained;
     Synth *s;
 
@@ -422,13 +424,14 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
     s->synth_log_cb = synth_log_cb;
     s->synth_log_priv = synth_log_priv;
 
-    desired.freq = DEFAULT_RATE;
+    desired.freq = rate;
     /* may as well use this as the desired output format if the internal format
      * will be F32 anyway, but build a converter just in case it's needed. */
     desired.format = AUDIO_F32SYS;
-    /* we _really_ want stereo but mono will work fine.  Surround is ...
-     * technically supported but it'd probably be uselessly slow. */
-    desired.channels = 2;
+    /* Stereo should be fine for most things but technically surround is
+     * supported and in theory this should create additional audio sinks for
+     * all the surround channels.  Untested. */
+    desired.channels = channels;
     desired.samples = DEFAULT_FRAGMENT_SIZE;
     desired.callback = synth_audio_cb;
     desired.userdata = s;

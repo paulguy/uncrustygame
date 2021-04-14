@@ -47,7 +47,9 @@ unsigned int synth_get_samples_needed(Synth *s);
 Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                  void *synth_frame_priv,
                  synth_log_cb_t synth_log_cb,
-                 void *synth_log_priv);
+                 void *synth_log_priv,
+                 unsigned int rate,
+                 unsigned int channels);
 void synth_free(Synth *s);
 unsigned int synth_get_rate(Synth *s);
 unsigned int synth_get_channels(Synth *s);
