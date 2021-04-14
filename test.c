@@ -17,12 +17,8 @@
  * along with crustygame.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 #include <time.h>
 #include <math.h>
 #include <SDL.h>
