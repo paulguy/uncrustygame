@@ -212,7 +212,7 @@ int tilemap_add_tileset(LayerList *ll,
                         unsigned int tw,
                         unsigned int th) {
     Tileset *temp;
-    SDL_Surface *surface2;
+    SDL_Surface *surface2 = NULL;
     SDL_Texture *tex;
     unsigned int i, j;
     unsigned int maxx, maxy;
@@ -255,7 +255,7 @@ int tilemap_add_tileset(LayerList *ll,
         src.x = 0; src.y = 0; src.w = surface->w; src.h = surface->h;
         dest.x = 0; dest.y = 0; dest.w = surface2->w; dest.h = surface2->h;
         if(SDL_BlitSurface(surface, &src, surface2, &dest) < 0) {
-            LOG_PRINTF(ll, "Failed to copy to power of two surface.\n");
+            LOG_PRINTF(ll, "Failed to copy to power of two surface: %s.\n", SDL_GetError());
             SDL_FreeSurface(surface2);
             return(-1);
         }
@@ -500,10 +500,10 @@ int tilemap_set_tilemap_map(LayerList *ll,
                             unsigned int index,
                             unsigned int x,
                             unsigned int y,
-                            int pitch,
-                            int w,
-                            int h,
-                            unsigned int *value,
+                            unsigned int pitch,
+                            unsigned int w,
+                            unsigned int h,
+                            const unsigned int *value,
                             unsigned int size) {
     unsigned int i;
 
@@ -512,17 +512,6 @@ int tilemap_set_tilemap_map(LayerList *ll,
        ll->tilemap[index].map == NULL) {
         LOG_PRINTF(ll, "Invalid tilemap index %u.\n", index);
         return(-1);
-    }
-    /* Allow passing in 0s to be filled in for the whole map size, allow a
-     * 0 pitch to be specified to copy the same row over each line */
-    if(pitch < 0) {
-        pitch = ll->tilemap[index].w;
-    }
-    if(w <= 0) {
-        w = ll->tilemap[index].w;
-    }
-    if(h <= 0) {
-        h = ll->tilemap[index].h;
     }
 
     if((((h - 1) * pitch) + w) > size) {
@@ -555,10 +544,10 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
                                    unsigned int index,
                                    unsigned int x,
                                    unsigned int y,
-                                   int pitch,
-                                   int w,
-                                   int h,
-                                   unsigned int *value,
+                                   unsigned int pitch,
+                                   unsigned int w,
+                                   unsigned int h,
+                                   const unsigned int *value,
                                    unsigned int size) {
     unsigned int i;
 
@@ -567,17 +556,6 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
        ll->tilemap[index].map == NULL) {
         LOG_PRINTF(ll, "Invalid tilemap index %u.\n", index);
         return(-1);
-    }
-    /* Allow passing in 0s to be filled in for the whole map size, allow a
-     * 0 pitch to be specified to copy the same row over each line */
-    if(pitch < 0) {
-        pitch = ll->tilemap[index].w;
-    }
-    if(w <= 0) {
-        w = ll->tilemap[index].w;
-    }
-    if(h <= 0) {
-        h = ll->tilemap[index].h;
     }
 
     if(((h - 1) * pitch) + w > size) {
@@ -623,10 +601,10 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
                                       unsigned int index,
                                       unsigned int x,
                                       unsigned int y,
-                                      int pitch,
-                                      int w,
-                                      int h,
-                                      Uint32 *value,
+                                      unsigned int pitch,
+                                      unsigned int w,
+                                      unsigned int h,
+                                      const Uint32 *value,
                                       unsigned int size) {
     unsigned int i;
 
@@ -635,17 +613,6 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
        ll->tilemap[index].map == NULL) {
         LOG_PRINTF(ll, "Invalid tilemap index %u.\n", index);
         return(-1);
-    }
-    /* Allow passing in 0s to be filled in for the whole map size, allow a
-     * 0 pitch to be specified to copy the same row over each line */
-    if(pitch < 0) {
-        pitch = ll->tilemap[index].w;
-    }
-    if(w <= 0) {
-        w = ll->tilemap[index].w;
-    }
-    if(h <= 0) {
-        h = ll->tilemap[index].h;
     }
 
     if(((h - 1) * pitch) + w > size) {
@@ -781,7 +748,8 @@ int tilemap_update_tilemap(LayerList *ll,
         for(i = x; i < x + w; i++) {
             src.x = tilemap->map[tilemap->w * j + i];
             /* check to see if index is within tileset */
-            if(src.x > tileset->max) {
+            /* src.x can't be negative, silences a warning */
+            if((unsigned int)(src.x) > tileset->max) {
                 LOG_PRINTF(ll, "Tilemap index beyond tileset: %u\n", src.x);
                 return(-1);
             }
@@ -999,7 +967,10 @@ int tilemap_set_layer_pos(LayerList *ll, unsigned int index, int x, int y) {
     return(0);
 }
 
-int tilemap_set_layer_window(LayerList *ll, unsigned int index, int w, int h) {
+int tilemap_set_layer_window(LayerList *ll,
+                             unsigned int index,
+                             unsigned int w,
+                             unsigned int h) {
     Layer *layer;
     Tilemap *tilemap;
     Tileset *tileset;
@@ -1024,8 +995,7 @@ int tilemap_set_layer_window(LayerList *ll, unsigned int index, int w, int h) {
         h = tmh;
     }
 
-    if(w < 0 || h < 0 ||
-       w > tmw || h > tmh) {
+    if(w > tmw || h > tmh) {
         LOG_PRINTF(ll, "Layer window out of range.\n");
         return(-1);
     }
@@ -1038,8 +1008,8 @@ int tilemap_set_layer_window(LayerList *ll, unsigned int index, int w, int h) {
 
 int tilemap_set_layer_scroll_pos(LayerList *ll,
                                  unsigned int index,
-                                 int scroll_x,
-                                 int scroll_y) {
+                                 unsigned int scroll_x,
+                                 unsigned int scroll_y) {
     Layer *layer;
     Tilemap *tilemap;
     Tileset *tileset;
@@ -1057,8 +1027,7 @@ int tilemap_set_layer_scroll_pos(LayerList *ll,
     tmw = tilemap->w * tileset->tw;
     tmh = tilemap->h * tileset->th;
 
-    if(scroll_x < 0 || scroll_y < 0 ||
-       scroll_x > tmw - 1 || scroll_y > tmh - 1) {
+    if(scroll_x > tmw - 1 || scroll_y > tmh - 1) {
         LOG_PRINTF(ll, "Layer scroll pos out of range.\n");
         return(-1);
     }

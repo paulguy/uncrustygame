@@ -54,21 +54,23 @@
 #define TEST_SPRITE_WIDTH  (32)
 #define TEST_SPRITE_HEIGHT (32)
 const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
-                                                2, 3};
+                                                2, 3,
+                                                4, 5,
+                                                6, 7,
+                                                8, 9};
 #define C_OPAQUE TILEMAP_COLOR(255, 255, 255, 255)
 #define C_TRANSL TILEMAP_COLOR(255, 255, 255, ZZZ_TRANSLUCENCY)
 const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_OPAQUE, C_TRANSL,
+    C_OPAQUE, C_OPAQUE,
+    C_OPAQUE, C_OPAQUE,
+    C_OPAQUE, C_OPAQUE,
     C_OPAQUE, C_OPAQUE
 };
-#define TEST_RESTING_X (0)
-#define TEST_RESTING_Y (0)
-#define TEST_ZZZ_X     (1)
-#define TEST_ZZZ_Y     (0)
-#define TEST_ANIM0_X   (0)
-#define TEST_ANIM0_Y   (1)
-#define TEST_ANIM1_X   (1)
-#define TEST_ANIM1_Y   (1)
+#define TEST_RESTING (0)
+#define TEST_ZZZ     (1)
+#define TEST_ANIM0   (2)
+#define TEST_ANIM1   (3)
 
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 #define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
@@ -125,7 +127,7 @@ int initialize_video(SDL_Window **win,
         fprintf(stderr, "Driver %d: %s", i, driver.name);
         if((driver.flags & SDL_RENDERER_SOFTWARE) &&
            softdrv == -1) {
-            for(j = 0; j < driver.num_texture_formats; j++) {
+            for(j = 0; (unsigned int)j < driver.num_texture_formats; j++) {
                 if(SDL_BITSPERPIXEL(driver.texture_formats[j]) >= 24) {
                     softfmt = driver.texture_formats[j];
                     softdrv = i;
@@ -137,7 +139,7 @@ int initialize_video(SDL_Window **win,
                   strcmp(driver.name, "metal") == 0) &&
                   nameddrv == -1) {
             /* prefer direct3d 11 or opengles or metal for better blend mode support */
-            for(j = 0; j < driver.num_texture_formats; j++) {
+            for(j = 0; (unsigned int)j < driver.num_texture_formats; j++) {
                 if(SDL_BITSPERPIXEL(driver.texture_formats[j]) >= 24) {
                     namedfmt = driver.texture_formats[j];
                     nameddrv = i;
@@ -147,7 +149,7 @@ int initialize_video(SDL_Window **win,
         } else if((driver.flags & SDL_RENDERER_ACCELERATED) &&
                   (driver.flags & SDL_RENDERER_TARGETTEXTURE) &&
                   bestdrv == -1) {
-            for(j = 0; j < driver.num_texture_formats; j++) {
+            for(j = 0; (unsigned int)j < driver.num_texture_formats; j++) {
                 if(SDL_BITSPERPIXEL(driver.texture_formats[j]) >= 24) {
                     bestfmt = driver.texture_formats[j];
                     bestdrv = i;
@@ -167,7 +169,7 @@ int initialize_video(SDL_Window **win,
             fprintf(stderr, "TARGETTEXTURE ");
         fprintf(stderr, "\n");
         fprintf(stderr, "Formats: ");
-        for(j = 0; j < driver.num_texture_formats; j++) {
+        for(j = 0; (unsigned int)j < driver.num_texture_formats; j++) {
             fprintf(stderr, "(%08X) %s ",
                     driver.texture_formats[j],
                     SDL_GetPixelFormatName(driver.texture_formats[j]));
@@ -205,7 +207,7 @@ int initialize_video(SDL_Window **win,
                 goto error;
             }
             selectfmt = SDL_PIXELFORMAT_UNKNOWN;
-            for(j = 0; j < driver.num_texture_formats; j++) {
+            for(j = 0; (unsigned int)j < driver.num_texture_formats; j++) {
                 if(SDL_BITSPERPIXEL(driver.texture_formats[j]) >= 24) {
                     selectfmt = driver.texture_formats[j];
                     break;
@@ -256,11 +258,6 @@ int tileset_from_bmp(LayerList *ll,
     surface = SDL_LoadBMP(filename);
     if(surface == NULL) {
         fprintf(stderr, "Failed to load %s.\n", filename);
-        return(-1);
-    }
-    if(SDL_LockSurface(surface) < 0) {
-        fprintf(stderr, "Failed to lock surface.\n");
-        SDL_FreeSurface(surface);
         return(-1);
     }
 
@@ -769,7 +766,7 @@ int main(int argc, char **argv) {
     CatState catState = CAT_ANIM0;
     int animCounter = 0;
     double catAngle = 0.0;
-    int zzzlayer;
+    int zzzlayer = -1;
     double zzzcycle = 0.0;
     int fullscreen = 0;
     int winwidth = WINDOW_WIDTH;
@@ -828,7 +825,7 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
     /* create the tilemap */
-    tilemap = tilemap_add_tilemap(ll, 2, 2);
+    tilemap = tilemap_add_tilemap(ll, ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1);
     if(tilemap < 0) {
         fprintf(stderr, "Failed to make tilemap.\n");
         goto error_synth;
@@ -842,8 +839,8 @@ int main(int argc, char **argv) {
      * since it's probably already 0, but for demonstration purposes) */
     if(tilemap_set_tilemap_map(ll, tilemap, 
                                0, 0, /* start x and y for destination rectangle */
-                               2, /* row width for source rectangle */
-                               2, 2, /* size of rectangle */
+                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES), /* row width for source rectangle */
+                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1, /* size of rectangle */
                                TEST_SPRITESHEET_VALUES, /* the values of the
                                                            map rect */
                                ARRAY_COUNT(TEST_SPRITESHEET_VALUES)
@@ -856,8 +853,8 @@ int main(int argc, char **argv) {
      * the tilemap map */
     if(tilemap_set_tilemap_attr_colormod(ll, tilemap,
                                          0, 0,
-                                         2,
-                                         2, 2,
+                                         ARRAY_COUNT(TEST_SPRITESHEET_VALUES),
+                                         ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1,
                                          TEST_SPRITESHEET_COLORMOD,
                                          ARRAY_COUNT(TEST_SPRITESHEET_COLORMOD)
                                         ) < 0) {
@@ -867,7 +864,7 @@ int main(int argc, char **argv) {
     /* update/"render out" the tilemap for the first time */
     if(tilemap_update_tilemap(ll, tilemap,
                               0, 0, /* start rectangle to update */
-                              2, 2) /* update rectangle size */ < 0) {
+                              ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1) /* update rectangle size */ < 0) {
         fprintf(stderr, "Failed to update tilemap.\n");
         goto error_synth;
     }
@@ -1158,8 +1155,8 @@ int main(int argc, char **argv) {
                         } else {
                             catState = CAT_RESTING;
                             if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                                            TEST_RESTING_X * TEST_SPRITE_WIDTH,
-                                                            TEST_RESTING_Y * TEST_SPRITE_HEIGHT) < 0) {
+                                                            TEST_RESTING * TEST_SPRITE_WIDTH,
+                                                            0) < 0) {
                                 fprintf(stderr, "Failed to set layer scroll pos.\n");
                                 goto error_synth;
                             }
@@ -1182,8 +1179,8 @@ int main(int argc, char **argv) {
                                 goto error_synth;
                             }
                             if(tilemap_set_layer_scroll_pos(ll, zzzlayer,
-                                                            TEST_ZZZ_X * TEST_SPRITE_WIDTH,
-                                                            TEST_ZZZ_Y * TEST_SPRITE_HEIGHT) < 0) {
+                                                            TEST_ZZZ * TEST_SPRITE_WIDTH,
+                                                            0) < 0) {
                                 fprintf(stderr, "Failed to set layer scroll pos.\n");
                                 goto error_synth;
                             }
@@ -1274,8 +1271,8 @@ int main(int argc, char **argv) {
                         catState = CAT_ANIM1;
                         animCounter = 0;
                         if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                                        TEST_ANIM1_X * TEST_SPRITE_WIDTH,
-                                                        TEST_ANIM1_Y * TEST_SPRITE_HEIGHT) < 0) {
+                                                        TEST_ANIM1 * TEST_SPRITE_WIDTH,
+                                                        0) < 0) {
                             fprintf(stderr, "Failed to set layer scroll pos.\n");
                             goto error_synth;
                         }
@@ -1286,8 +1283,8 @@ int main(int argc, char **argv) {
                         catState = CAT_ANIM0;
                         animCounter = 0;
                         if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                                        TEST_ANIM0_X * TEST_SPRITE_WIDTH,
-                                                        TEST_ANIM0_Y * TEST_SPRITE_HEIGHT) < 0) {
+                                                        TEST_ANIM0 * TEST_SPRITE_WIDTH,
+                                                        0) < 0) {
                             fprintf(stderr, "Failed to set layer scroll pos.\n");
                             goto error_synth;
                         }
@@ -1295,9 +1292,9 @@ int main(int argc, char **argv) {
                 }
             } else { /* CAT_RESTING */
                 if(tilemap_set_layer_pos(ll, zzzlayer,
-                                     catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
-                                     caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
-                                     (sin(zzzcycle) * ZZZ_AMP)) < 0) {
+                                         catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
+                                         caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
+                                         (sin(zzzcycle) * ZZZ_AMP)) < 0) {
                     fprintf(stderr, "Failed to set ZZZ position.\n");
                     goto error_synth;
                 }
