@@ -278,26 +278,6 @@ error:
     return(-1);
 }
 
-int tileset_from_bmp(LayerList *ll,
-                     const char *filename,
-                     unsigned int tw,
-                     unsigned int th) {
-    SDL_Surface *surface;
-    int tileset;
-
-    surface = SDL_LoadBMP(filename);
-    if(surface == NULL) {
-        fprintf(stderr, "Failed to load %s.\n", filename);
-        return(-1);
-    }
-
-    tileset = tilemap_add_tileset(ll,
-                                  surface,
-                                  tw, th);
-    SDL_FreeSurface(surface);
-    return(tileset);
-}
-
 /* i don't knwo what i'm doing */
 double angle_from_xy(double x, double y) {
     if(x == 0.0) {
@@ -955,10 +935,10 @@ int main(int argc, char **argv) {
     /* init stuff */
 
     /* load the spritesheet */
-    tileset = tileset_from_bmp(ll,
-                               TEST_SPRITESHEET,
-                               TEST_SPRITE_WIDTH,
-                               TEST_SPRITE_HEIGHT);
+    tileset = tilemap_tileset_from_bmp(ll,
+                                       TEST_SPRITESHEET,
+                                       TEST_SPRITE_WIDTH,
+                                       TEST_SPRITE_HEIGHT);
     if(tileset < 0) {
         fprintf(stderr, "Failed to load spritesheet.\n");
         goto error_synth;

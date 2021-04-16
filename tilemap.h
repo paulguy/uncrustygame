@@ -54,6 +54,11 @@
 typedef struct LayerList_t LayerList;
 typedef void (*layerlist_log_cb_t)(void *priv, const char *fmt, ...);
 
+int tilemap_tileset_from_bmp(LayerList *ll,
+                             const char *filename,
+                             unsigned int tw,
+                             unsigned int th);
+
 LayerList *layerlist_new(SDL_Renderer *renderer,
                          Uint32 format,
                          layerlist_log_cb_t log_cb,

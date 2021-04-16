@@ -90,6 +90,26 @@ typedef struct LayerList_t {
     int blendWarned;
 } LayerList;
 
+int tilemap_tileset_from_bmp(LayerList *ll,
+                             const char *filename,
+                             unsigned int tw,
+                             unsigned int th) {
+    SDL_Surface *surface;
+    int tileset;
+
+    surface = SDL_LoadBMP(filename);
+    if(surface == NULL) {
+        fprintf(stderr, "Failed to load %s.\n", filename);
+        return(-1);
+    }
+
+    tileset = tilemap_add_tileset(ll,
+                                  surface,
+                                  tw, th);
+    SDL_FreeSurface(surface);
+    return(tileset);
+}
+
 static unsigned int find_power_of_two(unsigned int val) {
     unsigned int i;
 
