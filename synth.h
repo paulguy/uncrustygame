@@ -43,6 +43,9 @@ typedef enum {
 
 typedef struct Synth_t Synth;
 
+SynthImportType synth_type_from_audioformat(SDL_AudioFormat format);
+int synth_buffer_from_wav(Synth *s, const char *filename);
+
 void synth_print_full_stats(Synth *s);
 unsigned int synth_get_samples_needed(Synth *s);
 Synth *synth_new(synth_frame_cb_t synth_frame_cb,

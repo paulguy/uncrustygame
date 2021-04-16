@@ -538,52 +538,6 @@ double find_cat_velocity(double curdist, double angle, int catx, int caty, int w
     return(curdist);
 }
 
-SynthImportType synthtype_from_audioformat(SDL_AudioFormat format) {
-    switch(format) {
-        case AUDIO_U8:
-            return(SYNTH_TYPE_U8);
-            break;
-        case AUDIO_S16SYS:
-            return(SYNTH_TYPE_S16);
-            break;
-        case AUDIO_F32SYS:
-            return(SYNTH_TYPE_F32);
-            break;
-        default:
-            break;
-    }
-    return(SYNTH_TYPE_INVALID);
-}
-
-int synthbuffer_from_wav(Synth *s, const char *filename) {
-    SDL_AudioSpec spec;
-    Uint8 *audiobuf;
-    Uint32 len;
-    SynthImportType type;
-    int sb;
-
-    if(SDL_LoadWAV(filename, &spec, &audiobuf, &len) == NULL) {
-        fprintf(stderr, "Failed to load WAV file.\n");
-        return(-1);
-    }
-
-    if(spec.channels != 1) {
-        fprintf(stderr, "Buffers are mono.\n");
-        return(-1);
-    }
-
-    type = synthtype_from_audioformat(spec.format);
-    if(type == SYNTH_TYPE_INVALID) {
-        fprintf(stderr, "Unsupported format.\n");
-        return(-1);
-    }
-
-    sb = synth_add_buffer(s, type, audiobuf, len);
-    SDL_FreeWAV(audiobuf);
-
-    return(sb);
-}
-
 float volume_from_db(float db) {
     if(db < 0.0) {
         return(powf(10.0, db / 10.0));
@@ -1083,7 +1037,7 @@ int main(int argc, char **argv) {
     /* load the sound effects and create players for them, as they may
      * eventually each have different parameters for volume balance or
      * whatever else */
-    meow1_buf = synthbuffer_from_wav(s, "meow1.wav");
+    meow1_buf = synth_buffer_from_wav(s, "meow1.wav");
     if(meow1_buf < 0) {
         fprintf(stderr, "Failed to load meow1.wav.\n");
         goto error_synth;
@@ -1097,7 +1051,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set meow1 speed.\n");
         goto error_synth;
     }
-    meow2_buf = synthbuffer_from_wav(s, "meow2.wav");
+    meow2_buf = synth_buffer_from_wav(s, "meow2.wav");
     if(meow2_buf < 0) {
         fprintf(stderr, "Failed to load meow2.wav.\n");
         goto error_synth;
@@ -1115,7 +1069,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set meow2 volume.\n");
         goto error_synth;
     }
-    cat_activation_buf = synthbuffer_from_wav(s, "cat_activation.wav");
+    cat_activation_buf = synth_buffer_from_wav(s, "cat_activation.wav");
     if(cat_activation_buf < 0) {
         fprintf(stderr, "Failed to load cat_activation.wav.\n");
         goto error_synth;
@@ -1133,7 +1087,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "failed to set cat_activation volume.\n");
         goto error_synth;
     }
-    purr_buf = synthbuffer_from_wav(s, "purr.wav");
+    purr_buf = synth_buffer_from_wav(s, "purr.wav");
     if(purr_buf < 0) {
         fprintf(stderr, "Failed to load purr.wav.\n");
         goto error_synth;
