@@ -23,6 +23,8 @@ typedef struct {
 } SynthBuffer;
 
 typedef struct {
+    unsigned int inUse;
+
     unsigned int inBuffer;
     unsigned int outBuffer;
 
@@ -88,6 +90,135 @@ typedef struct Synth_t {
     synth_log_cb_t synth_log_cb;
     void *synth_log_priv;
 } Synth;
+
+#define PRINT_BUFFER_STATS(BUF) \
+    LOG_PRINTF(s, " Size: %u\n", (BUF)->size); \
+    LOG_PRINTF(s, " Refcount: %u\n", (BUF)->ref);
+
+#define PRINT_PLAYER_STATS(PLR) \
+    LOG_PRINTF(s, " In Use: "); \
+    if((PLR)->inUse) { \
+        LOG_PRINTF(s, "Yes\n"); \
+    } else { \
+        LOG_PRINTF(s, "No\n"); \
+    } \
+    LOG_PRINTF(s, " Input Buffer: %u\n", (PLR)->inBuffer); \
+    LOG_PRINTF(s, " Output Buffer: %u\n", (PLR)->outBuffer); \
+    LOG_PRINTF(s, " Input Buffer Pos: %f\n", (PLR)->inPos); \
+    LOG_PRINTF(s, " Output Buffer Pos: %u\n", (PLR)->outPos); \
+    LOG_PRINTF(s, " Output Operation: "); \
+    switch((PLR)->outOp) { \
+        case SYNTH_OUTPUT_REPLACE: \
+            LOG_PRINTF(s, "Replace\n"); \
+            break; \
+        case SYNTH_OUTPUT_ADD: \
+            LOG_PRINTF(s, "Add/Mix\n"); \
+            break; \
+        default: \
+            LOG_PRINTF(s, "Invalid\n");\
+    } \
+    LOG_PRINTF(s, " Volume Mode: "); \
+    switch((PLR)->volMode) { \
+        case SYNTH_VOLUME_CONSTANT: \
+            LOG_PRINTF(s, "Constant\n"); \
+            break; \
+        case SYNTH_VOLUME_SOURCE: \
+            LOG_PRINTF(s, "Source/Modulate\n"); \
+            break; \
+        default: \
+            LOG_PRINTF(s, "Invalid\n"); \
+    } \
+    LOG_PRINTF(s, " Volume: %f\n", (PLR)->volume); \
+    LOG_PRINTF(s, " Volume Source Buffer: %u\n", (PLR)->volBuffer); \
+    LOG_PRINTF(s, " Volume Source Buffer Pos: %u\n", (PLR)->volPos); \
+    LOG_PRINTF(s, " Player Mode: "); \
+    switch((PLR)->mode) { \
+        case SYNTH_MODE_ONCE: \
+            LOG_PRINTF(s, "Play Once\n"); \
+            break; \
+        case SYNTH_MODE_LOOP: \
+            LOG_PRINTF(s, "Loop\n"); \
+            break; \
+        case SYNTH_MODE_PINGPONG: \
+            LOG_PRINTF(s, "Ping Pong Loop\n"); \
+            break; \
+        case SYNTH_MODE_PHASE_SOURCE: \
+            LOG_PRINTF(s, "Source/Modulate\n"); \
+            break; \
+        default: \
+            LOG_PRINTF(s, "Invalid\n"); \
+    } \
+    LOG_PRINTF(s, " Loop Start: %u\n", (PLR)->loopStart); \
+    LOG_PRINTF(s, " Loop End: %u\n", (PLR)->loopEnd); \
+    LOG_PRINTF(s, " Phase Source Buffer: %u\n", (PLR)->phaseBuffer); \
+    LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR)->phasePos); \
+    LOG_PRINTF(s, " Speed Mode: "); \
+    switch((PLR)->speedMode) { \
+        case SYNTH_SPEED_CONSTANT: \
+            LOG_PRINTF(s, "Constant\n"); \
+            break; \
+        case SYNTH_SPEED_SOURCE: \
+            LOG_PRINTF(s, "Source/Modulate\n"); \
+            break; \
+        default: \
+            LOG_PRINTF(s, "Invalid\n"); \
+    } \
+    LOG_PRINTF(s, " Speed: %f\n", (PLR)->speed); \
+    LOG_PRINTF(s, " Speed Source Buffer: %u\n", (PLR)->speedBuffer); \
+    LOG_PRINTF(s, " Speed Source Buffer Pos: %u\n", (PLR)->speedPos);
+
+void synth_print_full_stats(Synth *s) {
+    unsigned int i;
+
+    if(s->synth_log_cb == NULL) {
+        return;
+    }
+
+    LOG_PRINTF(s, "SDL audio device ID: %u\n", s->audiodev);
+    LOG_PRINTF(s, "Audio rate: %u\n", s->rate);
+    LOG_PRINTF(s, "Channels: %u\n", s->channels);
+    for(i = 0; i < s->channels; i++) {
+        LOG_PRINTF(s, "Channel %u Buffer:\n", i);
+        PRINT_BUFFER_STATS(&(s->channelbuffer[i]))
+    }
+    LOG_PRINTF(s, "Read Cursor Pos: %u\n", s->readcursor);
+    LOG_PRINTF(s, "Write Cursor Pos: %u\n", s->writecursor);
+    LOG_PRINTF(s, "Buffer Filled: %u\n", s->bufferfilled);
+    LOG_PRINTF(s, "Buffer Total Size: %u\n", s->buffersize);
+    LOG_PRINTF(s, "Has Underrun Since Last Reset: ");
+    if(s->underrun) {
+        LOG_PRINTF(s, "Yes\n");
+    } else {
+        LOG_PRINTF(s, "No\n");
+    }
+    LOG_PRINTF(s, "Synth State: ");
+    switch(s->state) {
+        case SYNTH_STOPPED:
+            LOG_PRINTF(s, "Stopped\n");
+            break;
+        case SYNTH_ENABLED:
+            LOG_PRINTF(s, "Enabled/Pending\n");
+            break;
+        case SYNTH_RUNNING:
+            LOG_PRINTF(s, "Running\n");
+            break;
+        default:
+            LOG_PRINTF(s, "Invalid\n");
+    }
+    LOG_PRINTF(s, "Buffers Memory: %u\n", s->buffersmem);
+    for(i = 0; i < s->buffersmem; i++) {
+        LOG_PRINTF(s, "Buffer %u (%u):\n", i, i + s->channels);
+        PRINT_BUFFER_STATS(&(s->buffer[i]));
+    }
+    LOG_PRINTF(s, "Players Memory: %u\n", s->playersmem);
+    for(i = 0; i < s->playersmem; i++) {
+        LOG_PRINTF(s, "Player %u:\n", i);
+        PRINT_PLAYER_STATS(&(s->player[i]));
+    }
+}
+
+#undef PRINT_PLAYER_STATS
+#undef PRINT_BUFFER_STATS
 
 /* implement a simple but hardly transparent ring buffer.
  * Guarantee that only up to the cursor or the end of the buffer may be
@@ -656,7 +787,7 @@ int synth_set_fragments(Synth *s,
 
     if(s->channelbuffer != NULL) {
         if(s->fragments != fragments) {
-            for(i = 0; i < s->channels; i++) {
+            for(i = 0; (unsigned int)i < s->channels; i++) {
                 free(s->channelbuffer[i].data);
             }
             free(s->channelbuffer);
@@ -677,7 +808,7 @@ int synth_set_fragments(Synth *s,
 
     s->fragments = fragments;
     s->buffersize = s->fragmentsize * fragments;
-    for(i = 0; i < s->channels; i++) {
+    for(i = 0; (unsigned int)i < s->channels; i++) {
         s->channelbuffer[i].size = s->buffersize;
         s->channelbuffer[i].data =
             malloc(sizeof(float) * s->buffersize);
@@ -862,6 +993,44 @@ int synth_free_buffer(Synth *s, unsigned int index) {
     return(0);
 }
 
+int synth_silence_buffer(Synth *s,
+                         unsigned int index,
+                         unsigned int start,
+                         unsigned int end) {
+    float *o;
+    unsigned int os;
+    Uint8 silence = s->silence;
+
+    if(index < s->channels) {
+        o = &(s->channelbuffer[index].data[s->writecursor]);
+        os = synth_get_samples_needed(s);
+    } else {
+        index -= s->channels;
+        if(index > s->buffersmem ||
+           s->buffer[index].size == 0) {
+            LOG_PRINTF(s, "Invalid buffer index.\n");
+            return(-1);
+        }
+        o = s->buffer[index].data;
+        os = s->buffer[index].size;
+        /* 0s should clear a float array? */
+        silence = 0;
+    }
+
+    if(start >= os ||
+       start + end > os) {
+        LOG_PRINTF(s, "Bound(s) out of buffer range.\n");
+        return(0);
+    }
+
+    o = &(o[start]);
+    os = end - start;
+
+    memset(o, silence, os * sizeof(float));
+
+    return(0);
+}
+
 int synth_add_player(Synth *s, unsigned int inBuffer) {
     unsigned int i, j;
     SynthPlayer *temp;
@@ -886,6 +1055,7 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
             return(-1);
         }
         s->playersmem = 1;
+        s->player[0].inUse = 1;
         s->player[0].inBuffer = inBuffer;
         s->buffer[inBuffer].ref++; /* add a reference */
         s->player[0].outBuffer = 0; /* A 0th buffer will have to exist at least */
@@ -916,7 +1086,8 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
 
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->playersmem; i++) {
-        if(s->player[i].inBuffer == 0) {
+        if(s->player[i].inUse == 0) {
+            s->player[i].inUse = 1;
             s->player[i].inBuffer = inBuffer;
             s->buffer[inBuffer].ref++;
             s->player[i].outBuffer = 0;
@@ -954,8 +1125,9 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
     s->playersmem *= 2;
     /* initialize empty excess buffers as empty */
     for(j = i + 1; j < s->playersmem; j++) {
-        s->player[j].inBuffer = 0;
+        s->player[j].inUse = 0;
     }
+    s->player[i].inUse = 1;
     s->player[i].inBuffer = inBuffer;
     s->buffer[inBuffer].ref++;
     s->player[i].outBuffer = 0;
@@ -983,7 +1155,7 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
 
 int synth_free_player(Synth *s, unsigned int index) {
     if(index > s->playersmem ||
-       s->player[index].inBuffer == 0) {
+       s->player[index].inUse == 0) {
         LOG_PRINTF(s, "Invalid player index.\n");
         return(-1);
     }
@@ -996,7 +1168,7 @@ int synth_free_player(Synth *s, unsigned int index) {
     s->buffer[s->player[index].volBuffer].ref--;
     s->buffer[s->player[index].phaseBuffer].ref--;
     s->buffer[s->player[index].speedBuffer].ref--;
-    s->player[index].inBuffer = 0;
+    s->player[index].inUse = 0;
 
     return(0);
 }

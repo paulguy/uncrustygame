@@ -57,11 +57,15 @@ const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
                                                 2, 3,
                                                 4, 5,
                                                 6, 7,
-                                                8, 9};
+                                                8, 9,
+                                                10, 11,
+                                                12, 13};
 #define C_OPAQUE TILEMAP_COLOR(255, 255, 255, 255)
 #define C_TRANSL TILEMAP_COLOR(255, 255, 255, ZZZ_TRANSLUCENCY)
 const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_OPAQUE, C_TRANSL,
+    C_OPAQUE, C_OPAQUE,
+    C_OPAQUE, C_OPAQUE,
     C_OPAQUE, C_OPAQUE,
     C_OPAQUE, C_OPAQUE,
     C_OPAQUE, C_OPAQUE,
@@ -71,6 +75,16 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_ZZZ     (1)
 #define TEST_ANIM0   (2)
 #define TEST_ANIM1   (3)
+#define TEST_MOUSE0  (4)
+#define TEST_MOUSE1  (5)
+#define TEST_SPIDER0 (6)
+#define TEST_SPIDER1 (7)
+#define TEST_ANT0    (8)
+#define TEST_ANT1    (9)
+#define TEST_BIGHOLE (10)
+#define TEST_SMHOLE  (11)
+#define TEST_GORE0   (12)
+#define TEST_GORE1   (13)
 
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 #define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
@@ -90,7 +104,6 @@ typedef struct {
     int activePlayer;
     int centerBuffer;
     int centerPlayer;
-    int silence;
     int meow1, meow2, cat_activation, purr;
 } AudioState;
 
@@ -616,16 +629,6 @@ int audio_frame_cb(void *priv) {
             fprintf(stderr, "Failed to free center channel buffer.\n");
             return(-1);
         }
-        /* also free the silence buffer then recreate it */
-        if(synth_free_buffer(as->s, as->silence) < 0) {
-            fprintf(stderr, "Failed to free silence buffer.\n");
-            return(-1);
-        }
-        as->silence = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
-        if(as->silence < 0) {
-            fprintf(stderr, "Failed to expand silence buffer.\n");
-            return(-1);
-        }
         /* then create the buffer with the new fragment size, which represents
          * the largest possible request, hopefullly */
         as->centerBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
@@ -642,24 +645,7 @@ int audio_frame_cb(void *priv) {
             fprintf(stderr, "Failed to set center channel output mode.\n");
             return(-1);
         }
-        /* repoint all the players back to the new center channel buffer */
-        if(synth_set_player_output_buffer(as->s, as->meow1, as->centerBuffer) < 0) {
-            fprintf(stderr, "failed to set meow1 output to center.\n");
-            return(-1);
-        }
-        if(synth_set_player_output_buffer(as->s, as->meow2, as->centerBuffer) < 0) {
-            fprintf(stderr, "failed to set meow2 output to center.\n");
-            return(-1);
-        }
-        if(synth_set_player_output_buffer(as->s, as->cat_activation, as->centerBuffer) < 0) {
-            fprintf(stderr, "failed to set cat_activation output to center.\n");
-            return(-1);
-        }
-        if(synth_set_player_output_buffer(as->s, as->purr, as->centerBuffer) < 0) {
-            fprintf(stderr, "failed to set purr output to center.\n");
-            return(-1);
-        }
- 
+
         /* re-enable the synth.  I don't entirely remember how this works but
          * this function may be called again recursively so make sure nothing
          * else happens between this and returning. */
@@ -672,23 +658,32 @@ int audio_frame_cb(void *priv) {
         return(0);
     }
 
+    /* point all the players to the center channel buffer */
+    if(synth_set_player_output_buffer(as->s, as->meow1, as->centerBuffer) < 0) {
+        fprintf(stderr, "failed to set meow1 output to center.\n");
+        return(-1);
+    }
+    if(synth_set_player_output_buffer(as->s, as->meow2, as->centerBuffer) < 0) {
+        fprintf(stderr, "failed to set meow2 output to center.\n");
+        return(-1);
+    }
+    if(synth_set_player_output_buffer(as->s, as->cat_activation, as->centerBuffer) < 0) {
+        fprintf(stderr, "failed to set cat_activation output to center.\n");
+        return(-1);
+    }
+    if(synth_set_player_output_buffer(as->s, as->purr, as->centerBuffer) < 0) {
+        fprintf(stderr, "failed to set purr output to center.\n");
+        return(-1);
+    }
+
     /* check to see if there's an active player set and if so, try to run it.
      * Simply monophonic playback for the sake of demonstration, but additional
      * calls to run will "mix" together in to their output buffers, or the final
      * audio output, if that's the mode which is set for that player. */
     if(as->activePlayer >= 0) {
-        /* clear center channel buffer from last frame, positions are reset to 0
-         * on buffer set */
-        if(synth_set_player_input_buffer(as->s, as->centerPlayer, as->silence) < 0) {
-            fprintf(stderr, "Failed to set center player buffer to silence.\n");
-            return(-1);
-        }
-        if(synth_set_player_output_buffer(as->s, as->centerPlayer, as->centerBuffer) < 0) {
-            fprintf(stderr, "Failed to set center player buffer to center channel.\n");
-            return(-1);
-        }
-        if(synth_run_player(as->s, as->centerPlayer, synth_get_samples_needed(as->s)) < 0) {
-            fprintf(stderr, "Failed to clear center channel buffer.\n");
+        /* clear center channel buffer */
+        if(synth_silence_buffer(as->s, as->centerBuffer, 0, synth_get_samples_needed(as->s)) < 0) {
+            fprintf(stderr, "Failed to silence center buffer.\n");
             return(-1);
         }
         /* reset the buffer output pos to 0 */
@@ -704,8 +699,8 @@ int audio_frame_cb(void *priv) {
             as->activePlayer = -1;
         }
         /* play out the center channel to both channels */
-        if(synth_set_player_input_buffer(as->s, as->centerPlayer, as->centerBuffer) < 0) {
-            fprintf(stderr, "Failed to set center player input to center channel.\n");
+        if(synth_set_player_input_buffer_pos(as->s, as->centerPlayer, 0) < 0) {
+            fprintf(stderr, "Failed to reset center player output pos.\n");
             return(-1);
         }
         if(synth_set_player_output_buffer(as->s, as->centerPlayer, 0) < 0) {
@@ -896,14 +891,8 @@ int main(int argc, char **argv) {
     }
 
     /* set up an initial center channel to be 1 fragment long, which is to be
-     * resized on underruns, also a silence buffer to clear the center channel
-     * between frames */
+     * resized on underruns */
     /* the import type is ignored when creating empty buffers. */
-    audioState.silence = synth_add_buffer(s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(s));
-    if(audioState.silence < 0) {
-        fprintf(stderr, "Failed to create silence buffer.\n");
-        goto error_synth;
-    }
     audioState.centerBuffer = synth_add_buffer(s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(s));
     if(audioState.centerBuffer < 0) {
         fprintf(stderr, "Failed to create center buffer.\n");
@@ -931,10 +920,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to create meow1 player.\n");
         goto error_synth;
     }
-    if(synth_set_player_output_buffer(s, audioState.meow1, audioState.centerBuffer) < 0) {
-        fprintf(stderr, "failed to set meow1 output buffer.\n");
-        goto error_synth;
-    }
     if(synth_set_player_speed(s, audioState.meow1, 8000.0 / (float)synth_get_rate(s)) < 0) {
         fprintf(stderr, "Failed to set meow1 speed.\n");
         goto error_synth;
@@ -947,10 +932,6 @@ int main(int argc, char **argv) {
     audioState.meow2 = synth_add_player(s, meow2_buf);
     if(audioState.meow2 < 0) {
         fprintf(stderr, "Failed to create meow2 player.\n");
-        goto error_synth;
-    }
-    if(synth_set_player_output_buffer(s, audioState.meow2, audioState.centerBuffer) < 0) {
-        fprintf(stderr, "failed to set meow2 output buffer.\n");
         goto error_synth;
     }
     if(synth_set_player_speed(s, audioState.meow2, 8000.0 / (float)synth_get_rate(s)) < 0) {
@@ -971,10 +952,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to create cat_activation player.\n");
         goto error_synth;
     }
-    if(synth_set_player_output_buffer(s, audioState.cat_activation, audioState.centerBuffer) < 0) {
-        fprintf(stderr, "failed to set cat_activatin output buffer.\n");
-        goto error_synth;
-    }
     if(synth_set_player_speed(s, audioState.cat_activation, 8000.0 / (float)synth_get_rate(s)) < 0) {
         fprintf(stderr, "Failed to set cat_activation speed.\n");
         goto error_synth;
@@ -991,10 +968,6 @@ int main(int argc, char **argv) {
     audioState.purr = synth_add_player(s, purr_buf);
     if(audioState.purr < 0) {
         fprintf(stderr, "Failed to create purr player.\n");
-        goto error_synth;
-    }
-    if(synth_set_player_output_buffer(s, audioState.purr, audioState.centerBuffer) < 0) {
-        fprintf(stderr, "failed to set purr output buffer.\n");
         goto error_synth;
     }
     if(synth_set_player_speed(s, audioState.purr, 8000.0 / (float)synth_get_rate(s)) < 0) {

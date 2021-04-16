@@ -43,6 +43,7 @@ typedef enum {
 
 typedef struct Synth_t Synth;
 
+void synth_print_full_stats(Synth *s);
 unsigned int synth_get_samples_needed(Synth *s);
 Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                  void *synth_frame_priv,
@@ -65,6 +66,10 @@ int synth_add_buffer(Synth *s,
                      unsigned int size);
 int synth_free_buffer(Synth *s, unsigned int index);
 int synth_add_player(Synth *s, unsigned int inBuffer);
+int synth_silence_buffer(Synth *s,
+                         unsigned int index,
+                         unsigned int start,
+                         unsigned int end);
 int synth_free_player(Synth *s, unsigned int index);
 int synth_set_player_input_buffer(Synth *s,
                                   unsigned int index,
