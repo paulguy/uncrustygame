@@ -43,6 +43,7 @@
 #define CAT_ANIM_DIV   (6)
 #define CAT_OFFSCREEN_DIST_FACTOR (0.1)
 #define CAT_IDLE_MEOW    (2000) /* milliseconds */
+#define CAT_PAN_FACTOR   (0.75)
 #define ZZZ_TRANSLUCENCY (128)
 #define ZZZ_AMP          (10)
 #define ZZZ_CYCLE_SPEED  (M_PI * 2 / CAT_FPS / 3)
@@ -898,6 +899,7 @@ int main(int argc, char **argv) {
     AudioState *audioState;
     unsigned int catIdleTime = 0;
     int catSound = 0;
+    float catPan = 0.0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -1192,16 +1194,16 @@ int main(int argc, char **argv) {
                         }
                     } else if(key->keysym.sym == SDLK_1) {
                         stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, meow1, 1.0, 0.0);
+                        catSound = play_sound(audioState, meow1, 1.0, catPan);
                     } else if(key->keysym.sym == SDLK_2) {
                         stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, meow2, 1.0, 0.0);
+                        catSound = play_sound(audioState, meow2, 1.0, catPan);
                     } else if(key->keysym.sym == SDLK_3) {
                         stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, cat_activation, 1.0, 0.0);
+                        catSound = play_sound(audioState, cat_activation, 1.0, catPan);
                     } else if(key->keysym.sym == SDLK_4) {
                         stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, purr, 1.0, 0.0);
+                        catSound = play_sound(audioState, purr, 1.0, catPan);
                     }
                     break;
                 case SDL_KEYUP:
@@ -1226,7 +1228,7 @@ int main(int argc, char **argv) {
                             }
 
                             stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, cat_activation, 1.0, 0.0);
+                            catSound = play_sound(audioState, cat_activation, 1.0, catPan);
                         } else {
                             catState = CAT_RESTING;
                             if(tilemap_set_layer_scroll_pos(ll, catlayer,
@@ -1261,11 +1263,13 @@ int main(int argc, char **argv) {
                             }
                             
                             stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, purr, 1.0, 0.0);
+                            catSound = play_sound(audioState, purr, 1.0, catPan);
                         }
                     } else if(click->button == 3) {
                         catx = mousex;
                         caty = mousey;
+                        catPan = (float)(catx - (winwidth / 2)) /
+                                 ((float)winwidth / 2) * CAT_PAN_FACTOR;
                     }
                     break;
                 case SDL_MOUSEBUTTONUP:
@@ -1300,10 +1304,10 @@ int main(int argc, char **argv) {
                     if(catIdleTime >= CAT_IDLE_MEOW) {
                         if(rand() % 2 == 1) {
                             stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, meow1, 1.0, 0.0);
+                            catSound = play_sound(audioState, meow1, 1.0, catPan);
                         } else {
                             stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, meow2, 1.0, 0.0);
+                            catSound = play_sound(audioState, meow2, 1.0, catPan);
                         }
                     }
                     catIdleTime = 0;
@@ -1342,6 +1346,10 @@ int main(int argc, char **argv) {
                 } else {
                     catIdleTime += CAT_RATE;
                 }
+                update_panning(audioState,
+                               catSound,
+                               (float)(catx - (winwidth / 2)) /
+                               (float)winwidth);
 
                 if(catState == CAT_ANIM0) {
                     animCounter++;
