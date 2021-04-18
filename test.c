@@ -27,6 +27,7 @@
 #include "synth.h"
 
 /* initial settings */
+#define MAX_PROCESS_TIME (200)
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (1280)
 #define WINDOW_HEIGHT   (720)
@@ -36,21 +37,46 @@
 #define BG_R (47)
 #define BG_G (17)
 #define BG_B (49)
-#define CAT_FPS        (60)
-#define CAT_RATE       (1000 / CAT_FPS)
+#define ACTOR_FPS      (60)
+#define ACTOR_RATE     (1000 / ACTOR_FPS)
 #define CAT_VELOCITY   (5.0)
-#define CAT_TURN_SPEED (M_PI * 2 / CAT_FPS)
+#define CAT_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS)
 #define CAT_ANIM_DIV   (6)
 #define CAT_OFFSCREEN_DIST_FACTOR (0.1)
 #define CAT_IDLE_MEOW    (2000) /* milliseconds */
 #define CAT_PAN_FACTOR   (0.75)
 #define ZZZ_TRANSLUCENCY (128)
 #define ZZZ_AMP          (10)
-#define ZZZ_CYCLE_SPEED  (M_PI * 2 / CAT_FPS / 3)
+#define ZZZ_CYCLE_SPEED  (M_PI * 2.0 / ACTOR_FPS / 3.0)
 #define ZZZ_COLOR_BIAS   (64)
 /* from bottom-left */
 #define ZZZ_POS_X        (0.75)
 #define ZZZ_POS_Y        (0.75)
+
+#define MAX_ENEMIES      (256)
+#define MIN_SPAWNER_TIME (500)
+#define MAX_SPAWNER_TIME (2000)
+#define ANT_SPAWN_MIN    (20)
+#define ANT_SPAWN_MAX    (100)
+#define ANT_SPAWN_TIME_MIN (10)
+#define ANT_SPAWN_TIME_MAX (30)
+#define ANT_VELOCITY     (1.0)
+#define ANT_TURN_SPEED   (M_PI * 2.0 / ACTOR_FPS * 2.0)
+#define ANT_VALUE        (10)
+#define SPIDER_SPAWN_MIN (10)
+#define SPIDER_SPAWN_MAX (50)
+#define SPIDER_SPAWN_TIME_MIN (20)
+#define SPIDER_SPAWN_TIME_MAX (50)
+#define SPIDER_VELOCITY  (2.0)
+#define SPIDER_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.8)
+#define SPIDER_VALUE     (50)
+#define MOUSE_SPAWN_MIN  (2)
+#define MOUSE_SPAWN_MAX  (10)
+#define MOUSE_SPAWN_TIME_MIN (100)
+#define MOUSE_SPAWN_TIME_MAX (500)
+#define MOUSE_VELOCITY   (4.0)
+#define MOUSE_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.3)
+#define MOUSE_VALUE      (200)
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
@@ -93,6 +119,7 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     ((((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))) + (DMIN))
 #define SCALEINV(VAL, SMIN, SMAX, DMIN, DMAX) \
     ((DMAX) - (((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))))
+#define RANDRANGE(MIN, MAX) ((rand() % (MAX - MIN)) + MIN)
 
 typedef enum {
     CAT_RESTING,
@@ -116,6 +143,31 @@ typedef struct {
     int rightBuffer;
     int mixPlayer;
 } AudioState;
+
+typedef struct {
+    int sprite;
+    unsigned int anim;
+    unsigned int animCounter;
+    CatState state;
+    float x, y;
+    float angle;
+    float maxSpeed;
+    float maxAngle;
+    int value;
+} Enemy;
+
+typedef enum {
+    SPAWN_NONE,
+    SPAWN_ANTS,
+    SPAWN_SPIDERS,
+    SPAWN_MICE
+} SpawnerType;
+
+typedef struct {
+    float catx, caty;
+    unsigned int winwidth, winheight;
+    Enemy enemy[MAX_ENEMIES];
+} GameState;
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -386,137 +438,6 @@ unsigned int color_from_angle(double angle, unsigned int bias) {
                          bias,
                          255,
                          255));
-}
-
-double find_cat_velocity(double curdist, double angle, int catx, int caty, int winwidth, int winheight) {
-    if(catx < 0) {
-        if(caty < 0) {
-            if(angle > M_PI * 1.5 && angle <= M_PI * 1.75) {
-                double distance = sqrt(pow(-catx, 2) + pow(-caty, 2));
-                return(SCALE(angle,
-                             M_PI * 1.5, M_PI * 1.75,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else if(angle > M_PI * 1.75 && angle <= M_PI * 2.0) {
-                double distance = sqrt(pow(-catx, 2) + pow(-caty, 2));
-                return(SCALEINV(angle,
-                                M_PI * 1.75, M_PI * 2.0,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else {
-                return(CAT_VELOCITY);
-            }
-        } else if(caty > winheight) {
-            if(angle > M_PI && angle <= M_PI * 1.25) {
-                double distance = sqrt(pow(-catx, 2) + pow(caty - winheight, 2));
-                return(SCALE(angle,
-                             M_PI, M_PI * 1.25,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else if(angle > M_PI * 1.25 && angle <= M_PI * 1.5) {
-                double distance = sqrt(pow(-catx, 2) + pow(caty - winheight, 2));
-                return(SCALEINV(angle,
-                                M_PI * 1.25, M_PI * 1.5,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else {
-                return(CAT_VELOCITY);
-            }
-        } else {
-            if(angle > M_PI && angle <= M_PI * 1.5) {
-                return(SCALE(angle,
-                             M_PI, M_PI * 1.5,
-                             0, -catx * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
-                return(SCALEINV(angle,
-                                M_PI * 1.5, M_PI * 2.0,
-                                0, -catx * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else {
-                return(CAT_VELOCITY);
-            }
-        }
-    } else if(catx > winwidth) { 
-        if(caty < 0) {
-            if(angle > 0 && angle <= M_PI * 0.25) {
-                double distance = sqrt(pow(catx - winwidth, 2) + pow(-caty, 2));
-                return(SCALE(angle,
-                             0, M_PI * 0.25,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else if(angle > M_PI * 0.25 && angle <= M_PI * 0.5) {
-                double distance = sqrt(pow(catx - winwidth, 2) + pow(-caty, 2));
-                return(SCALEINV(angle,
-                                M_PI * 0.25, M_PI * 0.5,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else {
-                return(CAT_VELOCITY);
-            }
-        } else if(caty > winheight) {
-            if(angle > M_PI * 0.5 && angle <= M_PI * 0.75) {
-                double distance = sqrt(pow(catx - winwidth, 2) + pow(caty - winheight, 2));
-                return(SCALE(angle,
-                             M_PI * 0.5, M_PI * 0.75,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else if(angle > M_PI * 0.75 && angle <= M_PI) {
-                double distance = sqrt(pow(catx - winwidth, 2) + pow(caty - winheight, 2));
-                return(SCALEINV(angle,
-                                M_PI * 0.75, M_PI,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else {
-                return(CAT_VELOCITY);
-            }
-        } else {
-            if(angle > 0 && angle <= M_PI * 0.5) {
-                return(SCALE(angle,
-                             0, M_PI * 0.5,
-                             0, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else if(angle > M_PI * 0.5 && angle <= M_PI) {
-                return(SCALEINV(angle,
-                                M_PI * 0.5, M_PI,
-                                0, (catx - winwidth) * CAT_OFFSCREEN_DIST_FACTOR)
-                       + CAT_VELOCITY);
-            } else {
-                return(CAT_VELOCITY);
-            }
-        }
-    } else if(caty < 0) {
-        if(angle > 0 && angle <= M_PI * 0.5) {
-            return(SCALEINV(angle,
-                         0, M_PI * 0.5,
-                         0, -caty * CAT_OFFSCREEN_DIST_FACTOR)
-                   + CAT_VELOCITY);
-        } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
-            return(SCALEINV(angle,
-                            M_PI * 1.5, M_PI,
-                            0, -caty * CAT_OFFSCREEN_DIST_FACTOR)
-                   + CAT_VELOCITY);
-        } else {
-            return(CAT_VELOCITY);
-        }
-    } else if(caty > winheight) {
-        if(angle > M_PI * 0.5 && angle <= M_PI) {
-            return(SCALE(angle,
-                         M_PI * 0.5, M_PI,
-                         0, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR)
-                   + CAT_VELOCITY);
-        } else if(angle > M_PI && angle <= M_PI * 1.5) {
-            return(SCALEINV(angle,
-                            M_PI, M_PI * 1.5,
-                            0, (caty - winheight) * CAT_OFFSCREEN_DIST_FACTOR)
-                   + CAT_VELOCITY);
-        } else {
-            return(CAT_VELOCITY);
-        }
-    } else if(curdist > CAT_VELOCITY) {
-        return(CAT_VELOCITY);
-    }
-    return(curdist);
 }
 
 float volume_from_db(float db) {
@@ -868,38 +789,381 @@ int update_panning(AudioState *as, int token, float panning) {
     return(0);
 }
 
+int create_enemy(GameState *gs,
+                 SpawnerType type,
+                 float x,
+                 float y,
+                 float angle) {
+    unsigned int i;
+
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        if(gs->enemy[i].sprite >= 0) {
+            break;
+        }
+    }
+    if(i == MAX_ENEMIES) {
+        fprintf(stderr, "Max enemies exceeded.\n");
+        return(-1);
+    }
+
+    switch(type) {
+        case SPAWN_ANTS:
+            gs->enemy[i].state = CAT_ANIM0;
+            gs->enemy[i].anim = ANT_ANIM0;
+            gs->enemy[i].animCounter = 0;
+            gs->enemy[i].maxSpeed = ANT_VELOCITY;
+            gs->enemy[i].maxAngle = ANT_TURN_SPEED;
+            gs->enemy[i].x = x;
+            gs->enemy[i].y = y;
+            gs->enemy[i].angle = angle;
+            break;
+        case SPAWN_SPIDERS:
+            gs->enemy[i].state = CAT_ANIM0;
+            gs->enemy[i].anim = SPIDER_ANIM0;
+            gs->enemy[i].animCounter = 0;
+            gs->enemy[i].maxSpeed = SPIDER_VELOCITY;
+            gs->enemy[i].maxAngle = SPIDER_TURN_SPEED;
+            gs->enemy[i].x = x;
+            gs->enemy[i].y = y;
+            gs->enemy[i].angle = angle;
+            break;
+        case SPAWN_MICE:
+            gs->enemy[i].state = CAT_ANIM0;
+            gs->enemy[i].anim = MOUSE_ANIM0;
+            gs->enemy[i].animCounter = 0;
+            gs->enemy[i].maxSpeed = MOUSE_VELOCITY;
+            gs->enemy[i].maxAngle = MOUSE_TURN_SPEED;
+            gs->enemy[i].x = x;
+            gs->enemy[i].y = y;
+            gs->enemy[i].angle = angle;
+            break;
+        default:
+            fprintf(stderr, "Invalid enemy spawn type.\n");
+            return(-1);
+    }
+
+    gs->enemy[i].sprite = tilemap_add_layer(gs->ll, gs->tilemap);
+    if(gs->enemy[i].sprite < 0) {
+        fprintf(stderr, "Failed to add layer for enemy.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_scroll_pos(gs->ll, gs->enemy[i].sprite,
+                                    gs->enemy[i].anim * TEST_SPRITE_WIDTH,
+                                    0) < 0) {
+        fprintf(stderr, "Failed to set layer scroll for enemy.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_window(gs->ll, gs->enemy[i].sprite,
+                                TEST_SPRITE_WIDTH,
+                                TEST_SPRITE_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set enemy window size.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_rotation_center(gs->ll, gs->enemy[i].sprite,
+                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
+                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set enemy rotation center.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_scale(gs->ll, gs->enemy[i].sprite,
+                               SPRITE_SCALE, SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set enemy sprite scame.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+float find_object_velocity(float curdist, float angle,
+                           int x, int y,
+                           int width, int height,
+                           float velocity) {
+    if(x < 0) {
+        if(y < 0) {
+            if(angle > M_PI * 1.5 && angle <= M_PI * 1.75) {
+                float distance = sqrt(pow(-x, 2) + pow(-y, 2));
+                return(SCALE(angle,
+                             M_PI * 1.5, M_PI * 1.75,
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else if(angle > M_PI * 1.75 && angle <= M_PI * 2.0) {
+                float distance = sqrt(pow(-x, 2) + pow(-y, 2));
+                return(SCALEINV(angle,
+                                M_PI * 1.75, M_PI * 2.0,
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else {
+                return(velocity);
+            }
+        } else if(y > height) {
+            if(angle > M_PI && angle <= M_PI * 1.25) {
+                float distance = sqrt(pow(-x, 2) + pow(y - height, 2));
+                return(SCALE(angle,
+                             M_PI, M_PI * 1.25,
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else if(angle > M_PI * 1.25 && angle <= M_PI * 1.5) {
+                float distance = sqrt(pow(-x, 2) + pow(y - height, 2));
+                return(SCALEINV(angle,
+                                M_PI * 1.25, M_PI * 1.5,
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else {
+                return(velocity);
+            }
+        } else {
+            if(angle > M_PI && angle <= M_PI * 1.5) {
+                return(SCALE(angle,
+                             M_PI, M_PI * 1.5,
+                             0, -x * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
+                return(SCALEINV(angle,
+                                M_PI * 1.5, M_PI * 2.0,
+                                0, -x * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else {
+                return(velocity);
+            }
+        }
+    } else if(x > width) { 
+        if(y < 0) {
+            if(angle > 0 && angle <= M_PI * 0.25) {
+                float distance = sqrt(pow(x - width, 2) + pow(-y, 2));
+                return(SCALE(angle,
+                             0, M_PI * 0.25,
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else if(angle > M_PI * 0.25 && angle <= M_PI * 0.5) {
+                float distance = sqrt(pow(x - width, 2) + pow(-y, 2));
+                return(SCALEINV(angle,
+                                M_PI * 0.25, M_PI * 0.5,
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else {
+                return(velocity);
+            }
+        } else if(y > height) {
+            if(angle > M_PI * 0.5 && angle <= M_PI * 0.75) {
+                float distance = sqrt(pow(x - width, 2) + pow(y - height, 2));
+                return(SCALE(angle,
+                             M_PI * 0.5, M_PI * 0.75,
+                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else if(angle > M_PI * 0.75 && angle <= M_PI) {
+                float distance = sqrt(pow(x - width, 2) + pow(y - height, 2));
+                return(SCALEINV(angle,
+                                M_PI * 0.75, M_PI,
+                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else {
+                return(velocity);
+            }
+        } else {
+            if(angle > 0 && angle <= M_PI * 0.5) {
+                return(SCALE(angle,
+                             0, M_PI * 0.5,
+                             0, (x - width) * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else if(angle > M_PI * 0.5 && angle <= M_PI) {
+                return(SCALEINV(angle,
+                                M_PI * 0.5, M_PI,
+                                0, (x - width) * CAT_OFFSCREEN_DIST_FACTOR)
+                       + velocity);
+            } else {
+                return(velocity);
+            }
+        }
+    } else if(y < 0) {
+        if(angle > 0 && angle <= M_PI * 0.5) {
+            return(SCALEINV(angle,
+                         0, M_PI * 0.5,
+                         0, -y * CAT_OFFSCREEN_DIST_FACTOR)
+                   + velocity);
+        } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
+            return(SCALEINV(angle,
+                            M_PI * 1.5, M_PI,
+                            0, -y * CAT_OFFSCREEN_DIST_FACTOR)
+                   + velocity);
+        } else {
+            return(velocity);
+        }
+    } else if(y > height) {
+        if(angle > M_PI * 0.5 && angle <= M_PI) {
+            return(SCALE(angle,
+                         M_PI * 0.5, M_PI,
+                         0, (y - height) * CAT_OFFSCREEN_DIST_FACTOR)
+                   + velocity);
+        } else if(angle > M_PI && angle <= M_PI * 1.5) {
+            return(SCALEINV(angle,
+                            M_PI, M_PI * 1.5,
+                            0, (y - height) * CAT_OFFSCREEN_DIST_FACTOR)
+                   + velocity);
+        } else {
+            return(velocity);
+        }
+    } else if(curdist > velocity) {
+        return(velocity);
+    }
+    return(curdist);
+}
+
+void update_movement(float *thisx, float *thisy,
+                     float targetx, float targety,
+                     float maxVelocity,
+                     unsigned int maxx, unsigned int maxy,
+                     float *catIdleTime,
+                     float *thisAngle, float maxAngle) {
+    float motionx, motiony;
+    float velocity;
+    float angle, angleDiff;
+
+    motionx = targetx - *thisx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
+    motiony = targety - *thisy - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
+    velocity = velocity_from_xy(motionx, motiony);
+    if(velocity >= 1.0) {
+        if(catIdleTime != NULL) {
+            *catIdleTime = 0;
+        }
+
+        angle = angle_from_xy(motionx, motiony);
+        if(*thisAngle > M_PI && angle < *thisAngle - M_PI) {
+            angle += M_PI * 2;
+        } else if(*thisAngle < M_PI && angle > *thisAngle + M_PI) {
+            angle -= M_PI * 2;
+        }
+        angleDiff = *thisAngle - angle;
+        if(angleDiff > maxAngle) {
+            angleDiff = maxAngle;
+        } else if(angleDiff < -maxAngle) {
+            angleDiff = -maxAngle;
+        }
+        *thisAngle -= angleDiff;
+        /* if not updating the cat, then updating an enemy, so actually move
+         * _away_ from the target */
+        if(catIdleTime == NULL) {
+            *thisAngle += M_PI;
+        }
+        if(*thisAngle < 0.0) {
+            *thisAngle += M_PI * 2;
+        } else if(*thisAngle >= M_PI * 2) {
+            *thisAngle -= M_PI * 2;
+        }
+       
+        velocity = find_object_velocity(velocity, thisAngle,
+                                        thisx, thisy,
+                                        maxx, maxy,
+                                        maxVelocity);
+        xy_from_angle(&motionx, &motiony, thisAngle);
+        *thisx += motionx * velocity;
+        *thisy += motiony * velocity;
+    } else {
+        if(catIdleTime != NULL) {
+            *catIdleTime += ACTOR_RATE;
+        }
+    }
+}
+
+void process_enemies(GameState *gs) {
+    unsigned int i;
+
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        if(gs->enemy[i].sprite < 0) {
+            continue;
+        }
+
+        update_movement(&(gs->enemy[i].x), &(gs->enemy[i].y),
+                        gs->catx, gs.caty,
+                        gs->enemy[i].maxSpeed,
+                        gs->winwidth, gs->winheight,
+                        NULL,
+                        &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
+        /* invalidate any enemies which have gone of screen */
+        if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
+           gs->enemy[i].x > gs->winwidth + (TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
+           gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE) ||
+           gs->enemy[i].y > gs->winheight + (TEST_SPRITE_HEIGHT * SPRITE_SCALE)) {
+            gs->enemy[i].sprite = -1;
+            continue;
+        }
+
+        gs->enemy[i].animCounter++;
+        if(gs->enemy[i].animCounter >= CAT_ANIM_DIV) {
+            if(gs->enemy[i].state == CAT_ANIM0) {
+                gs->enemy[i].state = CAT_ANIM1;
+                gs->enemy[i].anim++;
+            } else {
+                gs->enemy[i].state = CAT_ANIM0;
+                gs->enemy[i].anim--;
+            }
+
+            if(tilemap_set_layer_scroll_pos(gs->ll, gs->enemy[i].sprite,
+                                            gs->enemy[i].anim * TEST_SPRITE_WIDTH,
+                                            0) < 0) {
+                return(-1);
+            }
+            gs->enemy[i].animCounter = 0;
+        }
+
+        if(tilemap_set_layer_pos(gs->ll, gs->enemy[i].sprite,
+                                 gs->catx, gs->caty) < 0) {
+            return(-1);
+        }
+        if(tilemap_set_layer_rotation(gs->ll, gs->enemy[i].sprite,
+                                      radian_to_degree(gs->enemy[i].angle)) < 0) {
+            return(-1);
+        }
+    }
+}
+
+int draw_enemies(GameState *gs) {
+    unsigned int i;
+
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        if(gs->enemy[i].sprite < 0) {
+            continue;
+        }
+
+        if(tilemap_draw_layer(gs->ll, gs->enemy[i].sprite) < 0) {
+            return(-1);
+        }
+    }
+
+    return(0);
+}
+
 int main(int argc, char **argv) {
     Uint32 format;
     SDL_Window *win;
     SDL_Renderer *renderer;
     SDL_Event lastEvent;
-    LayerList *ll;
     Synth *s;
+    AudioState *audioState;
+    GameState gs;
     int running;
     int mouseCaptured = 0;
     unsigned int mouseReleaseCombo = 0;
     int tileset;
-    int tilemap;
     int catlayer;
     int mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
     int mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
-    double catx = mousex;
-    double caty = mousey;
-    Uint32 nextMotion = SDL_GetTicks() + CAT_RATE;
+    Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
     CatState catState = CAT_ANIM0;
     int animCounter = 0;
+    int catAnim = TEST_ANIM0;
     double catAngle = 0.0;
     int zzzlayer = -1;
     double zzzcycle = 0.0;
     int fullscreen = 0;
-    int winwidth = WINDOW_WIDTH;
-    int winheight = WINDOW_HEIGHT;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meow1, meow2, cat_activation, purr;
-    AudioState *audioState;
     unsigned int catIdleTime = 0;
     int catSound = 0;
     float catPan = 0.0;
+    SpawnerType spawner;
+    unsigned int spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+    int spawnerx, spawnery;
+    int spawnCount;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -915,11 +1179,11 @@ int main(int argc, char **argv) {
     }
 
     /* initialize the layerlist */
-    ll = layerlist_new(renderer,
+    gs.ll = layerlist_new(renderer,
                        format,
                        vprintf_cb,
                        stderr);
-    if(ll == NULL) {
+    if(gs.ll == NULL) {
         fprintf(stderr, "Failed to create layerlist.\n");
         goto error_video;
     }
@@ -937,7 +1201,7 @@ int main(int argc, char **argv) {
     /* init stuff */
 
     /* load the spritesheet */
-    tileset = tilemap_tileset_from_bmp(ll,
+    tileset = tilemap_tileset_from_bmp(gs.ll,
                                        TEST_SPRITESHEET,
                                        TEST_SPRITE_WIDTH,
                                        TEST_SPRITE_HEIGHT);
@@ -946,19 +1210,19 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
     /* create the tilemap */
-    tilemap = tilemap_add_tilemap(ll, ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1);
-    if(tilemap < 0) {
+    gs.tilemap = tilemap_add_tilemap(gs.ll, ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1);
+    if(gs.tilemap < 0) {
         fprintf(stderr, "Failed to make tilemap.\n");
         goto error_synth;
     }
     /* assign the spritesheet to the sprite */
-    if(tilemap_set_tilemap_tileset(ll, tilemap, tileset) < 0) {
+    if(tilemap_set_tilemap_tileset(gs.ll, gs.tilemap, tileset) < 0) {
         fprintf(stderr, "Failed to apply tileset to tilemap.\n");
         goto error_synth;
     }
     /* set up its map for the first time (not likely necessary in this case
      * since it's probably already 0, but for demonstration purposes) */
-    if(tilemap_set_tilemap_map(ll, tilemap, 
+    if(tilemap_set_tilemap_map(gs.ll, gs.tilemap, 
                                0, 0, /* start x and y for destination rectangle */
                                ARRAY_COUNT(TEST_SPRITESHEET_VALUES), /* row width for source rectangle */
                                ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1, /* size of rectangle */
@@ -972,7 +1236,7 @@ int main(int argc, char **argv) {
     }
     /* apply color modifications, arguments are basically identical to setting
      * the tilemap map */
-    if(tilemap_set_tilemap_attr_colormod(ll, tilemap,
+    if(tilemap_set_tilemap_attr_colormod(gs.ll, gs.tilemap,
                                          0, 0,
                                          ARRAY_COUNT(TEST_SPRITESHEET_VALUES),
                                          ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1,
@@ -983,20 +1247,20 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
     /* update/"render out" the tilemap for the first time */
-    if(tilemap_update_tilemap(ll, tilemap,
+    if(tilemap_update_tilemap(gs.ll, gs.tilemap,
                               0, 0, /* start rectangle to update */
                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1) /* update rectangle size */ < 0) {
         fprintf(stderr, "Failed to update tilemap.\n");
         goto error_synth;
     }
     /* add the tilemap to a layer */
-    catlayer = tilemap_add_layer(ll, tilemap);
+    catlayer = tilemap_add_layer(gs.ll, gs.tilemap);
     if(catlayer < 0) {
         fprintf(stderr, "Failed to create cat layer.\n");
         goto error_synth;
     }
     /* make the tilemap window the size of a single sprite */
-    if(tilemap_set_layer_window(ll, catlayer,
+    if(tilemap_set_layer_window(gs.ll, catlayer,
                                 TEST_SPRITE_WIDTH,
                                 TEST_SPRITE_HEIGHT) < 0) {
         fprintf(stderr, "Failed to set layer window.\n");
@@ -1004,14 +1268,14 @@ int main(int argc, char **argv) {
     }
     /* make the rotation center in the center of the sprite so it rotates
      * about where it aims for the cursor */
-    if(tilemap_set_layer_rotation_center(ll, catlayer,
+    if(tilemap_set_layer_rotation_center(gs.ll, catlayer,
                                          TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
                                          TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
         fprintf(stderr, "Failed to set layer rotation center.\n");
         goto error_synth;
     }
     /* Makes the sprite more visible without me having to draw a larger sprite */
-    if(tilemap_set_layer_scale(ll, catlayer, SPRITE_SCALE, SPRITE_SCALE) < 0) {
+    if(tilemap_set_layer_scale(gs.ll, catlayer, SPRITE_SCALE, SPRITE_SCALE) < 0) {
         fprintf(stderr, "Failed to set layer scale.\n");
         goto error_synth;
     }
@@ -1096,6 +1360,16 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to enable synth.\n");
         goto error_synth;
     }
+
+    gs.catx = mousex;
+    gs.caty = mousey;
+    gs.winwidth = WINDOW_WIDTH;
+    gs.winheight = WINDOW_HEIGHT;
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        gs.enemy[sprite] = -1;
+    }
+
+    spawneType = SPAWN_NONE;
 
     /* ##### MAIN LOOP ##### */
     running = 1;
@@ -1222,7 +1496,7 @@ int main(int argc, char **argv) {
                     if(click->button == 1) {
                         if(catState == CAT_RESTING) {
                             catState = CAT_ANIM0;
-                            if(tilemap_free_layer(ll, zzzlayer) < 0) {
+                            if(tilemap_free_layer(gs.ll, zzzlayer) < 0) {
                                 fprintf(stderr, "Failed to free ZZZ layer.\n");
                                 goto error_synth;
                             }
@@ -1231,31 +1505,31 @@ int main(int argc, char **argv) {
                             catSound = play_sound(audioState, cat_activation, 1.0, catPan);
                         } else {
                             catState = CAT_RESTING;
-                            if(tilemap_set_layer_scroll_pos(ll, catlayer,
+                            if(tilemap_set_layer_scroll_pos(gs.ll, catlayer,
                                                             TEST_RESTING * TEST_SPRITE_WIDTH,
                                                             0) < 0) {
                                 fprintf(stderr, "Failed to set layer scroll pos.\n");
                                 goto error_synth;
                             }
 
-                            zzzlayer = tilemap_add_layer(ll, tilemap);
+                            zzzlayer = tilemap_add_layer(gs.ll, gs.tilemap);
                             if(zzzlayer < 0) {
                                 fprintf(stderr, "Failed to create ZZZ layer.\n");
                                 goto error_synth;
                             }
-                            if(tilemap_set_layer_window(ll, zzzlayer,
+                            if(tilemap_set_layer_window(gs.ll, zzzlayer,
                                                         TEST_SPRITE_WIDTH,
                                                         TEST_SPRITE_HEIGHT) < 0) {
                                 fprintf(stderr, "Failed to set layer window.\n");
                                 goto error_synth;
                             }
-                            if(tilemap_set_layer_scale(ll, zzzlayer,
+                            if(tilemap_set_layer_scale(gs.ll, zzzlayer,
                                                        SPRITE_SCALE,
                                                        SPRITE_SCALE) < 0) {
                                 fprintf(stderr, "Failed to set layer scale.\n");
                                 goto error_synth;
                             }
-                            if(tilemap_set_layer_scroll_pos(ll, zzzlayer,
+                            if(tilemap_set_layer_scroll_pos(gs.ll, zzzlayer,
                                                             TEST_ZZZ * TEST_SPRITE_WIDTH,
                                                             0) < 0) {
                                 fprintf(stderr, "Failed to set layer scroll pos.\n");
@@ -1266,10 +1540,10 @@ int main(int argc, char **argv) {
                             catSound = play_sound(audioState, purr, 1.0, catPan);
                         }
                     } else if(click->button == 3) {
-                        catx = mousex;
-                        caty = mousey;
-                        catPan = (float)(catx - (winwidth / 2)) /
-                                 ((float)winwidth / 2) * CAT_PAN_FACTOR;
+                        gs.catx = mousex;
+                        gs.caty = mousey;
+                        catPan = (float)(gs.catx - (gs.winwidth / 2)) /
+                                 ((float)gs.winwidth / 2) * CAT_PAN_FACTOR;
                     }
                     break;
                 case SDL_MOUSEBUTTONUP:
@@ -1277,8 +1551,8 @@ int main(int argc, char **argv) {
                 case SDL_WINDOWEVENT:
                     winEv = (SDL_WindowEvent *)&lastEvent;
                     if(winEv->event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-                        winwidth = winEv->data1;
-                        winheight = winEv->data2;
+                        gs.winwidth = winEv->data1;
+                        gs.winheight = winEv->data2;
                     }
                     break;
                 default:
@@ -1292,125 +1566,187 @@ int main(int argc, char **argv) {
             goto error_synth;
         }
 
-        /* frame stuff */
+        /* frame stuff, try to keep thisTick ahead of nextMotion, but if
+         * things are just running really badly for some reason, just give up
+         * if things get too far behind and maybe it'll eventually be able to
+         * catch up.  It'll slow down but still be able to display something
+         * and poll for events */
         Uint32 thisTick = SDL_GetTicks();
-        while(thisTick >= nextMotion) {
-            nextMotion += CAT_RATE;
-            if(catState != CAT_RESTING) {
-                double motionx = mousex - catx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
-                double motiony = mousey - caty - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
-                double velocity = velocity_from_xy(motionx, motiony);
-                if(velocity >= 1.0) {
-                    if(catIdleTime >= CAT_IDLE_MEOW) {
-                        if(rand() % 2 == 1) {
-                            stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, meow1, 1.0, catPan);
-                        } else {
-                            stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, meow2, 1.0, catPan);
-                        }
-                    }
-                    catIdleTime = 0;
+        processTime = thisTick;
+        while(thisTick >= nextMotion &&
+              thisTick - processTime < MAX_PROCESS_TIME) {
+            nextMotion += ACTOR_RATE;
 
-                    double angle = angle_from_xy(motionx, motiony);
-                    double angleDiff;
-                    if(catAngle > M_PI && angle < catAngle - M_PI) {
-                        angle += M_PI * 2;
-                    } else if(catAngle < M_PI && angle > catAngle + M_PI) {
-                        angle -= M_PI * 2;
+            if(catState != CAT_RESTING) {
+                float lastCatIdleTime = catIdleTime;
+                update_movement(&(gs.catx), &(gs.caty),
+                                mousex, mousey,
+                                CAT_VELOCITY,
+                                gs.winwidth, gs.winheight,
+                                &catIdleTime,
+                                &catAngle, CAT_TURN_SPEED);
+                if(lastCatIdleTime - catIdleTime >= CAT_IDLE_MEOW) {
+                    if(rand() % 2 == 1) {
+                        stop_sound(audioState, catSound);
+                        catSound = play_sound(audioState, meow1, 1.0, catPan);
+                    } else {
+                        stop_sound(audioState, catSound);
+                        catSound = play_sound(audioState, meow2, 1.0, catPan);
                     }
-                    angleDiff = catAngle - angle;
-                    if(angleDiff > CAT_TURN_SPEED) {
-                        angleDiff = CAT_TURN_SPEED;
-                    } else if(angleDiff < -CAT_TURN_SPEED) {
-                        angleDiff = -CAT_TURN_SPEED;
+                }
+                if(tilemap_set_layer_pos(gs.ll, catlayer,
+                                         gs.catx, gs.caty) < 0) {
+                    fprintf(stderr, "Failed to set cat position.\n");
+                    goto error_synth;
+                }
+                if(tilemap_set_layer_rotation(gs.ll, catlayer,
+                                              radian_to_degree(catAngle)) < 0) {
+                    fprintf(stderr, "Failed to set layer rotation.\n");
+                    return(-1);
+                }
+
+                update_panning(audioState, catSound, catPan);
+
+                animCounter++;
+                if(animCounter >= CAT_ANIM_DIV) {
+                    if(catState == CAT_ANIM0) {
+                        catState = CAT_ANIM1;
+                        catAnim++;
+                    } else {
+                        catState = CAT_ANIM0;
+                        catAnim--;
                     }
-                    catAngle -= angleDiff;
-                    if(catAngle < 0.0) {
-                        catAngle += M_PI * 2;
-                    } else if(catAngle >= M_PI * 2) {
-                        catAngle -= M_PI * 2;
-                    }
-                    if(tilemap_set_layer_rotation(ll, catlayer,
-                                                  radian_to_degree(catAngle)) < 0) {
-                        fprintf(stderr, "Failed to set layer rotation.\n");
+
+                    if(tilemap_set_layer_scroll_pos(gs.ll, catlayer,
+                                                    catAnim * TEST_SPRITE_WIDTH,
+                                                    0) < 0) {
+                        fprintf(stderr, "Failed to set layer scroll pos.\n");
                         goto error_synth;
                     }
-                    
-                    velocity = find_cat_velocity(velocity, catAngle,
-                                                 catx, caty,
-                                                 winwidth, winheight);
-                    xy_from_angle(&motionx, &motiony, catAngle);
-                    catx += motionx * velocity;
-                    caty += motiony * velocity;
-                } else {
-                    catIdleTime += CAT_RATE;
-                }
-                update_panning(audioState,
-                               catSound,
-                               (float)(catx - (winwidth / 2)) /
-                               (float)winwidth);
 
-                if(catState == CAT_ANIM0) {
-                    animCounter++;
-                    if(animCounter >= CAT_ANIM_DIV) {
-                        catState = CAT_ANIM1;
-                        animCounter = 0;
-                        if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                                        TEST_ANIM1 * TEST_SPRITE_WIDTH,
-                                                        0) < 0) {
-                            fprintf(stderr, "Failed to set layer scroll pos.\n");
-                            goto error_synth;
-                        }
-                    }
-                } else {
-                    animCounter++;
-                    if(animCounter >= CAT_ANIM_DIV) {
-                        catState = CAT_ANIM0;
-                        animCounter = 0;
-                        if(tilemap_set_layer_scroll_pos(ll, catlayer,
-                                                        TEST_ANIM0 * TEST_SPRITE_WIDTH,
-                                                        0) < 0) {
-                            fprintf(stderr, "Failed to set layer scroll pos.\n");
-                            goto error_synth;
-                        }
-                    }
+                    animCounter = 0;
                 }
             } else { /* CAT_RESTING */
-                if(tilemap_set_layer_pos(ll, zzzlayer,
-                                         catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
-                                         caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
+                zzzcycle += ZZZ_CYCLE_SPEED;
+                if(zzzcycle >= M_PI * 2) {
+                    zzzcycle -= M_PI * 2;
+                }
+
+                if(tilemap_set_layer_pos(gs.ll, zzzlayer,
+                                         gs.catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
+                                         gs.caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
                                          (sin(zzzcycle) * ZZZ_AMP)) < 0) {
                     fprintf(stderr, "Failed to set ZZZ position.\n");
                     goto error_synth;
                 }
-                if(tilemap_set_layer_colormod(ll, zzzlayer,
+                if(tilemap_set_layer_colormod(gs.ll, zzzlayer,
                                               color_from_angle(zzzcycle,
                                                                ZZZ_COLOR_BIAS)) < 0) {
                     fprintf(stderr, "Failed to set ZZZ colormod.\n");
                     goto error_synth;
                 }
+            }
 
-                zzzcycle += ZZZ_CYCLE_SPEED;
-                if(zzzcycle >= M_PI * 2) {
-                    zzzcycle -= M_PI * 2;
-                }
+            process_enemies(&gs);
+
+            switch(spawner) {
+                case SPAWN_ANTS:
+                    spawnerTimer -= ACTOR_RATE;
+                    while(spawnerTimer < 0) {
+                        if(spawnerCount == 0) {
+                            spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+                            spawner = SPAWN_NONE;
+                            break;
+                        }
+
+                        spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
+                        if(create_enemy(&gs, SPAWN_ANTS,
+                                        RANDRANGE(0, gs.winwidth),
+                                        RANDRANGE(0, gs.winheight),
+                                        SCALE((double)rand(),
+                                              0.0, RAND_MAX,
+                                              0.0, M_PI * 2.0)) < 0) {
+                            goto error_synth;
+                        }
+                        spawnerCount--;
+                    }
+                    break;
+                case SPAWN_SPIDERS:
+                    spawnerTimer -= ACTOR_RATE;
+                    while(spawnerTimer < 0) {
+                        if(spawnerCount == 0) {
+                            spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+                            spawner = SPAWN_NONE;
+                            break;
+                        }
+
+                        spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
+                        if(create_enemy(&gs, SPAWN_SPIDERS,
+                                        RANDRANGE(0, gs.winwidth),
+                                        RANDRANGE(0, gs.winheight),
+                                        SCALE((double)rand(),
+                                              0.0, RAND_MAX,
+                                              0.0, M_PI * 2.0)) < 0) {
+                            goto error_synth;
+                        }
+                        spawnerCount--;
+                    }
+                    break;
+                case SPAWN_MICE:
+                    spawnerTimer -= ACTOR_RATE;
+                    while(spawnerTimer < 0) {
+                        if(spawnerCount == 0) {
+                            spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+                            spawner = SPAWN_NONE;
+                            break;
+                        }
+
+                        spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
+                        if(create_enemy(&gs, SPAWN_MICE,
+                                        RANDRANGE(0, gs.winwidth),
+                                        RANDRANGE(0, gs.winheight),
+                                        SCALE((double)rand(),
+                                              0.0, RAND_MAX,
+                                              0.0, M_PI * 2.0)) < 0) {
+                            goto error_synth;
+                        }
+                        spawnerCount--;
+                    }
+                    break;
+                default:
+                    spawnerTimer -= ACTOR_RATE;
+                    if(spawnerTimer < 0) {
+                        gs.spawnerx = rand() % gs.winwidth;
+                        gs.spawnery = rand() % gs.winheight;
+                        switch(rand() % 3) {
+                            case 0:
+                                spawner = SPAWN_ANTS;
+                                spawnerCount = RAND_RANGE(ANT_SPAWN_MIN, ANT_SPAWN_MAX);
+                                spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
+                                break;
+                            case 1:
+                                spawner = SPAWN_SPIDERS;
+                                spawnerCount = RAND_RANGE(SPIDER_SPAWN_MIN, SPIDER_SPAWN_MAX);
+                                spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
+                                break;
+                            default:
+                                spawner = SPAWN_MICE;
+                                spawnerCount = RAND_RANGE(MOUSE_SPAWN_MIN, MOUSE_SPAWN_MAX);
+                                spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
+                        }
+                    }
             }
 
             thisTick = SDL_GetTicks();
         }
 
-        if(tilemap_set_layer_pos(ll, catlayer,
-                                 catx, caty) < 0) {
-            fprintf(stderr, "Failed to set cat position.\n");
-            goto error_synth;
-        }
-        if(tilemap_draw_layer(ll, catlayer) < 0) {
+        draw_enemies(&gs);
+        if(tilemap_draw_layer(gs.ll, catlayer) < 0) {
             fprintf(stderr, "Failed to draw cat layer.\n");
             goto error_synth;
         }
         if(catState == CAT_RESTING) {
-            if(tilemap_draw_layer(ll, zzzlayer) < 0) {
+            if(tilemap_draw_layer(gs.ll, zzzlayer) < 0) {
                 fprintf(stderr, "Failed to draw ZZZ layer.\n");
                 goto error_synth;
             }
@@ -1422,10 +1758,10 @@ int main(int argc, char **argv) {
     free_audio_state(audioState);
 
     /* test cleanup functions */
-    tilemap_free_layer(ll, catlayer);
-    tilemap_free_tilemap(ll, tilemap);
-    tilemap_free_tileset(ll, tileset);
-    layerlist_free(ll);
+    tilemap_free_layer(gs.ll, catlayer);
+    tilemap_free_tilemap(gs.ll, gs.tilemap);
+    tilemap_free_tileset(gs.ll, tileset);
+    layerlist_free(gs.ll);
 
     SDL_DestroyWindow(win);
     SDL_Quit();
@@ -1435,7 +1771,7 @@ int main(int argc, char **argv) {
 error_synth:
     free_audio_state(audioState);
 error_ll:
-    layerlist_free(ll);
+    layerlist_free(gs.ll);
 error_video:
     SDL_DestroyWindow(win);
 error_sdl:
