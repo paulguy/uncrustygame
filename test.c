@@ -63,6 +63,7 @@
 #define ANT_VELOCITY     (1.0)
 #define ANT_TURN_SPEED   (M_PI * 2.0 / ACTOR_FPS * 2.0)
 #define ANT_VALUE        (10)
+#define ANT_EAT_TIME     (100)
 #define SPIDER_SPAWN_MIN (10)
 #define SPIDER_SPAWN_MAX (50)
 #define SPIDER_SPAWN_TIME_MIN (20)
@@ -70,6 +71,7 @@
 #define SPIDER_VELOCITY  (2.0)
 #define SPIDER_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.8)
 #define SPIDER_VALUE     (50)
+#define SPIDER_EAT_TIME  (500)
 #define MOUSE_SPAWN_MIN  (2)
 #define MOUSE_SPAWN_MAX  (10)
 #define MOUSE_SPAWN_TIME_MIN (100)
@@ -77,6 +79,7 @@
 #define MOUSE_VELOCITY   (4.0)
 #define MOUSE_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.3)
 #define MOUSE_VALUE      (200)
+#define MOUSE_EAT_TIME   (1000)
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
@@ -113,6 +116,8 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_SMHOLE  (11)
 #define TEST_GORE0   (12)
 #define TEST_GORE1   (13)
+
+#define CAT_DISTANCE     (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)
 
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 #define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
@@ -154,6 +159,7 @@ typedef struct {
     float maxSpeed;
     float maxAngle;
     int value;
+    unsigned int eatTime;
 } Enemy;
 
 typedef enum {
@@ -164,9 +170,13 @@ typedef enum {
 } SpawnerType;
 
 typedef struct {
+    LayerList *ll;
+    int tilemap;
     float catx, caty;
     unsigned int winwidth, winheight;
     Enemy enemy[MAX_ENEMIES];
+    int eating;
+    int score;
 } GameState;
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
@@ -332,7 +342,7 @@ error:
 }
 
 /* i don't knwo what i'm doing */
-double angle_from_xy(double x, double y) {
+float angle_from_xy(float x, float y) {
     if(x == 0.0) {
         if(y < 0.0) {
             return(M_PI);
@@ -347,71 +357,85 @@ double angle_from_xy(double x, double y) {
         }
     } else if(x > 0.0 && y > 0.0) {
         if(x < y) {
-            return((M_PI * 2.0) - atan(x / y));
+            return((M_PI * 2.0) - atanf(x / y));
         } else {
-            return((M_PI * 1.5) + atan(y / x));
+            return((M_PI * 1.5) + atanf(y / x));
         }
     } else if(x < 0.0 && y > 0.0) {
         x = -x;
         if(x < y) {
-            return(atan(x / y));
+            return(atanf(x / y));
         } else {
-            return((M_PI * 0.5) - atan(y / x));
+            return((M_PI * 0.5) - atanf(y / x));
         }
     } else if(x > 0.0 && y < 0.0) {
         y = -y;
         if(x < y) {
-            return(M_PI + atan(x / y));
+            return(M_PI + atanf(x / y));
         } else {
-            return((M_PI * 1.5) - atan(y / x));
+            return((M_PI * 1.5) - atanf(y / x));
         }
     }
 
     x = -x;
     y = -y;
     if(x < y) {
-        return(M_PI - atan(x / y));
+        return(M_PI - atanf(x / y));
     }
-    return((M_PI * 0.5) + atan(y / x));
+    return((M_PI * 0.5) + atanf(y / x));
 }
 
-double radian_to_degree(double radian) {
+float radian_to_degree(float radian) {
     return(radian / (M_PI * 2) * 360.0);
 }
 
-double velocity_from_xy(double x, double y) {
-    return(sqrt(pow(x, 2) + pow(y, 2)));
+float velocity_from_xy(float x, float y) {
+    return(sqrtf(powf(x, 2) + powf(y, 2)));
+}
+
+float distance(float x1, float y1, float x2, float y2) {
+    if(x1 > x2) {
+        if(y1 > y2) {
+            return(velocity_from_xy(x1 - x2, y1 - y2));
+        } else {
+            return(velocity_from_xy(x1 - x2, y2 - y1));
+        }
+    }
+    if(y1 > y2) {
+        return(velocity_from_xy(x2 - x1, y1 - y2));
+    }
+    return(velocity_from_xy(x2 - x1, y2 - y1));
 }
 
 /* still have no idea */
-void xy_from_angle(double *x, double *y, double angle) {
+void xy_from_angle(float *x, float *y, float angle) {
     *x = -sin(angle);
     *y = cos(angle);
 }
 
-unsigned int color_from_angle(double angle, unsigned int bias) {
-    const double COLORDIV = ((M_PI * 2.0) / 6.0);
+unsigned int color_from_angle(float angle, unsigned int bias) {
+    const float COLORDIV = ((M_PI * 2.0) / 6.0);
 
     if(angle >= 0.0 && angle < COLORDIV) {
         return(TILEMAP_COLOR(255,
                              bias,
                              (unsigned int)SCALEINV(angle,
                                                     0.0, COLORDIV,
-                                                    (double)bias, 255.0),
+                                                    (float)bias, 255.0),
                              255));
     } else if(angle >= COLORDIV &&
        angle < COLORDIV * 2.0) {
         return(TILEMAP_COLOR(255,
                              (unsigned int)SCALE(angle,
                                                  COLORDIV, COLORDIV * 2.0,
-                                                 (double)bias, 255.0),
+                                                 (float)bias, 255.0),
                              bias,
                              255));
     } else if(angle >= COLORDIV * 2.0 &&
        angle < COLORDIV * 3.0) {
         return(TILEMAP_COLOR((unsigned int)SCALEINV(angle,
                                                     COLORDIV * 2.0, COLORDIV * 3.0,
-                                                    (double)bias, 255.0),
+                                                    (float)bias, 255.0),
                              255,
                              bias,
                              255));
@@ -421,20 +445,20 @@ unsigned int color_from_angle(double angle, unsigned int bias) {
                              255,
                              (unsigned int)SCALE(angle,
                                                  COLORDIV * 3.0, COLORDIV * 4.0,
-                                                 (double)bias, 255.0),
+                                                 (float)bias, 255.0),
                              255));
     } else if(angle >= COLORDIV * 4.0 &&
        angle < COLORDIV * 5.0) {
         return(TILEMAP_COLOR(bias,
                              (unsigned int)SCALEINV(angle,
                                                     COLORDIV * 4.0, COLORDIV * 5.0,
-                                                    (double)bias, 255.0),
+                                                    (float)bias, 255.0),
                              255,
                              255));
     }
     return(TILEMAP_COLOR((unsigned int)SCALE(angle,
                                              COLORDIV * 5.0, COLORDIV * 6.0,
-                                             (double)bias, 255.0),
+                                             (float)bias, 255.0),
                          bias,
                          255,
                          255));
@@ -797,7 +821,7 @@ int create_enemy(GameState *gs,
     unsigned int i;
 
     for(i = 0; i < MAX_ENEMIES; i++) {
-        if(gs->enemy[i].sprite >= 0) {
+        if(gs->enemy[i].sprite < 0) {
             break;
         }
     }
@@ -809,30 +833,36 @@ int create_enemy(GameState *gs,
     switch(type) {
         case SPAWN_ANTS:
             gs->enemy[i].state = CAT_ANIM0;
-            gs->enemy[i].anim = ANT_ANIM0;
+            gs->enemy[i].anim = TEST_ANT0;
             gs->enemy[i].animCounter = 0;
             gs->enemy[i].maxSpeed = ANT_VELOCITY;
             gs->enemy[i].maxAngle = ANT_TURN_SPEED;
+            gs->enemy[i].value = ANT_VALUE;
+            gs->enemy[i].eatTime = ANT_EAT_TIME;
             gs->enemy[i].x = x;
             gs->enemy[i].y = y;
             gs->enemy[i].angle = angle;
             break;
         case SPAWN_SPIDERS:
             gs->enemy[i].state = CAT_ANIM0;
-            gs->enemy[i].anim = SPIDER_ANIM0;
+            gs->enemy[i].anim = TEST_SPIDER0;
             gs->enemy[i].animCounter = 0;
             gs->enemy[i].maxSpeed = SPIDER_VELOCITY;
             gs->enemy[i].maxAngle = SPIDER_TURN_SPEED;
+            gs->enemy[i].value = SPIDER_VALUE;
+            gs->enemy[i].eatTime = SPIDER_EAT_TIME;
             gs->enemy[i].x = x;
             gs->enemy[i].y = y;
             gs->enemy[i].angle = angle;
             break;
         case SPAWN_MICE:
             gs->enemy[i].state = CAT_ANIM0;
-            gs->enemy[i].anim = MOUSE_ANIM0;
+            gs->enemy[i].anim = TEST_MOUSE0;
             gs->enemy[i].animCounter = 0;
             gs->enemy[i].maxSpeed = MOUSE_VELOCITY;
             gs->enemy[i].maxAngle = MOUSE_TURN_SPEED;
+            gs->enemy[i].value = MOUSE_VALUE;
+            gs->enemy[i].eatTime = MOUSE_EAT_TIME;
             gs->enemy[i].x = x;
             gs->enemy[i].y = y;
             gs->enemy[i].angle = angle;
@@ -1012,7 +1042,7 @@ void update_movement(float *thisx, float *thisy,
                      float targetx, float targety,
                      float maxVelocity,
                      unsigned int maxx, unsigned int maxy,
-                     float *catIdleTime,
+                     int *catIdleTime,
                      float *thisAngle, float maxAngle) {
     float motionx, motiony;
     float velocity;
@@ -1027,6 +1057,14 @@ void update_movement(float *thisx, float *thisy,
         }
 
         angle = angle_from_xy(motionx, motiony);
+        /* if not updating the cat, then updating an enemy, so actually move
+         * _away_ from the target */
+        if(catIdleTime == NULL) {
+            angle += M_PI;
+            if(angle >= M_PI * 2) {
+                angle -= M_PI * 2;
+            }
+        }
         if(*thisAngle > M_PI && angle < *thisAngle - M_PI) {
             angle += M_PI * 2;
         } else if(*thisAngle < M_PI && angle > *thisAngle + M_PI) {
@@ -1039,22 +1077,17 @@ void update_movement(float *thisx, float *thisy,
             angleDiff = -maxAngle;
         }
         *thisAngle -= angleDiff;
-        /* if not updating the cat, then updating an enemy, so actually move
-         * _away_ from the target */
-        if(catIdleTime == NULL) {
-            *thisAngle += M_PI;
-        }
         if(*thisAngle < 0.0) {
             *thisAngle += M_PI * 2;
         } else if(*thisAngle >= M_PI * 2) {
             *thisAngle -= M_PI * 2;
         }
        
-        velocity = find_object_velocity(velocity, thisAngle,
-                                        thisx, thisy,
+        velocity = find_object_velocity(velocity, *thisAngle,
+                                        *thisx, *thisy,
                                         maxx, maxy,
                                         maxVelocity);
-        xy_from_angle(&motionx, &motiony, thisAngle);
+        xy_from_angle(&motionx, &motiony, *thisAngle);
         *thisx += motionx * velocity;
         *thisy += motiony * velocity;
     } else {
@@ -1064,7 +1097,7 @@ void update_movement(float *thisx, float *thisy,
     }
 }
 
-void process_enemies(GameState *gs) {
+int process_enemies(GameState *gs) {
     unsigned int i;
 
     for(i = 0; i < MAX_ENEMIES; i++) {
@@ -1072,19 +1105,32 @@ void process_enemies(GameState *gs) {
             continue;
         }
 
-        update_movement(&(gs->enemy[i].x), &(gs->enemy[i].y),
-                        gs->catx, gs.caty,
-                        gs->enemy[i].maxSpeed,
-                        gs->winwidth, gs->winheight,
-                        NULL,
-                        &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
-        /* invalidate any enemies which have gone of screen */
-        if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
-           gs->enemy[i].x > gs->winwidth + (TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
-           gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE) ||
-           gs->enemy[i].y > gs->winheight + (TEST_SPRITE_HEIGHT * SPRITE_SCALE)) {
+        if(gs->eating <= 0 &&
+           distance(gs->catx, gs->caty,
+                    gs->enemy[i].x, gs->enemy[i].y) < CAT_DISTANCE) {
+            /* despawn eaten enemy */
             gs->enemy[i].sprite = -1;
+            gs->eating = gs->enemy[i].eatTime;
+            gs->score += gs->enemy[i].value;
+            if(gs->score < 0) {
+                gs->score = 0;
+            }
             continue;
+        } else {
+            update_movement(&(gs->enemy[i].x), &(gs->enemy[i].y),
+                            gs->catx, gs->caty,
+                            gs->enemy[i].maxSpeed,
+                            gs->winwidth, gs->winheight,
+                            NULL,
+                            &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
+            /* invalidate any enemies which have gone of screen */
+            if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
+               gs->enemy[i].x > gs->winwidth + (TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
+               gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE) ||
+               gs->enemy[i].y > gs->winheight + (TEST_SPRITE_HEIGHT * SPRITE_SCALE)) {
+                gs->enemy[i].sprite = -1;
+                continue;
+            }
         }
 
         gs->enemy[i].animCounter++;
@@ -1100,20 +1146,25 @@ void process_enemies(GameState *gs) {
             if(tilemap_set_layer_scroll_pos(gs->ll, gs->enemy[i].sprite,
                                             gs->enemy[i].anim * TEST_SPRITE_WIDTH,
                                             0) < 0) {
+                fprintf(stderr, "Failed to set enemy sprite scroll pos.\n");
                 return(-1);
             }
             gs->enemy[i].animCounter = 0;
         }
 
         if(tilemap_set_layer_pos(gs->ll, gs->enemy[i].sprite,
-                                 gs->catx, gs->caty) < 0) {
+                                 gs->enemy[i].x, gs->enemy[i].y) < 0) {
+            fprintf(stderr, "Failed to set enemy sprite pos.\n");
             return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->enemy[i].sprite,
                                       radian_to_degree(gs->enemy[i].angle)) < 0) {
+            fprintf(stderr, "Failed to set enemy sprite rotation.\n");
             return(-1);
         }
     }
+
+    return(0);
 }
 
 int draw_enemies(GameState *gs) {
@@ -1133,6 +1184,7 @@ int draw_enemies(GameState *gs) {
 }
 
 int main(int argc, char **argv) {
+    unsigned int i;
     Uint32 format;
     SDL_Window *win;
     SDL_Renderer *renderer;
@@ -1151,19 +1203,21 @@ int main(int argc, char **argv) {
     CatState catState = CAT_ANIM0;
     int animCounter = 0;
     int catAnim = TEST_ANIM0;
-    double catAngle = 0.0;
+    float catAngle = 0.0;
     int zzzlayer = -1;
-    double zzzcycle = 0.0;
+    float zzzcycle = 0.0;
     int fullscreen = 0;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meow1, meow2, cat_activation, purr;
-    unsigned int catIdleTime = 0;
+    int catIdleTime = 0;
     int catSound = 0;
     float catPan = 0.0;
     SpawnerType spawner;
-    unsigned int spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-    int spawnerx, spawnery;
-    int spawnCount;
+    int spawnerSprite;
+    int spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+    unsigned int spawnerx = RANDRANGE(0, WINDOW_WIDTH);
+    unsigned int spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+    unsigned int spawnerCount = 0;;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -1280,6 +1334,28 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
+    spawnerSprite = tilemap_add_layer(gs.ll, gs.tilemap);
+    if(spawnerSprite < 0) {
+        fprintf(stderr, "Failed to create spawner layer.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_window(gs.ll, spawnerSprite,
+                                TEST_SPRITE_WIDTH,
+                                TEST_SPRITE_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set spawner layer window.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_rotation_center(gs.ll, spawnerSprite,
+                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
+                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set spawner layer rotation center.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_scale(gs.ll, spawnerSprite, SPRITE_SCALE, SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set spawner layer scale.\n");
+        goto error_synth;
+    }
+
     /* load the sound effects and create players for them, as they may
      * eventually each have different parameters for volume balance or
      * whatever else */
@@ -1366,10 +1442,12 @@ int main(int argc, char **argv) {
     gs.winwidth = WINDOW_WIDTH;
     gs.winheight = WINDOW_HEIGHT;
     for(i = 0; i < MAX_ENEMIES; i++) {
-        gs.enemy[sprite] = -1;
+        gs.enemy[i].sprite = -1;
     }
+    gs.eating = 0;
+    gs.score = 0;
 
-    spawneType = SPAWN_NONE;
+    spawner = SPAWN_NONE;
 
     /* ##### MAIN LOOP ##### */
     running = 1;
@@ -1572,13 +1650,17 @@ int main(int argc, char **argv) {
          * catch up.  It'll slow down but still be able to display something
          * and poll for events */
         Uint32 thisTick = SDL_GetTicks();
-        processTime = thisTick;
+        Uint32 processTime = thisTick;
         while(thisTick >= nextMotion &&
               thisTick - processTime < MAX_PROCESS_TIME) {
             nextMotion += ACTOR_RATE;
 
+            if(gs.eating > 0) {
+                gs.eating -= ACTOR_RATE;
+            }
+
             if(catState != CAT_RESTING) {
-                float lastCatIdleTime = catIdleTime;
+                int lastCatIdleTime = catIdleTime;
                 update_movement(&(gs.catx), &(gs.caty),
                                 mousex, mousey,
                                 CAT_VELOCITY,
@@ -1647,8 +1729,6 @@ int main(int argc, char **argv) {
                 }
             }
 
-            process_enemies(&gs);
-
             switch(spawner) {
                 case SPAWN_ANTS:
                     spawnerTimer -= ACTOR_RATE;
@@ -1661,8 +1741,7 @@ int main(int argc, char **argv) {
 
                         spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
                         if(create_enemy(&gs, SPAWN_ANTS,
-                                        RANDRANGE(0, gs.winwidth),
-                                        RANDRANGE(0, gs.winheight),
+                                        spawnerx, spawnery,
                                         SCALE((double)rand(),
                                               0.0, RAND_MAX,
                                               0.0, M_PI * 2.0)) < 0) {
@@ -1682,8 +1761,7 @@ int main(int argc, char **argv) {
 
                         spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
                         if(create_enemy(&gs, SPAWN_SPIDERS,
-                                        RANDRANGE(0, gs.winwidth),
-                                        RANDRANGE(0, gs.winheight),
+                                        spawnerx, spawnery,
                                         SCALE((double)rand(),
                                               0.0, RAND_MAX,
                                               0.0, M_PI * 2.0)) < 0) {
@@ -1703,8 +1781,7 @@ int main(int argc, char **argv) {
 
                         spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
                         if(create_enemy(&gs, SPAWN_MICE,
-                                        RANDRANGE(0, gs.winwidth),
-                                        RANDRANGE(0, gs.winheight),
+                                        spawnerx, spawnery,
                                         SCALE((double)rand(),
                                               0.0, RAND_MAX,
                                               0.0, M_PI * 2.0)) < 0) {
@@ -1716,28 +1793,52 @@ int main(int argc, char **argv) {
                 default:
                     spawnerTimer -= ACTOR_RATE;
                     if(spawnerTimer < 0) {
-                        gs.spawnerx = rand() % gs.winwidth;
-                        gs.spawnery = rand() % gs.winheight;
+                        spawnerx = RANDRANGE(0, gs.winwidth);
+                        spawnery = RANDRANGE(0, gs.winheight);
+                        if(tilemap_set_layer_scroll_pos(gs.ll, spawnerSprite,
+                                                        TEST_BIGHOLE * TEST_SPRITE_WIDTH,
+                                                        0) < 0) {
+                            fprintf(stderr, "Failed to set spawner layer scroll pos.\n");
+                            goto error_synth;
+                        }
+
+                        if(tilemap_set_layer_pos(gs.ll, spawnerSprite,
+                                                 spawnerx, spawnery) < 0) {
+                            fprintf(stderr, "Failed to set spawner position.\n");
+                            goto error_synth;
+                        }
+
                         switch(rand() % 3) {
                             case 0:
                                 spawner = SPAWN_ANTS;
-                                spawnerCount = RAND_RANGE(ANT_SPAWN_MIN, ANT_SPAWN_MAX);
+                                spawnerCount = RANDRANGE(ANT_SPAWN_MIN, ANT_SPAWN_MAX);
                                 spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
                                 break;
                             case 1:
                                 spawner = SPAWN_SPIDERS;
-                                spawnerCount = RAND_RANGE(SPIDER_SPAWN_MIN, SPIDER_SPAWN_MAX);
+                                spawnerCount = RANDRANGE(SPIDER_SPAWN_MIN, SPIDER_SPAWN_MAX);
                                 spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
                                 break;
                             default:
                                 spawner = SPAWN_MICE;
-                                spawnerCount = RAND_RANGE(MOUSE_SPAWN_MIN, MOUSE_SPAWN_MAX);
+                                spawnerCount = RANDRANGE(MOUSE_SPAWN_MIN, MOUSE_SPAWN_MAX);
                                 spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
                         }
                     }
             }
 
             thisTick = SDL_GetTicks();
+        }
+
+        if(process_enemies(&gs) < 0) {
+            goto error_synth;
+        }
+
+        if(spawner != SPAWN_NONE) {
+            if(tilemap_draw_layer(gs.ll, spawnerSprite) < 0) {
+                fprintf(stderr, "Failed to draw cat layer.\n");
+                goto error_synth;
+            }
         }
 
         draw_enemies(&gs);
