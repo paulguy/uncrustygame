@@ -75,6 +75,7 @@ typedef struct {
 typedef struct LayerList_t {
     SDL_Renderer *renderer;
     Uint32 format;
+    SDL_Texture *defaultTex;
     layerlist_log_cb_t log_cb;
     void *log_priv;
     
@@ -89,6 +90,14 @@ typedef struct LayerList_t {
 
     int blendWarned;
 } LayerList;
+
+static unsigned int find_power_of_two(unsigned int val) {
+    unsigned int i;
+
+    for(i = 1; i < val; i *= 2);
+
+    return(i);
+}
 
 int tilemap_tileset_from_bmp(LayerList *ll,
                              const char *filename,
@@ -110,12 +119,42 @@ int tilemap_tileset_from_bmp(LayerList *ll,
     return(tileset);
 }
 
-static unsigned int find_power_of_two(unsigned int val) {
-    unsigned int i;
+int tilemap_blank_tileset(LayerList *ll,
+                          unsigned int w,
+                          unsigned int h,
+                          Uint32 color,
+                          unsigned int tw,
+                          unsigned int th) {
+    SDL_Surface *surface;
+    Uint32 rmask, gmask, bmask, amask;
+    int bpp;
+    int ret;
 
-    for(i = 1; i < val; i *= 2);
+    /* get the masks from the pixel format */
+    if(SDL_PixelFormatEnumToMasks(ll->format, &bpp,
+                                  &rmask, &gmask, &bmask, &amask) == SDL_FALSE) {
+        LOG_PRINTF(ll, "Failed to get format masks.\n");
+        return(-1);
+    }
 
-    return(i);
+    /* create the surface */
+    surface = SDL_CreateRGBSurface(0, w, h, bpp,
+                                   rmask, gmask, bmask, amask);
+    if(surface == NULL) {
+        LOG_PRINTF(ll, "Failed to create surface.\n");
+        return(-1);
+    }
+
+    /* fill it */
+    if(SDL_FillRect(surface, NULL, color) < 0) {
+        LOG_PRINTF(ll, "Failed to fill surface with color.\n");
+        return(-1);
+    }
+
+    /* create the tilemap, free the no longer needed surface and return */
+    ret = tilemap_add_tileset(ll, surface, tw, th);
+    SDL_FreeSurface(surface);
+    return(ret);
 }
 
 static int debug_show_texture(LayerList *ll,
@@ -180,6 +219,8 @@ LayerList *layerlist_new(SDL_Renderer *renderer,
 
     ll->renderer = renderer;
     ll->format = format;
+    /* NULL is the screen */
+    ll->defaultTex = NULL;
     ll->log_cb = log_cb;
     ll->log_priv = log_priv;
     ll->tilesetsmem = 0;
@@ -689,6 +730,7 @@ int tilemap_update_tilemap(LayerList *ll,
     double angle;
     SDL_RendererFlip flip;
     unsigned int texw, texh;
+    SDL_Texture *targetTexture;
 
     /* make sure index is a valid tilemap */
     if(index >= ll->tilemapsmem ||
@@ -740,6 +782,7 @@ int tilemap_update_tilemap(LayerList *ll,
         }
     }
     /* set it to be rendered to */
+    targetTexture = SDL_GetRenderTarget(ll->renderer);
     if(SDL_SetRenderTarget(ll->renderer, tilemap->tex) < 0) {
         LOG_PRINTF(ll, "Failed to set render target: %s.\n",
                        SDL_GetError());
@@ -860,9 +903,9 @@ int tilemap_update_tilemap(LayerList *ll,
         dest.y += dest.h;
     }
 
-    /* restore default render target */
-    if(SDL_SetRenderTarget(ll->renderer, NULL) < 0) {
-        LOG_PRINTF(ll, "Failed to restore default render target.\n");
+    /* restore render target */
+    if(SDL_SetRenderTarget(ll->renderer, targetTexture) < 0) {
+        LOG_PRINTF(ll, "Failed to restore render target.\n");
         return(-1);
     }
 
@@ -1149,6 +1192,32 @@ int tilemap_set_layer_blendmode(LayerList *ll, unsigned int index, int blendMode
     return(0);
 }
  
+
+void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex) {
+    ll->defaultTex = tex;
+}
+
+int tilemap_set_target_tileset(LayerList *ll, int tileset) {
+    SDL_Texture *texture;
+
+    if(tileset < 0) {
+        texture = ll->defaultTex;
+    } else if((unsigned int)tileset >= ll->tilesetsmem ||
+              ll->tileset[tileset].tex == NULL) {
+        LOG_PRINTF(ll, "Invalid tileset index.\n");
+        return(-1);
+    } else {
+        texture = ll->tileset[tileset].tex;
+    }
+
+    if(SDL_SetRenderTarget(ll->renderer, texture) < 0) {
+        LOG_PRINTF(ll, "Failed to set render target.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
 int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     Tileset *tileset;
     Tilemap *tilemap;

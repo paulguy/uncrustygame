@@ -58,6 +58,12 @@ int tilemap_tileset_from_bmp(LayerList *ll,
                              const char *filename,
                              unsigned int tw,
                              unsigned int th);
+int tilemap_blank_tileset(LayerList *ll,
+                          unsigned int w,
+                          unsigned int h,
+                          Uint32 color,
+                          unsigned int tw,
+                          unsigned int th);
 
 LayerList *layerlist_new(SDL_Renderer *renderer,
                          Uint32 format,
@@ -145,6 +151,8 @@ int tilemap_set_layer_colormod(LayerList *ll,
 int tilemap_set_layer_blendmode(LayerList *ll,
                                 unsigned int index,
                                 int blendMode);
+void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);
+int tilemap_set_target_tileset(LayerList *ll, int tileset);
 int tilemap_draw_layer(LayerList *ll, unsigned int index);
 
 #endif

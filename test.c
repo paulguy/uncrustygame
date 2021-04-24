@@ -29,8 +29,8 @@
 /* initial settings */
 #define MAX_PROCESS_TIME (200)
 #define WINDOW_TITLE    "UnCrustyGame Test"
-#define WINDOW_WIDTH    (1280)
-#define WINDOW_HEIGHT   (720)
+#define WINDOW_WIDTH    (1024)
+#define WINDOW_HEIGHT   (768)
 #define DEFAULT_RATE    (48000)
 #define SPRITE_SCALE    (2.0)
 #define MAX_ACTIVE_PLAYERS (32)
@@ -50,8 +50,8 @@
 #define ZZZ_CYCLE_SPEED  (M_PI * 2.0 / ACTOR_FPS / 3.0)
 #define ZZZ_COLOR_BIAS   (64)
 /* from bottom-left */
-#define ZZZ_POS_X        (0.75)
-#define ZZZ_POS_Y        (0.75)
+#define ZZZ_POS_X        (-0.25)
+#define ZZZ_POS_Y        (0.25)
 
 #define MAX_ENEMIES      (256)
 #define MIN_SPAWNER_TIME (500)
@@ -173,10 +173,11 @@ typedef struct {
     LayerList *ll;
     int tilemap;
     float catx, caty;
-    unsigned int winwidth, winheight;
     Enemy enemy[MAX_ENEMIES];
     int eating;
     int score;
+    SDL_Texture *goreTex;
+    int goreSprite;
 } GameState;
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
@@ -326,6 +327,9 @@ int initialize_video(SDL_Window **win,
         *format = bestfmt;
         selectdrv = bestdrv;
     }
+
+    /* might make some different?  dunno */
+    setenv("SDL_HINT_RENDER_BATCHING", "1", 0);
 
     *renderer = SDL_CreateRenderer(*win, selectdrv, SDL_RENDERER_PRESENTVSYNC);
     if(*renderer == NULL) {
@@ -813,6 +817,68 @@ int update_panning(AudioState *as, int token, float panning) {
     return(0);
 }
 
+int create_sprite(GameState *gs) {
+    int sprite;
+
+    sprite = tilemap_add_layer(gs->ll, gs->tilemap);
+    if(sprite < 0) {
+        fprintf(stderr, "Failed to add layer for sprite.\n");
+        return(-1);
+    }
+
+    /* make the tilemap window the size of a single sprite */
+    if(tilemap_set_layer_window(gs->ll, sprite,
+                                TEST_SPRITE_WIDTH,
+                                TEST_SPRITE_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set sprite window size.\n");
+        return(-1);
+    }
+    /* make the rotation center in the center of the sprite so it rotates
+     * about where it aims for the cursor */
+    if(tilemap_set_layer_rotation_center(gs->ll, sprite,
+                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
+                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set sprite rotation center.\n");
+        return(-1);
+    }
+    /* Makes the sprite more visible without me having to draw a larger sprite */
+    if(tilemap_set_layer_scale(gs->ll, sprite,
+                               SPRITE_SCALE, SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set sprite scale.\n");
+        return(-1);
+    }
+
+    return(sprite);
+}
+
+int select_sprite(GameState *gs,
+                  int layer,
+                  int sprite) {
+    if(tilemap_set_layer_scroll_pos(gs->ll, layer,
+                                    sprite * TEST_SPRITE_WIDTH,
+                                    0) < 0) {
+        fprintf(stderr, "Failed to set layer scroll for sprite.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+int position_sprite(GameState *gs,
+                    int layer,
+                    int x,
+                    int y) {
+    /* position sprite based on center */
+    if(tilemap_set_layer_pos(gs->ll, layer,
+                             x - (TEST_SPRITE_WIDTH * SPRITE_SCALE / 2),
+                             y - (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)) < 0) {
+        fprintf(stderr, "Failed to set sprite pos.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
 int create_enemy(GameState *gs,
                  SpawnerType type,
                  float x,
@@ -872,36 +938,12 @@ int create_enemy(GameState *gs,
             return(-1);
     }
 
-    gs->enemy[i].sprite = tilemap_add_layer(gs->ll, gs->tilemap);
+    gs->enemy[i].sprite = create_sprite(gs);
     if(gs->enemy[i].sprite < 0) {
-        fprintf(stderr, "Failed to add layer for enemy.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_scroll_pos(gs->ll, gs->enemy[i].sprite,
-                                    gs->enemy[i].anim * TEST_SPRITE_WIDTH,
-                                    0) < 0) {
-        fprintf(stderr, "Failed to set layer scroll for enemy.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_window(gs->ll, gs->enemy[i].sprite,
-                                TEST_SPRITE_WIDTH,
-                                TEST_SPRITE_HEIGHT) < 0) {
-        fprintf(stderr, "Failed to set enemy window size.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_rotation_center(gs->ll, gs->enemy[i].sprite,
-                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
-                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set enemy rotation center.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_scale(gs->ll, gs->enemy[i].sprite,
-                               SPRITE_SCALE, SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set enemy sprite scame.\n");
         return(-1);
     }
 
-    return(0);
+    return(select_sprite(gs, gs->enemy[i].sprite, gs->enemy[i].anim));
 }
 
 float find_object_velocity(float curdist, float angle,
@@ -1115,19 +1157,53 @@ int process_enemies(GameState *gs) {
             if(gs->score < 0) {
                 gs->score = 0;
             }
+
+            /* render to gore texture */
+            tilemap_set_default_render_target(gs->ll, gs->goreTex);
+            if(tilemap_set_target_tileset(gs->ll, -1) < 0) {
+                fprintf(stderr, "Failed to set target tileset.\n");
+                return(-1);
+            }
+
+            if(select_sprite(gs, gs->goreSprite,
+                             TEST_GORE0 + (rand() % 2)) < 0) {
+                return(-1);
+            }
+            if(position_sprite(gs, gs->goreSprite,
+                               gs->enemy[i].x, gs->enemy[i].y) < 0) {
+                return(-1);
+            }
+            if(tilemap_set_layer_rotation(gs->ll, gs->goreSprite,
+                                          SCALE((double)rand(),
+                                                0.0, (double)RAND_MAX,
+                                                0.0, 360.0)) < 0) {
+                fprintf(stderr, "Failed to set gore sprite rotation.\n");
+                return(-1);
+            }
+            if(tilemap_draw_layer(gs->ll, gs->goreSprite) < 0) {
+                fprintf(stderr, "Failed to draw gore sprite.\n");
+                return(-1);
+            }
+
+            /* render to screen */
+            tilemap_set_default_render_target(gs->ll, NULL);
+            if(tilemap_set_target_tileset(gs->ll, -1) < 0) {
+                fprintf(stderr, "Failed to set target tileset.\n");
+                return(-1);
+            }
             continue;
         } else {
             update_movement(&(gs->enemy[i].x), &(gs->enemy[i].y),
                             gs->catx, gs->caty,
                             gs->enemy[i].maxSpeed,
-                            gs->winwidth, gs->winheight,
+                            WINDOW_WIDTH, WINDOW_HEIGHT,
                             NULL,
                             &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
             /* invalidate any enemies which have gone of screen */
             if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
-               gs->enemy[i].x > gs->winwidth + (TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
+               gs->enemy[i].x > WINDOW_WIDTH + (TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
                gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE) ||
-               gs->enemy[i].y > gs->winheight + (TEST_SPRITE_HEIGHT * SPRITE_SCALE)) {
+               gs->enemy[i].y > WINDOW_HEIGHT + (TEST_SPRITE_HEIGHT * SPRITE_SCALE)) {
                 gs->enemy[i].sprite = -1;
                 continue;
             }
@@ -1143,18 +1219,14 @@ int process_enemies(GameState *gs) {
                 gs->enemy[i].anim--;
             }
 
-            if(tilemap_set_layer_scroll_pos(gs->ll, gs->enemy[i].sprite,
-                                            gs->enemy[i].anim * TEST_SPRITE_WIDTH,
-                                            0) < 0) {
-                fprintf(stderr, "Failed to set enemy sprite scroll pos.\n");
+            if(select_sprite(gs, gs->enemy[i].sprite, gs->enemy[i].anim) < 0) {
                 return(-1);
             }
             gs->enemy[i].animCounter = 0;
         }
 
-        if(tilemap_set_layer_pos(gs->ll, gs->enemy[i].sprite,
-                                 gs->enemy[i].x, gs->enemy[i].y) < 0) {
-            fprintf(stderr, "Failed to set enemy sprite pos.\n");
+        if(position_sprite(gs, gs->enemy[i].sprite,
+                           gs->enemy[i].x, gs->enemy[i].y) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->enemy[i].sprite,
@@ -1225,18 +1297,21 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if(initialize_video(&win,
-                        &renderer,
-                        &format) < 0) {
+    if(initialize_video(&win, &renderer, &format) < 0) {
         fprintf(stderr, "Failed to initialize video.\n");
         goto error_sdl;
     }
 
+    if(SDL_RenderSetLogicalSize(renderer,
+                                WINDOW_WIDTH,
+                                WINDOW_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set render logical size.\n");
+        goto error_video;
+    }
+
     /* initialize the layerlist */
-    gs.ll = layerlist_new(renderer,
-                       format,
-                       vprintf_cb,
-                       stderr);
+    gs.ll = layerlist_new(renderer, format,
+                          vprintf_cb, stderr);
     if(gs.ll == NULL) {
         fprintf(stderr, "Failed to create layerlist.\n");
         goto error_video;
@@ -1253,6 +1328,8 @@ int main(int argc, char **argv) {
     srand(time(NULL));
 
     /* init stuff */
+
+    gs.goreTex = NULL;
 
     /* load the spritesheet */
     tileset = tilemap_tileset_from_bmp(gs.ll,
@@ -1307,52 +1384,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to update tilemap.\n");
         goto error_synth;
     }
-    /* add the tilemap to a layer */
-    catlayer = tilemap_add_layer(gs.ll, gs.tilemap);
+
+    catlayer = create_sprite(&gs);
     if(catlayer < 0) {
-        fprintf(stderr, "Failed to create cat layer.\n");
-        goto error_synth;
-    }
-    /* make the tilemap window the size of a single sprite */
-    if(tilemap_set_layer_window(gs.ll, catlayer,
-                                TEST_SPRITE_WIDTH,
-                                TEST_SPRITE_HEIGHT) < 0) {
-        fprintf(stderr, "Failed to set layer window.\n");
-        goto error_synth;
-    }
-    /* make the rotation center in the center of the sprite so it rotates
-     * about where it aims for the cursor */
-    if(tilemap_set_layer_rotation_center(gs.ll, catlayer,
-                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
-                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set layer rotation center.\n");
-        goto error_synth;
-    }
-    /* Makes the sprite more visible without me having to draw a larger sprite */
-    if(tilemap_set_layer_scale(gs.ll, catlayer, SPRITE_SCALE, SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set layer scale.\n");
         goto error_synth;
     }
 
-    spawnerSprite = tilemap_add_layer(gs.ll, gs.tilemap);
+    spawnerSprite = create_sprite(&gs);
     if(spawnerSprite < 0) {
-        fprintf(stderr, "Failed to create spawner layer.\n");
-        goto error_synth;
-    }
-    if(tilemap_set_layer_window(gs.ll, spawnerSprite,
-                                TEST_SPRITE_WIDTH,
-                                TEST_SPRITE_HEIGHT) < 0) {
-        fprintf(stderr, "Failed to set spawner layer window.\n");
-        goto error_synth;
-    }
-    if(tilemap_set_layer_rotation_center(gs.ll, spawnerSprite,
-                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
-                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set spawner layer rotation center.\n");
-        goto error_synth;
-    }
-    if(tilemap_set_layer_scale(gs.ll, spawnerSprite, SPRITE_SCALE, SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set spawner layer scale.\n");
         goto error_synth;
     }
 
@@ -1437,10 +1476,45 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
+    /* create and clear the gore texture */
+    gs.goreTex = SDL_CreateTexture(renderer, format,
+                                   SDL_TEXTUREACCESS_TARGET,
+                                   WINDOW_WIDTH,
+                                   WINDOW_HEIGHT);
+    if(gs.goreTex == NULL) {
+        fprintf(stderr, "Failed to create gore layer texture.\n");
+        goto error_synth;
+    }
+    if(SDL_SetTextureBlendMode(gs.goreTex, SDL_BLENDMODE_BLEND) < 0) {
+        fprintf(stderr, "Failed to set gore texture blend mode.\n");
+        goto error_synth;
+    }
+    if(SDL_SetRenderTarget(renderer, gs.goreTex) < 0) {
+        fprintf(stderr, "Failed to set render target to gore texture.\n");
+        goto error_synth;
+    }
+    if(SDL_SetRenderDrawColor(renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_TRANSPARENT) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        goto error_synth;
+    } 
+    if(SDL_RenderClear(renderer) < 0) {
+        fprintf(stderr, "Failed to clear gore texture.\n");
+        goto error_synth;
+    }
+    /* restore screen rendering */
+    if(SDL_SetRenderTarget(renderer, NULL) < 0) {
+        fprintf(stderr, "Failed to set render target to screen.\n");
+        goto error_synth;
+    }
+    gs.goreSprite = create_sprite(&gs);
+    if(gs.goreSprite < 0) {
+        goto error_synth;
+    }
+
     gs.catx = mousex;
     gs.caty = mousey;
-    gs.winwidth = WINDOW_WIDTH;
-    gs.winheight = WINDOW_HEIGHT;
     for(i = 0; i < MAX_ENEMIES; i++) {
         gs.enemy[i].sprite = -1;
     }
@@ -1452,26 +1526,6 @@ int main(int argc, char **argv) {
     /* ##### MAIN LOOP ##### */
     running = 1;
     while(running) {
-        /* clear the display, otherwise it'll show flickery garbage */
-        if(SDL_SetRenderDrawColor(renderer,
-                                  BG_R, BG_G, BG_B,
-                                  SDL_ALPHA_OPAQUE) < 0) {
-            fprintf(stderr, "Failed to set render draw color.\n");
-            goto error_synth;
-        } 
-        if(SDL_RenderClear(renderer) < 0) {
-            fprintf(stderr, "Failed to clear screen.\n");
-            goto error_synth;
-        }
-
-        /* needs to be transparent so tilemap updates work */
-        if(SDL_SetRenderDrawColor(renderer,
-                                  0, 0, 0,
-                                  SDL_ALPHA_TRANSPARENT) < 0) {
-            fprintf(stderr, "Failed to set render draw color.\n");
-            goto error_synth;
-        } 
-
         /* check running since an event may end execution early */
         while(running && SDL_PollEvent(&lastEvent)) {
             /* allow the user to press CTRL+F10 (like DOSBOX) to uncapture a
@@ -1513,7 +1567,6 @@ int main(int argc, char **argv) {
                 SDL_KeyboardEvent *key;
                 SDL_MouseMotionEvent *motion;
                 SDL_MouseButtonEvent *click;
-                SDL_WindowEvent *winEv;
                 case SDL_QUIT:
                     running = 0;
                     continue;
@@ -1583,34 +1636,15 @@ int main(int argc, char **argv) {
                             catSound = play_sound(audioState, cat_activation, 1.0, catPan);
                         } else {
                             catState = CAT_RESTING;
-                            if(tilemap_set_layer_scroll_pos(gs.ll, catlayer,
-                                                            TEST_RESTING * TEST_SPRITE_WIDTH,
-                                                            0) < 0) {
-                                fprintf(stderr, "Failed to set layer scroll pos.\n");
+                            if(select_sprite(&gs, catlayer, TEST_RESTING) < 0) {
                                 goto error_synth;
                             }
 
-                            zzzlayer = tilemap_add_layer(gs.ll, gs.tilemap);
+                            zzzlayer = create_sprite(&gs);
                             if(zzzlayer < 0) {
-                                fprintf(stderr, "Failed to create ZZZ layer.\n");
                                 goto error_synth;
                             }
-                            if(tilemap_set_layer_window(gs.ll, zzzlayer,
-                                                        TEST_SPRITE_WIDTH,
-                                                        TEST_SPRITE_HEIGHT) < 0) {
-                                fprintf(stderr, "Failed to set layer window.\n");
-                                goto error_synth;
-                            }
-                            if(tilemap_set_layer_scale(gs.ll, zzzlayer,
-                                                       SPRITE_SCALE,
-                                                       SPRITE_SCALE) < 0) {
-                                fprintf(stderr, "Failed to set layer scale.\n");
-                                goto error_synth;
-                            }
-                            if(tilemap_set_layer_scroll_pos(gs.ll, zzzlayer,
-                                                            TEST_ZZZ * TEST_SPRITE_WIDTH,
-                                                            0) < 0) {
-                                fprintf(stderr, "Failed to set layer scroll pos.\n");
+                            if(select_sprite(&gs, zzzlayer, TEST_ZZZ) < 0) {
                                 goto error_synth;
                             }
                             
@@ -1620,18 +1654,11 @@ int main(int argc, char **argv) {
                     } else if(click->button == 3) {
                         gs.catx = mousex;
                         gs.caty = mousey;
-                        catPan = (float)(gs.catx - (gs.winwidth / 2)) /
-                                 ((float)gs.winwidth / 2) * CAT_PAN_FACTOR;
+                        catPan = (float)(gs.catx - (WINDOW_WIDTH / 2)) /
+                                 ((float)WINDOW_WIDTH / 2) * CAT_PAN_FACTOR;
                     }
                     break;
                 case SDL_MOUSEBUTTONUP:
-                    break;
-                case SDL_WINDOWEVENT:
-                    winEv = (SDL_WindowEvent *)&lastEvent;
-                    if(winEv->event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-                        gs.winwidth = winEv->data1;
-                        gs.winheight = winEv->data2;
-                    }
                     break;
                 default:
                     break;
@@ -1664,7 +1691,7 @@ int main(int argc, char **argv) {
                 update_movement(&(gs.catx), &(gs.caty),
                                 mousex, mousey,
                                 CAT_VELOCITY,
-                                gs.winwidth, gs.winheight,
+                                WINDOW_WIDTH, WINDOW_HEIGHT,
                                 &catIdleTime,
                                 &catAngle, CAT_TURN_SPEED);
                 if(lastCatIdleTime - catIdleTime >= CAT_IDLE_MEOW) {
@@ -1676,9 +1703,8 @@ int main(int argc, char **argv) {
                         catSound = play_sound(audioState, meow2, 1.0, catPan);
                     }
                 }
-                if(tilemap_set_layer_pos(gs.ll, catlayer,
-                                         gs.catx, gs.caty) < 0) {
-                    fprintf(stderr, "Failed to set cat position.\n");
+                if(position_sprite(&gs, catlayer,
+                                   gs.catx, gs.caty) < 0) {
                     goto error_synth;
                 }
                 if(tilemap_set_layer_rotation(gs.ll, catlayer,
@@ -1699,10 +1725,7 @@ int main(int argc, char **argv) {
                         catAnim--;
                     }
 
-                    if(tilemap_set_layer_scroll_pos(gs.ll, catlayer,
-                                                    catAnim * TEST_SPRITE_WIDTH,
-                                                    0) < 0) {
-                        fprintf(stderr, "Failed to set layer scroll pos.\n");
+                    if(select_sprite(&gs, catlayer, catAnim) < 0) {
                         goto error_synth;
                     }
 
@@ -1714,11 +1737,10 @@ int main(int argc, char **argv) {
                     zzzcycle -= M_PI * 2;
                 }
 
-                if(tilemap_set_layer_pos(gs.ll, zzzlayer,
-                                         gs.catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
-                                         gs.caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
-                                         (sin(zzzcycle) * ZZZ_AMP)) < 0) {
-                    fprintf(stderr, "Failed to set ZZZ position.\n");
+                if(position_sprite(&gs, zzzlayer,
+                                   gs.catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
+                                   gs.caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
+                                   (sin(zzzcycle) * ZZZ_AMP)) < 0) {
                     goto error_synth;
                 }
                 if(tilemap_set_layer_colormod(gs.ll, zzzlayer,
@@ -1793,18 +1815,14 @@ int main(int argc, char **argv) {
                 default:
                     spawnerTimer -= ACTOR_RATE;
                     if(spawnerTimer < 0) {
-                        spawnerx = RANDRANGE(0, gs.winwidth);
-                        spawnery = RANDRANGE(0, gs.winheight);
-                        if(tilemap_set_layer_scroll_pos(gs.ll, spawnerSprite,
-                                                        TEST_BIGHOLE * TEST_SPRITE_WIDTH,
-                                                        0) < 0) {
-                            fprintf(stderr, "Failed to set spawner layer scroll pos.\n");
+                        spawnerx = RANDRANGE(0, WINDOW_WIDTH);
+                        spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+                        if(select_sprite(&gs, spawnerSprite, TEST_BIGHOLE) < 0) {
                             goto error_synth;
                         }
 
-                        if(tilemap_set_layer_pos(gs.ll, spawnerSprite,
-                                                 spawnerx, spawnery) < 0) {
-                            fprintf(stderr, "Failed to set spawner position.\n");
+                        if(position_sprite(&gs, spawnerSprite,
+                                           spawnerx, spawnery) < 0) {
                             goto error_synth;
                         }
 
@@ -1830,7 +1848,44 @@ int main(int argc, char **argv) {
             thisTick = SDL_GetTicks();
         }
 
+        /* clear the display, otherwise it'll show flickery garbage */
+        if(SDL_SetRenderDrawColor(renderer,
+                                  0, 0, 0,
+                                  SDL_ALPHA_OPAQUE) < 0) {
+            fprintf(stderr, "Failed to set render draw color.\n");
+            goto error_synth;
+        } 
+        if(SDL_RenderClear(renderer) < 0) {
+            fprintf(stderr, "Failed to clear screen.\n");
+            goto error_synth;
+        }
+        if(SDL_SetRenderDrawColor(renderer,
+                                  BG_R, BG_G, BG_B,
+                                  SDL_ALPHA_OPAQUE) < 0) {
+            fprintf(stderr, "Failed to set render draw color.\n");
+            goto error_synth;
+        } 
+        if(SDL_RenderFillRect(renderer, NULL) < 0) {
+            fprintf(stderr, "Failed to fill background.\n");
+            goto error_synth;
+        }
+
+        /* needs to be transparent so tilemap updates work */
+        if(SDL_SetRenderDrawColor(renderer,
+                                  0, 0, 0,
+                                  SDL_ALPHA_TRANSPARENT) < 0) {
+            fprintf(stderr, "Failed to set render draw color.\n");
+            goto error_synth;
+        } 
+
+        /* process enemies here since this call can draw things */
         if(process_enemies(&gs) < 0) {
+            goto error_synth;
+        }
+
+        /* draw the gore layer below eveyrthing */
+        if(SDL_RenderCopy(renderer, gs.goreTex, NULL, NULL) < 0) {
+            fprintf(stderr, "Failed to copy gore layer.\n");
             goto error_synth;
         }
 
@@ -1859,6 +1914,7 @@ int main(int argc, char **argv) {
     free_audio_state(audioState);
 
     /* test cleanup functions */
+    tilemap_free_layer(gs.ll, gs.goreSprite);
     tilemap_free_layer(gs.ll, catlayer);
     tilemap_free_tilemap(gs.ll, gs.tilemap);
     tilemap_free_tileset(gs.ll, tileset);
@@ -1871,6 +1927,9 @@ int main(int argc, char **argv) {
 
 error_synth:
     free_audio_state(audioState);
+    if(gs.goreTex != NULL) {
+        SDL_DestroyTexture(gs.goreTex);
+    }
 error_ll:
     layerlist_free(gs.ll);
 error_video:
