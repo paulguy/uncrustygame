@@ -46,12 +46,12 @@
 #define CAT_IDLE_MEOW    (2000) /* milliseconds */
 #define CAT_PAN_FACTOR   (0.75)
 #define ZZZ_TRANSLUCENCY (128)
-#define ZZZ_AMP          (10)
+#define ZZZ_AMP          (6)
 #define ZZZ_CYCLE_SPEED  (M_PI * 2.0 / ACTOR_FPS / 3.0)
 #define ZZZ_COLOR_BIAS   (64)
 /* from bottom-left */
-#define ZZZ_POS_X        (-0.25)
-#define ZZZ_POS_Y        (0.25)
+#define ZZZ_POS_X        (0.75)
+#define ZZZ_POS_Y        (-0.5)
 
 #define MAX_ENEMIES      (256)
 #define MIN_SPAWNER_TIME (500)
@@ -1090,8 +1090,8 @@ void update_movement(float *thisx, float *thisy,
     float velocity;
     float angle, angleDiff;
 
-    motionx = targetx - *thisx - (TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE);
-    motiony = targety - *thisy - (TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE);
+    motionx = targetx - *thisx;
+    motiony = targety - *thisy;
     velocity = velocity_from_xy(motionx, motiony);
     if(velocity >= 1.0) {
         if(catIdleTime != NULL) {
@@ -1200,10 +1200,10 @@ int process_enemies(GameState *gs) {
                             NULL,
                             &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
             /* invalidate any enemies which have gone of screen */
-            if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
-               gs->enemy[i].x > WINDOW_WIDTH + (TEST_SPRITE_WIDTH * SPRITE_SCALE) ||
-               gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE) ||
-               gs->enemy[i].y > WINDOW_HEIGHT + (TEST_SPRITE_HEIGHT * SPRITE_SCALE)) {
+            if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE / 2.0) ||
+               gs->enemy[i].x > WINDOW_WIDTH + (TEST_SPRITE_WIDTH * SPRITE_SCALE / 2.0) ||
+               gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2.0) ||
+               gs->enemy[i].y > WINDOW_HEIGHT + (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2.0)) {
                 gs->enemy[i].sprite = -1;
                 continue;
             }
@@ -1627,6 +1627,7 @@ int main(int argc, char **argv) {
                     if(click->button == 1) {
                         if(catState == CAT_RESTING) {
                             catState = CAT_ANIM0;
+                            catAnim = TEST_ANIM0;
                             if(tilemap_free_layer(gs.ll, zzzlayer) < 0) {
                                 fprintf(stderr, "Failed to free ZZZ layer.\n");
                                 goto error_synth;
@@ -1739,8 +1740,8 @@ int main(int argc, char **argv) {
 
                 if(position_sprite(&gs, zzzlayer,
                                    gs.catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
-                                   gs.caty - (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
-                                   (sin(zzzcycle) * ZZZ_AMP)) < 0) {
+                                   gs.caty + (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
+                                   ((sin(zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE)) < 0) {
                     goto error_synth;
                 }
                 if(tilemap_set_layer_colormod(gs.ll, zzzlayer,
