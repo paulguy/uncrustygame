@@ -1,9 +1,9 @@
 /*
- * Copyright 2020 paulguy <paulguy119@gmail.com>
+ * Copyright 2020, 2021 paulguy <paulguy119@gmail.com>
  *
- * This file is part of crustygame.
+ * This file is part of uncrustygame.
  *
- * crustygame is free software: you can redistribute it and/or modify
+ * uncrustygame is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with crustygame.  If not, see <https://www.gnu.org/licenses/>.
+ * along with uncrustygame.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <stdlib.h>
