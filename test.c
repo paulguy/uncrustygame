@@ -21,6 +21,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <stdarg.h>
+#include <string.h>
+#include <limits.h>
 #include <SDL.h>
 
 #include "tilemap.h"
@@ -119,6 +122,12 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 
 #define CAT_DISTANCE     (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)
 
+#define FONT_WIDTH  (8)
+#define FONT_HEIGHT (8)
+#define HUD_SCALE   (2)
+#define HUD_WIDTH   (WINDOW_WIDTH / (FONT_WIDTH * HUD_SCALE))
+#define HUD_HEIGHT  (WINDOW_HEIGHT / (FONT_HEIGHT * HUD_SCALE))
+
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 #define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
     ((((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))) + (DMIN))
@@ -178,7 +187,12 @@ typedef struct {
     int score;
     SDL_Texture *goreTex;
     int goreSprite;
+    int hudTilemap;
 } GameState;
+
+#define TEXT_SCORE_X (0)
+#define TEXT_SCORE_Y (0)
+const char *TEXT_SCORE = "Score: ";
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -344,6 +358,186 @@ error:
 
     return(-1);
 }
+
+void ascii_to_int(unsigned int *dst,
+                  const char *src,
+                  unsigned int len) {
+    unsigned int i;
+
+    for(i = 0; i < len; i++) {
+        dst[i] = (unsigned int)(src[i]);
+    }
+}
+
+int print_to_tilemap(LayerList *ll,
+                     unsigned int tilemap,
+                     unsigned int x,
+                     unsigned int y,
+                     unsigned int w,
+                     const char *text) {
+    unsigned int textLen = strlen(text);
+    unsigned int h = textLen / w;
+    if(textLen % w > 0) {
+        h++;
+    }
+    unsigned int textTilemap[w * h];
+    /* convert the char array to a tilemap */
+    ascii_to_int(textTilemap,
+                 text,
+                 textLen);
+    /* clear the rest, if there was a remainder */
+    memset(&(textTilemap[textLen]),
+           0,
+           ((w * h) - textLen) * sizeof(unsigned int));
+    /* apply it */
+    if(tilemap_set_tilemap_map(ll, tilemap,
+                               x, y,
+                               w,
+                               w, h,
+                               textTilemap, w * h) < 0) {
+        fprintf(stderr, "Failed to print to tilemap.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+int printf_to_tilemap(LayerList *ll,
+                      unsigned int tilemap,
+                      unsigned int x,
+                      unsigned int y,
+                      unsigned int w,
+                      const char *fmt,
+                      ...) {
+    va_list ap;
+
+    va_start(ap, fmt);
+    unsigned int textLen = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    unsigned int h = textLen / w;
+    if(textLen % w > 0) {
+        h++;
+    }
+    /* just use the stack for simplicity */
+    char text[textLen + 1];
+    unsigned int textTilemap[w * h];
+
+    va_start(ap, fmt);
+    if(vsnprintf(text, textLen + 1, fmt, ap) < (int)textLen) {
+        fprintf(stderr, "Failed to printf to text buf.\n");
+        return(-1);
+    }
+    va_end(ap);
+
+    /* convert the char array to a tilemap */
+    ascii_to_int(textTilemap,
+                 text,
+                 textLen);
+    /* clear the rest, if there was a remainder */
+    memset(&(textTilemap[textLen]),
+           0,
+           ((w * h) - textLen) * sizeof(unsigned int));
+    /* apply it */
+    if(tilemap_set_tilemap_map(ll, tilemap,
+                               x, y,
+                               w,
+                               w, h,
+                               textTilemap, w * h) < 0) {
+        fprintf(stderr, "Failed to printf to tilemap.\n");
+        return(-1);
+    }
+
+    return(textLen);
+}
+
+int ascii_wrap_to_int(unsigned int *dst,
+                      const char *src,
+                      unsigned int srclen,
+                      unsigned int dstwidth,
+                      unsigned int *dstheight) {
+    unsigned int temp;
+    unsigned int i, x, y;
+    unsigned int wordstart;
+    unsigned int wordend;
+    unsigned int wordlen;
+    int stopCopying;
+
+    if(dstheight == NULL) {
+        temp = UINT_MAX;
+        dstheight = &temp;
+    }
+
+    x = 0; y = 0;
+    for(i = 0; i < srclen; i++) {
+        /* find start of a word */
+        stopCopying = 0;
+        for(wordstart = i; wordstart < srclen; wordstart++) {
+            if(stopCopying == 0 && src[wordstart] == ' ') {
+                if(dst != NULL) {
+                    dst[(y * dstwidth) + x] = ' ';
+                }
+                x++;
+                /* at the end of a line, go to the next, but stop copying
+                 * spaces */
+                if(x == dstwidth) {
+                    x = 0;
+                    y++;
+                    if(y == *dstheight) {
+                        return(wordstart);
+                    }
+                    stopCopying = 1;
+                }
+            } else if(src[wordstart] == '\n') {
+                x = 0;
+                y++;
+                if(y == *dstheight) {
+                    return(wordstart);
+                }
+                stopCopying = 0;
+            } else {
+                break;
+            }
+        }
+
+        if(wordstart == srclen) {
+            break;
+        }
+
+        /* find end of word */
+        for(wordend = wordstart; wordend < srclen; wordend++) {
+            if(src[wordend] == ' ' || src[wordend] == '\n') {
+                break;
+            }
+        }
+
+        wordlen = wordend - wordstart;
+        /* if the word wouldn't fit, start a new line */
+        if(wordlen > dstwidth - x) {
+            x = 0;
+            y++;
+            if(y == *dstheight) {
+                return(wordstart);
+            }
+        }
+        for(i = wordstart; i < wordend; i++) {
+            if(x == dstwidth) {
+                x = 0;
+                y++;
+                if(y == *dstheight) {
+                    return(i);
+                }
+            }
+            if(dst != NULL) {
+                dst[(dstwidth * y) + x] = (unsigned int)(src[i]);
+            }
+            x++;
+        }
+    }
+
+    *dstheight = y;
+    return(srclen);
+}
+
 
 /* i don't knwo what i'm doing */
 float angle_from_xy(float x, float y) {
@@ -1139,6 +1333,30 @@ void update_movement(float *thisx, float *thisy,
     }
 }
 
+int print_score_to_tilemap(GameState *gs) {
+    int scorelen;
+
+    /* a potentially unbound operation, but the number should never be
+     * long enough to extend past the tilemap bounds, and the tielmap
+     * engine should error if that ends up the case */
+    scorelen = printf_to_tilemap(gs->ll, gs->hudTilemap,
+                                 TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
+                                 HUD_WIDTH - TEXT_SCORE_X - (sizeof(TEXT_SCORE) - 1),
+                                 "%d", gs->score);
+    if(scorelen < 0) {
+        fprintf(stderr, "Failed to print score.\n");
+        return(-1);
+    }
+    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
+                              TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
+                              scorelen, 1) < 0) {
+        fprintf(stderr, "Failed to update hud tilemap.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
 int process_enemies(GameState *gs) {
     unsigned int i;
 
@@ -1156,6 +1374,9 @@ int process_enemies(GameState *gs) {
             gs->score += gs->enemy[i].value;
             if(gs->score < 0) {
                 gs->score = 0;
+            }
+            if(print_score_to_tilemap(gs) < 0) {
+                return(-1);
             }
 
             /* render to gore texture */
@@ -1269,6 +1490,8 @@ int main(int argc, char **argv) {
     unsigned int mouseReleaseCombo = 0;
     int tileset;
     int catlayer;
+    int font;
+    int hud;
     int mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
     int mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
     Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
@@ -1513,13 +1736,52 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
+    font = tilemap_tileset_from_bmp(gs.ll, "font.bmp", 8, 8);
+    if(font < 0) {
+        fprintf(stderr, "Failed to load font.\n");
+        goto error_synth;
+    }
+    gs.hudTilemap = tilemap_add_tilemap(gs.ll, HUD_WIDTH, HUD_HEIGHT);
+    if(gs.hudTilemap < 0) {
+        fprintf(stderr, "Failed to create HUD tilemap.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_tilemap_tileset(gs.ll, gs.hudTilemap, font) < 0) {
+        fprintf(stderr, "Failed to set hud tileset.\n");
+        goto error_synth;
+    }
+    hud = tilemap_add_layer(gs.ll, gs.hudTilemap);
+    if(hud < 0) {
+        fprintf(stderr, "Failed to create HUD layer.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_scale(gs.ll, hud, HUD_SCALE, HUD_SCALE) < 0) {
+        fprintf(stderr, "Failed to set hud scale.\n");
+        goto error_synth;
+    }
+    if(print_to_tilemap(gs.ll, gs.hudTilemap,
+                        TEXT_SCORE_X, TEXT_SCORE_Y,
+                        sizeof(TEXT_SCORE) - 1, TEXT_SCORE) < 0) {
+        fprintf(stderr, "failed to print score text.\n");
+        goto error_synth;
+    }
+    if(tilemap_update_tilemap(gs.ll, gs.hudTilemap,
+                              TEXT_SCORE_X, TEXT_SCORE_Y,
+                              sizeof(TEXT_SCORE) - 1, 1) < 0) {
+        fprintf(stderr, "Failed to update hud tilemap.\n");
+        goto error_synth;
+    }
+    gs.score = 0;
+    if(print_score_to_tilemap(&gs) < 0) {
+        return(-1);
+    }
+
     gs.catx = mousex;
     gs.caty = mousey;
     for(i = 0; i < MAX_ENEMIES; i++) {
         gs.enemy[i].sprite = -1;
     }
     gs.eating = 0;
-    gs.score = 0;
 
     spawner = SPAWN_NONE;
 
@@ -1908,6 +2170,11 @@ int main(int argc, char **argv) {
                 goto error_synth;
             }
         }
+        /* draw the hud above everything */
+        if(tilemap_draw_layer(gs.ll, hud) < 0) {
+            fprintf(stderr, "Failed to hud layer.\n");
+            goto error_synth;
+        }
 
         SDL_RenderPresent(renderer);
     }
@@ -1915,6 +2182,9 @@ int main(int argc, char **argv) {
     free_audio_state(audioState);
 
     /* test cleanup functions */
+    tilemap_free_layer(gs.ll, hud);
+    tilemap_free_tilemap(gs.ll, gs.hudTilemap);
+    tilemap_free_tileset(gs.ll, font);
     tilemap_free_layer(gs.ll, gs.goreSprite);
     tilemap_free_layer(gs.ll, catlayer);
     tilemap_free_tilemap(gs.ll, gs.tilemap);
