@@ -93,9 +93,13 @@ const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
                                                 6, 7,
                                                 8, 9,
                                                 10, 11,
-                                                12, 13};
+                                                12, 13,
+                                                12, 12};
 #define C_OPAQUE TILEMAP_COLOR(255, 255, 255, 255)
 #define C_TRANSL TILEMAP_COLOR(255, 255, 255, ZZZ_TRANSLUCENCY)
+#define C_MOUSEBLOOD TILEMAP_COLOR(145, 0, 0, 255)
+#define C_ANTBLOOD TILEMAP_COLOR(37, 70, 0, 255)
+#define C_SPIDERBLOOD TILEMAP_COLOR(0, 34, 72, 255)
 const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_OPAQUE, C_TRANSL,
     C_OPAQUE, C_OPAQUE,
@@ -103,7 +107,8 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_OPAQUE, C_OPAQUE,
     C_OPAQUE, C_OPAQUE,
     C_OPAQUE, C_OPAQUE,
-    C_OPAQUE, C_OPAQUE
+    C_ANTBLOOD, C_OPAQUE,
+    C_SPIDERBLOOD, C_MOUSEBLOOD
 };
 #define TEST_RESTING (0)
 #define TEST_ZZZ     (1)
@@ -117,8 +122,10 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_ANT1    (9)
 #define TEST_BIGHOLE (10)
 #define TEST_SMHOLE  (11)
-#define TEST_GORE0   (12)
-#define TEST_GORE1   (13)
+#define TEST_ANT_GORE   (12)
+#define TEST_BONES   (13)
+#define TEST_SPIDER_GORE   (14)
+#define TEST_MOUSE_GORE   (15)
 
 #define CAT_DISTANCE     (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)
 
@@ -169,6 +176,7 @@ typedef struct {
     float maxAngle;
     int value;
     unsigned int eatTime;
+    int deadSprite;
 } Enemy;
 
 typedef enum {
@@ -1102,6 +1110,7 @@ int create_enemy(GameState *gs,
             gs->enemy[i].x = x;
             gs->enemy[i].y = y;
             gs->enemy[i].angle = angle;
+            gs->enemy[i].deadSprite = TEST_ANT_GORE;
             break;
         case SPAWN_SPIDERS:
             gs->enemy[i].state = CAT_ANIM0;
@@ -1114,6 +1123,7 @@ int create_enemy(GameState *gs,
             gs->enemy[i].x = x;
             gs->enemy[i].y = y;
             gs->enemy[i].angle = angle;
+            gs->enemy[i].deadSprite = TEST_SPIDER_GORE;
             break;
         case SPAWN_MICE:
             gs->enemy[i].state = CAT_ANIM0;
@@ -1126,6 +1136,7 @@ int create_enemy(GameState *gs,
             gs->enemy[i].x = x;
             gs->enemy[i].y = y;
             gs->enemy[i].angle = angle;
+            gs->enemy[i].deadSprite = TEST_MOUSE_GORE;
             break;
         default:
             fprintf(stderr, "Invalid enemy spawn type.\n");
@@ -1359,6 +1370,7 @@ int print_score_to_tilemap(GameState *gs) {
 
 int process_enemies(GameState *gs) {
     unsigned int i;
+    unsigned int gore;
 
     for(i = 0; i < MAX_ENEMIES; i++) {
         if(gs->enemy[i].sprite < 0) {
@@ -1386,10 +1398,6 @@ int process_enemies(GameState *gs) {
                 return(-1);
             }
 
-            if(select_sprite(gs, gs->goreSprite,
-                             TEST_GORE0 + (rand() % 2)) < 0) {
-                return(-1);
-            }
             if(position_sprite(gs, gs->goreSprite,
                                gs->enemy[i].x, gs->enemy[i].y) < 0) {
                 return(-1);
@@ -1401,10 +1409,29 @@ int process_enemies(GameState *gs) {
                 fprintf(stderr, "Failed to set gore sprite rotation.\n");
                 return(-1);
             }
-            if(tilemap_draw_layer(gs->ll, gs->goreSprite) < 0) {
-                fprintf(stderr, "Failed to draw gore sprite.\n");
-                return(-1);
+
+            gore = (rand() % 3) + 1;
+            if(gore & 1) {
+                if(select_sprite(gs, gs->goreSprite,
+                                 gs->enemy[i].deadSprite) < 0) {
+                    return(-1);
+                }
+                if(tilemap_draw_layer(gs->ll, gs->goreSprite) < 0) {
+                    fprintf(stderr, "Failed to draw gore sprite.\n");
+                    return(-1);
+                }
             }
+            if(gore & 2) {
+                if(select_sprite(gs, gs->goreSprite,
+                                 TEST_BONES) < 0) {
+                    return(-1);
+                }
+                if(tilemap_draw_layer(gs->ll, gs->goreSprite) < 0) {
+                    fprintf(stderr, "Failed to draw bones sprite.\n");
+                    return(-1);
+                }
+            }
+
 
             /* render to screen */
             tilemap_set_default_render_target(gs->ll, NULL);
