@@ -1,8 +1,12 @@
-meow1.wav - "Cat meow" by TRNGLE - CC0
+meow1.wav - clip from "Cat meow" by TRNGLE - CC0
 https://freesound.org/s/362652/
 
-cat_activation.wav, meow2.wav - "Cat meow.wav" by KaiAnderson - CC0
+cat_activation.wav, meow2.wav - clips from "Cat meow.wav" by KaiAnderson - CC0
 https://freesound.org/s/454805/
 
-purr.wav - "Misha purrs" by AstronautDown - CC0
+purr.wav - clip from "Misha purrs" by AstronautDown - CC0
 https://freesound.org/s/376378/
+
+meat.wav, meat2.wav - clips from "Alien is crawling-001.wav" by tosha73 - CC-BY
+https://freesound.org/s/512953/
+https://creativecommons.org/licenses/by/3.0/

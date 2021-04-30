@@ -142,6 +142,9 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     ((DMAX) - (((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))))
 #define RANDRANGE(MIN, MAX) ((rand() % (MAX - MIN)) + MIN)
 
+#define CATPAN(XPOS) ((float)((XPOS) - (WINDOW_WIDTH / 2.0)) / \
+                      ((float)WINDOW_WIDTH / 2.0) * CAT_PAN_FACTOR)
+
 typedef enum {
     CAT_RESTING,
     CAT_ANIM0,
@@ -188,14 +191,17 @@ typedef enum {
 
 typedef struct {
     LayerList *ll;
+    AudioState *as;
     int tilemap;
     float catx, caty;
+    int catSound;
     Enemy enemy[MAX_ENEMIES];
     int eating;
     int score;
     SDL_Texture *goreTex;
     int goreSprite;
     int hudTilemap;
+    int meat, meat2;
 } GameState;
 
 #define TEXT_SCORE_X (0)
@@ -929,12 +935,53 @@ AudioState *init_audio_state() {
 }
 
 void free_audio_state(AudioState *as) {
+    synth_free_player(as->s, as->mixPlayer);
+    synth_free_buffer(as->s, as->leftBuffer);
+    synth_free_buffer(as->s, as->rightBuffer);
+    synth_free_buffer(as->s, as->mixBuffer);
     synth_free(as->s);
     free(as);
 }
 
 Synth *get_synth(AudioState *as) {
     return(as->s);
+}
+
+int load_sound(Synth *s,
+               const char *filename,
+               int *buf,
+               float dB) {
+    int player;
+    unsigned int rate;
+
+    *buf = synth_buffer_from_wav(s, filename, &rate);
+    if(*buf < 0) {
+        fprintf(stderr, "Failed to load wave.\n");
+        return(-1);
+    }
+    player = synth_add_player(s, *buf);
+    if(player < 0) {
+        fprintf(stderr, "Failed to create wave player.\n");
+        synth_free_buffer(s, *buf);
+        *buf = -1;
+        return(-1);
+    }
+    if(synth_set_player_speed(s, player, (float)rate / (float)synth_get_rate(s)) < 0) {
+        fprintf(stderr, "Failed to set wave speed.\n");
+        synth_free_player(s, player);
+        synth_free_buffer(s, *buf);
+        *buf = -1;
+        return(-1);
+    }
+    if(synth_set_player_volume(s, player, volume_from_db(dB)) < 0) {
+        fprintf(stderr, "Failed to set wave volume.\n");
+        synth_free_player(s, player);
+        synth_free_buffer(s, *buf);
+        *buf = -1;
+        return(-1);
+    }
+
+    return(player);
 }
 
 int play_sound(AudioState *as, unsigned int player, float volume, float panning) {
@@ -1439,6 +1486,15 @@ int process_enemies(GameState *gs) {
                 fprintf(stderr, "Failed to set target tileset.\n");
                 return(-1);
             }
+
+            /* play the sound */
+            if(rand() % 2 == 0) {
+                stop_sound(gs->as, gs->catSound);
+                gs->catSound = play_sound(gs->as, gs->meat, 1.0, CATPAN(gs->catx));
+            } else {
+                stop_sound(gs->as, gs->catSound);
+                gs->catSound = play_sound(gs->as, gs->meat2, 1.0, CATPAN(gs->catx));
+            }
             continue;
         } else {
             update_movement(&(gs->enemy[i].x), &(gs->enemy[i].y),
@@ -1510,7 +1566,6 @@ int main(int argc, char **argv) {
     SDL_Renderer *renderer;
     SDL_Event lastEvent;
     Synth *s;
-    AudioState *audioState;
     GameState gs;
     int running;
     int mouseCaptured = 0;
@@ -1530,10 +1585,9 @@ int main(int argc, char **argv) {
     float zzzcycle = 0.0;
     int fullscreen = 0;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
+    int meat_buf, meat2_buf;
     int meow1, meow2, cat_activation, purr;
     int catIdleTime = 0;
-    int catSound = 0;
-    float catPan = 0.0;
     SpawnerType spawner;
     int spawnerSprite;
     int spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
@@ -1568,11 +1622,11 @@ int main(int argc, char **argv) {
     }
 
     /* initialize the audio */
-    audioState = init_audio_state();
-    if(audioState == NULL) {
+    gs.as = init_audio_state();
+    if(gs.as == NULL) {
         goto error_ll;
     }
-    s = get_synth(audioState);
+    s = get_synth(gs.as);
 
     /* seed random */
     srand(time(NULL));
@@ -1648,76 +1702,32 @@ int main(int argc, char **argv) {
     /* load the sound effects and create players for them, as they may
      * eventually each have different parameters for volume balance or
      * whatever else */
-    meow1_buf = synth_buffer_from_wav(s, "meow1.wav");
-    if(meow1_buf < 0) {
-        fprintf(stderr, "Failed to load meow1.wav.\n");
-        goto error_synth;
-    }
-    meow1 = synth_add_player(s, meow1_buf);
+    meow1 = load_sound(s, "meow1.wav", &meow1_buf, 0.0);
     if(meow1 < 0) {
-        fprintf(stderr, "Failed to create meow1 player.\n");
         goto error_synth;
     }
-    if(synth_set_player_speed(s, meow1, 8000.0 / (float)synth_get_rate(s)) < 0) {
-        fprintf(stderr, "Failed to set meow1 speed.\n");
-        goto error_synth;
-    }
-    meow2_buf = synth_buffer_from_wav(s, "meow2.wav");
-    if(meow2_buf < 0) {
-        fprintf(stderr, "Failed to load meow2.wav.\n");
-        goto error_synth;
-    }
-    meow2 = synth_add_player(s, meow2_buf);
+    meow2 = load_sound(s, "meow2.wav", &meow2_buf, -3.0);
     if(meow2 < 0) {
-        fprintf(stderr, "Failed to create meow2 player.\n");
         goto error_synth;
     }
-    if(synth_set_player_speed(s, meow2, 8000.0 / (float)synth_get_rate(s)) < 0) {
-        fprintf(stderr, "Failed to set meow2 speed.\n");
-        goto error_synth;
-    }
-    if(synth_set_player_volume(s, meow2, volume_from_db(-3)) < 0) {
-        fprintf(stderr, "Failed to set meow2 volume.\n");
-        goto error_synth;
-    }
-    cat_activation_buf = synth_buffer_from_wav(s, "cat_activation.wav");
-    if(cat_activation_buf < 0) {
-        fprintf(stderr, "Failed to load cat_activation.wav.\n");
-        goto error_synth;
-    }
-    cat_activation = synth_add_player(s, cat_activation_buf);
+    cat_activation = load_sound(s, "cat_activation.wav", &cat_activation_buf, -12.0);
     if(cat_activation < 0) {
-        fprintf(stderr, "Failed to create cat_activation player.\n");
         goto error_synth;
     }
-    if(synth_set_player_speed(s, cat_activation, 8000.0 / (float)synth_get_rate(s)) < 0) {
-        fprintf(stderr, "Failed to set cat_activation speed.\n");
-        goto error_synth;
-    }
-    if(synth_set_player_volume(s, cat_activation, volume_from_db(-12)) < 0) {
-        fprintf(stderr, "failed to set cat_activation volume.\n");
-        goto error_synth;
-    }
-    purr_buf = synth_buffer_from_wav(s, "purr.wav");
-    if(purr_buf < 0) {
-        fprintf(stderr, "Failed to load purr.wav.\n");
-        goto error_synth;
-    }
-    purr = synth_add_player(s, purr_buf);
+    purr = load_sound(s, "purr.wav", &purr_buf, -2.0);
     if(purr < 0) {
-        fprintf(stderr, "Failed to create purr player.\n");
-        goto error_synth;
-    }
-    if(synth_set_player_speed(s, purr, 8000.0 / (float)synth_get_rate(s)) < 0) {
-        fprintf(stderr, "Failed to set purr speed.\n");
-        goto error_synth;
-    }
-    if(synth_set_player_volume(s, purr, volume_from_db(-2)) < 0) {
-        fprintf(stderr, "failed to set purr volume.\n");
         goto error_synth;
     }
     if(synth_set_player_mode(s, purr, SYNTH_MODE_LOOP) < 0) {
         fprintf(stderr, "Failed to set purr to looping.\n");
+        goto error_synth;
+    }
+    gs.meat = load_sound(s, "meat.wav", &meat_buf, 0.0);
+    if(gs.meat < 0) {
+        goto error_synth;
+    }
+    gs.meat2 = load_sound(s, "meat2.wav", &meat2_buf, 0.0);
+    if(gs.meat2 < 0) {
         goto error_synth;
     }
 
@@ -1809,6 +1819,7 @@ int main(int argc, char **argv) {
         gs.enemy[i].sprite = -1;
     }
     gs.eating = 0;
+    gs.catSound = 0;
 
     spawner = SPAWN_NONE;
 
@@ -1887,17 +1898,17 @@ int main(int argc, char **argv) {
                             }
                         }
                     } else if(key->keysym.sym == SDLK_1) {
-                        stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, meow1, 1.0, catPan);
+                        stop_sound(gs.as, gs.catSound);
+                        gs.catSound = play_sound(gs.as, meow1, 1.0, CATPAN(gs.catx));
                     } else if(key->keysym.sym == SDLK_2) {
-                        stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, meow2, 1.0, catPan);
+                        stop_sound(gs.as, gs.catSound);
+                        gs.catSound = play_sound(gs.as, meow2, 1.0, CATPAN(gs.catx));
                     } else if(key->keysym.sym == SDLK_3) {
-                        stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, cat_activation, 1.0, catPan);
+                        stop_sound(gs.as, gs.catSound);
+                        gs.catSound = play_sound(gs.as, cat_activation, 1.0, CATPAN(gs.catx));
                     } else if(key->keysym.sym == SDLK_4) {
-                        stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, purr, 1.0, catPan);
+                        stop_sound(gs.as, gs.catSound);
+                        gs.catSound = play_sound(gs.as, purr, 1.0, CATPAN(gs.catx));
                     }
                     break;
                 case SDL_KEYUP:
@@ -1922,8 +1933,8 @@ int main(int argc, char **argv) {
                                 goto error_synth;
                             }
 
-                            stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, cat_activation, 1.0, catPan);
+                            stop_sound(gs.as, gs.catSound);
+                            gs.catSound = play_sound(gs.as, cat_activation, 1.0, CATPAN(gs.catx));
                         } else {
                             catState = CAT_RESTING;
                             if(select_sprite(&gs, catlayer, TEST_RESTING) < 0) {
@@ -1938,14 +1949,12 @@ int main(int argc, char **argv) {
                                 goto error_synth;
                             }
                             
-                            stop_sound(audioState, catSound);
-                            catSound = play_sound(audioState, purr, 1.0, catPan);
+                            stop_sound(gs.as, gs.catSound);
+                            gs.catSound = play_sound(gs.as, purr, 1.0, CATPAN(gs.catx));
                         }
                     } else if(click->button == 3) {
                         gs.catx = mousex;
                         gs.caty = mousey;
-                        catPan = (float)(gs.catx - (WINDOW_WIDTH / 2)) /
-                                 ((float)WINDOW_WIDTH / 2) * CAT_PAN_FACTOR;
                     }
                     break;
                 case SDL_MOUSEBUTTONUP:
@@ -1986,11 +1995,11 @@ int main(int argc, char **argv) {
                                 &catAngle, CAT_TURN_SPEED);
                 if(lastCatIdleTime - catIdleTime >= CAT_IDLE_MEOW) {
                     if(rand() % 2 == 1) {
-                        stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, meow1, 1.0, catPan);
+                        stop_sound(gs.as, gs.catSound);
+                        gs.catSound = play_sound(gs.as, meow1, 1.0, CATPAN(gs.catx));
                     } else {
-                        stop_sound(audioState, catSound);
-                        catSound = play_sound(audioState, meow2, 1.0, catPan);
+                        stop_sound(gs.as, gs.catSound);
+                        gs.catSound = play_sound(gs.as, meow2, 1.0, CATPAN(gs.catx));
                     }
                 }
                 if(position_sprite(&gs, catlayer,
@@ -2003,7 +2012,7 @@ int main(int argc, char **argv) {
                     return(-1);
                 }
 
-                update_panning(audioState, catSound, catPan);
+                update_panning(gs.as, gs.catSound, CATPAN(gs.catx));
 
                 animCounter++;
                 if(animCounter >= CAT_ANIM_DIV) {
@@ -2206,9 +2215,21 @@ int main(int argc, char **argv) {
         SDL_RenderPresent(renderer);
     }
 
-    free_audio_state(audioState);
-
     /* test cleanup functions */
+    synth_free_player(s, gs.meat);
+    synth_free_buffer(s, meat_buf);
+    synth_free_player(s, gs.meat2);
+    synth_free_buffer(s, meat2_buf);
+    synth_free_player(s, purr);
+    synth_free_buffer(s, purr_buf);
+    synth_free_player(s, cat_activation);
+    synth_free_buffer(s, cat_activation_buf);
+    synth_free_player(s, meow1);
+    synth_free_buffer(s, meow1_buf);
+    synth_free_player(s, meow2);
+    synth_free_buffer(s, meow2_buf);
+    free_audio_state(gs.as);
+
     tilemap_free_layer(gs.ll, hud);
     tilemap_free_tilemap(gs.ll, gs.hudTilemap);
     tilemap_free_tileset(gs.ll, font);
@@ -2224,7 +2245,7 @@ int main(int argc, char **argv) {
     exit(EXIT_SUCCESS);
 
 error_synth:
-    free_audio_state(audioState);
+    free_audio_state(gs.as);
     if(gs.goreTex != NULL) {
         SDL_DestroyTexture(gs.goreTex);
     }

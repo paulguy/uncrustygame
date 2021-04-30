@@ -127,7 +127,7 @@ SynthImportType synth_type_from_audioformat(SDL_AudioFormat format) {
     return(SYNTH_TYPE_INVALID);
 }
 
-int synth_buffer_from_wav(Synth *s, const char *filename) {
+int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     SDL_AudioSpec spec;
     Uint8 *audiobuf;
     Uint32 len;
@@ -153,6 +153,9 @@ int synth_buffer_from_wav(Synth *s, const char *filename) {
     }
 
     sb = synth_add_buffer(s, type, audiobuf, len);
+    if(rate != NULL) {
+        *rate = spec.freq;
+    }
     SDL_FreeWAV(audiobuf);
 
     return(sb);
