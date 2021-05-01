@@ -204,6 +204,12 @@ typedef struct {
     int meat, meat2;
 } GameState;
 
+typedef enum {
+    GAME_MODE_TITLE,
+    GAME_MODE_MENU,
+    GAME_MODE_GAME
+} GameMode;
+
 #define TEXT_SCORE_X (0)
 #define TEXT_SCORE_Y (0)
 const char *TEXT_SCORE = "Score: ";
