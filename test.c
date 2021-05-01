@@ -1828,40 +1828,6 @@ int main(int argc, char **argv) {
     while(running) {
         /* check running since an event may end execution early */
         while(running && SDL_PollEvent(&lastEvent)) {
-            /* allow the user to press CTRL+F10 (like DOSBOX) to uncapture a
-             * captured mouse, and also enforce disallowing recapture until
-             * reallowed by pressing the same combo again. */
-            if(lastEvent.type == SDL_KEYDOWN) {
-                if(((SDL_KeyboardEvent *)&lastEvent)->keysym.sym ==
-                   SDLK_LCTRL) {
-                    mouseReleaseCombo |= 1;
-                } else if(((SDL_KeyboardEvent *)&lastEvent)->keysym.sym ==
-                   SDLK_F10) {
-                    mouseReleaseCombo |= 2;
-                }
-
-                if(mouseReleaseCombo == 3) {
-                    if(mouseCaptured < 0) {
-                        mouseCaptured = 0;
-                    } else {
-                        if(SDL_SetRelativeMouseMode(0) < 0) {
-                            fprintf(stderr, "Failed to clear relative mouse mode.\n");
-                            return(-1);
-                        }
-                        mouseCaptured = -1;
-                    }
-                    mouseReleaseCombo = 0;
-                }
-            } else if(lastEvent.type == SDL_KEYUP) {
-                if(((SDL_KeyboardEvent *)&lastEvent)->keysym.sym ==
-                   SDLK_LCTRL) {
-                    mouseReleaseCombo &= ~1;
-                } else if(((SDL_KeyboardEvent *)&lastEvent)->keysym.sym ==
-                   SDLK_F10) {
-                    mouseReleaseCombo &= ~2;
-                }
-            }
-
             /* handle inputs */
             switch(lastEvent.type) {
                 SDL_KeyboardEvent *key;
@@ -1911,12 +1877,6 @@ int main(int argc, char **argv) {
                         gs.catSound = play_sound(gs.as, purr, 1.0, CATPAN(gs.catx));
                     }
                     break;
-                case SDL_KEYUP:
-                    key = (SDL_KeyboardEvent *)&lastEvent;
-                    if(key->repeat) {
-                        continue;
-                    }
-                    break;
                 case SDL_MOUSEMOTION:
                     motion = (SDL_MouseMotionEvent *)&lastEvent;
                     mousex = motion->x;
@@ -1956,8 +1916,6 @@ int main(int argc, char **argv) {
                         gs.catx = mousex;
                         gs.caty = mousey;
                     }
-                    break;
-                case SDL_MOUSEBUTTONUP:
                     break;
                 default:
                     break;

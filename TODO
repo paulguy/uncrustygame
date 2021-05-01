@@ -1,4 +1,0 @@
-tilemap.c: create empty tileset
-tilemap.c: target texture to a tileset
-test.c: add object management of some sort
-test.c: make enemies + interactions
