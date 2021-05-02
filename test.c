@@ -145,6 +145,13 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define CATPAN(XPOS) ((float)((XPOS) - (WINDOW_WIDTH / 2.0)) / \
                       ((float)WINDOW_WIDTH / 2.0) * CAT_PAN_FACTOR)
 
+typedef struct GameMode_s {
+    int (*input)(void *priv, SDL_Event *event);
+    struct GameMode_s* (*control)(void *priv);
+    int (*draw)(void *priv);
+    void *priv;
+} GameMode;
+
 typedef enum {
     CAT_RESTING,
     CAT_ANIM0,
@@ -190,25 +197,49 @@ typedef enum {
 } SpawnerType;
 
 typedef struct {
+    /* game modes */
+    GameMode game;
+
+    /* resources */
+    SDL_Window *win;
+    SDL_Renderer *renderer;
     LayerList *ll;
     AudioState *as;
     int tilemap;
-    float catx, caty;
-    int catSound;
-    Enemy enemy[MAX_ENEMIES];
-    int eating;
-    int score;
+    int catlayer;
+    int zzzlayer;
     SDL_Texture *goreTex;
     int goreSprite;
     int hudTilemap;
-    int meat, meat2;
-} GameState;
+    int hud;
 
-typedef enum {
-    GAME_MODE_TITLE,
-    GAME_MODE_MENU,
-    GAME_MODE_GAME
-} GameMode;
+    /* system state */
+    int running;
+    int fullscreen;
+    int mousex, mousey;
+
+    /* game state */
+    CatState catState;
+    int catAnim;
+    float catAngle;
+    int catIdleTime;
+    float catx, caty;
+    int eating;
+    int score;
+    int animCounter;
+    float zzzcycle;
+    SpawnerType spawner;
+    int spawnerSprite;
+    int spawnerTimer;
+    unsigned int spawnerx;
+    unsigned int spawnery;
+    unsigned int spawnerCount;
+    Enemy enemy[MAX_ENEMIES];
+
+    /* player sound resources and state */
+    int meow1, meow2, cat_activation, purr, meat, meat2;
+    int catSound;
+} GameState;
 
 #define TEXT_SCORE_X (0)
 #define TEXT_SCORE_Y (0)
@@ -1072,6 +1103,11 @@ int update_panning(AudioState *as, int token, float panning) {
     return(0);
 }
 
+void play_cat_sound(GameState *gs, int player) {
+    stop_sound(gs->as, gs->catSound);
+    gs->catSound = play_sound(gs->as, player, 1.0, CATPAN(gs->catx));
+}
+
 int create_sprite(GameState *gs) {
     int sprite;
 
@@ -1485,7 +1521,6 @@ int process_enemies(GameState *gs) {
                 }
             }
 
-
             /* render to screen */
             tilemap_set_default_render_target(gs->ll, NULL);
             if(tilemap_set_target_tileset(gs->ll, -1) < 0) {
@@ -1495,11 +1530,9 @@ int process_enemies(GameState *gs) {
 
             /* play the sound */
             if(rand() % 2 == 0) {
-                stop_sound(gs->as, gs->catSound);
-                gs->catSound = play_sound(gs->as, gs->meat, 1.0, CATPAN(gs->catx));
+                play_cat_sound(gs, gs->meat);
             } else {
-                stop_sound(gs->as, gs->catSound);
-                gs->catSound = play_sound(gs->as, gs->meat2, 1.0, CATPAN(gs->catx));
+                play_cat_sound(gs, gs->meat2);
             }
             continue;
         } else {
@@ -1565,41 +1598,354 @@ int draw_enemies(GameState *gs) {
     return(0);
 }
 
+int game_input(void *priv, SDL_Event *event) {
+    GameState *gs = (GameState *)priv;
+    SDL_KeyboardEvent *key = (SDL_KeyboardEvent *)event;
+    SDL_MouseMotionEvent *motion = (SDL_MouseMotionEvent *)event;
+    SDL_MouseButtonEvent *click = (SDL_MouseButtonEvent *)event;
+
+    switch(event->type) {
+        case SDL_QUIT:
+            gs->running = 0;
+            break;
+        case SDL_KEYDOWN:
+            /* suppress repeat events */
+            if(key->repeat) {
+                break;
+            }
+
+            if(key->keysym.sym == SDLK_q) {
+                gs->running = 0;
+            } else if(key->keysym.sym == SDLK_e) {
+                /* simulate an error, which will only only free the
+                 * whole layerlist, testing possible memory leaks */ 
+                return(-1);
+            } else if(key->keysym.sym == SDLK_f) {
+                if(gs->fullscreen) {
+                    if(SDL_SetWindowFullscreen(gs->win, 0) < 0) {
+                        fprintf(stderr, "Failed to make window windowed.\n");
+                    } else {
+                        gs->fullscreen = !gs->fullscreen;
+                    }
+                } else {
+                    if(SDL_SetWindowFullscreen(gs->win, SDL_WINDOW_FULLSCREEN_DESKTOP) < 0) {
+                        fprintf(stderr, "Failed to make window full screen.\n");
+                    } else {
+                        gs->fullscreen = !gs->fullscreen;
+                    }
+                }
+            }
+            break;
+        case SDL_MOUSEMOTION:
+            gs->mousex = motion->x;
+            gs->mousey = motion->y;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            if(click->button == 1) {
+                if(gs->catState == CAT_RESTING) {
+                    gs->catState = CAT_ANIM0;
+                    gs->catAnim = TEST_ANIM0;
+                    if(tilemap_free_layer(gs->ll, gs->zzzlayer) < 0) {
+                        fprintf(stderr, "Failed to free ZZZ layer.\n");
+                        return(-1);
+                    }
+
+                    play_cat_sound(gs, gs->cat_activation);
+                } else {
+                    gs->catState = CAT_RESTING;
+                    if(select_sprite(gs, gs->catlayer, TEST_RESTING) < 0) {
+                        return(-1);
+                    }
+
+                    gs->zzzlayer = create_sprite(gs);
+                    if(gs->zzzlayer < 0) {
+                        return(-1);
+                    }
+                    if(select_sprite(gs, gs->zzzlayer, TEST_ZZZ) < 0) {
+                        return(-1);
+                    }
+                    
+                    play_cat_sound(gs, gs->purr);
+                }
+            }
+            break;
+        default:
+            break;
+    }
+
+    return(0);
+}
+
+GameMode* game_control(void *priv) {
+    GameState *gs = (GameState *)priv;
+
+    if(gs->eating > 0) {
+        gs->eating -= ACTOR_RATE;
+    }
+
+    if(gs->catState != CAT_RESTING) {
+        int lastCatIdleTime = gs->catIdleTime;
+        update_movement(&(gs->catx), &(gs->caty),
+                        gs->mousex, gs->mousey,
+                        CAT_VELOCITY,
+                        WINDOW_WIDTH, WINDOW_HEIGHT,
+                        &(gs->catIdleTime),
+                        &(gs->catAngle), CAT_TURN_SPEED);
+        if(lastCatIdleTime - gs->catIdleTime >= CAT_IDLE_MEOW) {
+            if(rand() % 2 == 1) {
+                play_cat_sound(gs, gs->meow1);
+            } else {
+                play_cat_sound(gs, gs->meow2);
+            }
+        }
+        if(position_sprite(gs, gs->catlayer,
+                           gs->catx, gs->caty) < 0) {
+            return(NULL);
+        }
+        if(tilemap_set_layer_rotation(gs->ll, gs->catlayer,
+                                      radian_to_degree(gs->catAngle)) < 0) {
+            fprintf(stderr, "Failed to set layer rotation.\n");
+            return(NULL);
+        }
+
+        update_panning(gs->as, gs->catSound, CATPAN(gs->catx));
+
+        gs->animCounter++;
+        if(gs->animCounter >= CAT_ANIM_DIV) {
+            if(gs->catState == CAT_ANIM0) {
+                gs->catState = CAT_ANIM1;
+                gs->catAnim++;
+            } else {
+                gs->catState = CAT_ANIM0;
+                gs->catAnim--;
+            }
+
+            if(select_sprite(gs, gs->catlayer, gs->catAnim) < 0) {
+                return(NULL);
+            }
+
+            gs->animCounter = 0;
+        }
+    } else { /* CAT_RESTING */
+        gs->zzzcycle += ZZZ_CYCLE_SPEED;
+        if(gs->zzzcycle >= M_PI * 2) {
+            gs->zzzcycle -= M_PI * 2;
+        }
+
+        if(position_sprite(gs, gs->zzzlayer,
+                           gs->catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
+                           gs->caty + (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
+                           ((sin(gs->zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE)) < 0) {
+            return(NULL);
+        }
+        if(tilemap_set_layer_colormod(gs->ll, gs->zzzlayer,
+                                      color_from_angle(gs->zzzcycle,
+                                                       ZZZ_COLOR_BIAS)) < 0) {
+            fprintf(stderr, "Failed to set ZZZ colormod.\n");
+            return(NULL);
+        }
+    }
+
+    switch(gs->spawner) {
+        case SPAWN_ANTS:
+            gs->spawnerTimer -= ACTOR_RATE;
+            while(gs->spawnerTimer < 0) {
+                if(gs->spawnerCount == 0) {
+                    gs->spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+                    gs->spawner = SPAWN_NONE;
+                    break;
+                }
+
+                gs->spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
+                if(create_enemy(gs, SPAWN_ANTS,
+                                gs->spawnerx, gs->spawnery,
+                                SCALE((double)rand(),
+                                      0.0, RAND_MAX,
+                                      0.0, M_PI * 2.0)) < 0) {
+                    return(NULL);
+                }
+                gs->spawnerCount--;
+            }
+            break;
+        case SPAWN_SPIDERS:
+            gs->spawnerTimer -= ACTOR_RATE;
+            while(gs->spawnerTimer < 0) {
+                if(gs->spawnerCount == 0) {
+                    gs->spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+                    gs->spawner = SPAWN_NONE;
+                    break;
+                }
+
+                gs->spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
+                if(create_enemy(gs, SPAWN_SPIDERS,
+                                gs->spawnerx, gs->spawnery,
+                                SCALE((double)rand(),
+                                      0.0, RAND_MAX,
+                                      0.0, M_PI * 2.0)) < 0) {
+                    return(NULL);
+                }
+                gs->spawnerCount--;
+            }
+            break;
+        case SPAWN_MICE:
+            gs->spawnerTimer -= ACTOR_RATE;
+            while(gs->spawnerTimer < 0) {
+                if(gs->spawnerCount == 0) {
+                    gs->spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+                    gs->spawner = SPAWN_NONE;
+                    break;
+                }
+
+                gs->spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
+                if(create_enemy(gs, SPAWN_MICE,
+                                gs->spawnerx, gs->spawnery,
+                                SCALE((double)rand(),
+                                      0.0, RAND_MAX,
+                                      0.0, M_PI * 2.0)) < 0) {
+                    return(NULL);
+                }
+                gs->spawnerCount--;
+            }
+            break;
+        default:
+            gs->spawnerTimer -= ACTOR_RATE;
+            if(gs->spawnerTimer < 0) {
+                gs->spawnerx = RANDRANGE(0, WINDOW_WIDTH);
+                gs->spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+                if(select_sprite(gs, gs->spawnerSprite, TEST_BIGHOLE) < 0) {
+                    return(NULL);
+                }
+
+                if(position_sprite(gs, gs->spawnerSprite,
+                                   gs->spawnerx, gs->spawnery) < 0) {
+                    return(NULL);
+                }
+
+                switch(rand() % 3) {
+                    case 0:
+                        gs->spawner = SPAWN_ANTS;
+                        gs->spawnerCount = RANDRANGE(ANT_SPAWN_MIN, ANT_SPAWN_MAX);
+                        gs->spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
+                        break;
+                    case 1:
+                        gs->spawner = SPAWN_SPIDERS;
+                        gs->spawnerCount = RANDRANGE(SPIDER_SPAWN_MIN, SPIDER_SPAWN_MAX);
+                        gs->spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
+                        break;
+                    default:
+                        gs->spawner = SPAWN_MICE;
+                        gs->spawnerCount = RANDRANGE(MOUSE_SPAWN_MIN, MOUSE_SPAWN_MAX);
+                        gs->spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
+                }
+            }
+    }
+
+    /* needs to be transparent since process enemies can draw to the gore
+     * layer */
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_TRANSPARENT) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(NULL);
+    } 
+
+    if(process_enemies(gs) < 0) {
+        return(NULL);
+    }
+
+    return(&(gs->game));
+}
+
+int game_draw(void *priv) {
+    GameState *gs = (GameState *)priv;
+
+    /* clear the display, otherwise it'll show flickery garbage */
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_OPAQUE) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+    if(SDL_RenderClear(gs->renderer) < 0) {
+        fprintf(stderr, "Failed to clear screen.\n");
+        return(-1);
+    }
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              BG_R, BG_G, BG_B,
+                              SDL_ALPHA_OPAQUE) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+    if(SDL_RenderFillRect(gs->renderer, NULL) < 0) {
+        fprintf(stderr, "Failed to fill background.\n");
+        return(-1);
+    }
+
+    /* needs to be transparent so tilemap updates work */
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_TRANSPARENT) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+
+    /* process enemies here since this call can draw things */
+    if(process_enemies(gs) < 0) {
+        return(-1);
+    }
+
+    /* draw the gore layer below eveyrthing */
+    if(SDL_RenderCopy(gs->renderer, gs->goreTex, NULL, NULL) < 0) {
+        fprintf(stderr, "Failed to copy gore layer.\n");
+        return(-1);
+    }
+
+    if(gs->spawner != SPAWN_NONE) {
+        if(tilemap_draw_layer(gs->ll, gs->spawnerSprite) < 0) {
+            fprintf(stderr, "Failed to draw cat layer.\n");
+            return(-1);
+        }
+    }
+
+    if(draw_enemies(gs) < 0) {
+        return(-1);
+    }
+    if(tilemap_draw_layer(gs->ll, gs->catlayer) < 0) {
+        fprintf(stderr, "Failed to draw cat layer.\n");
+        return(-1);
+    }
+    if(gs->catState == CAT_RESTING) {
+        if(tilemap_draw_layer(gs->ll, gs->zzzlayer) < 0) {
+            fprintf(stderr, "Failed to draw ZZZ layer.\n");
+            return(-1);
+        }
+    }
+    /* draw the hud above everything */
+    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
+        fprintf(stderr, "Failed to hud layer.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
 int main(int argc, char **argv) {
     unsigned int i;
     Uint32 format;
-    SDL_Window *win;
-    SDL_Renderer *renderer;
     SDL_Event lastEvent;
     Synth *s;
     GameState gs;
-    int running;
-    int mouseCaptured = 0;
-    unsigned int mouseReleaseCombo = 0;
     int tileset;
-    int catlayer;
     int font;
-    int hud;
-    int mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
-    int mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
     Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
-    CatState catState = CAT_ANIM0;
-    int animCounter = 0;
-    int catAnim = TEST_ANIM0;
-    float catAngle = 0.0;
-    int zzzlayer = -1;
-    float zzzcycle = 0.0;
-    int fullscreen = 0;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
-    int meow1, meow2, cat_activation, purr;
-    int catIdleTime = 0;
-    SpawnerType spawner;
-    int spawnerSprite;
-    int spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-    unsigned int spawnerx = RANDRANGE(0, WINDOW_WIDTH);
-    unsigned int spawnery = RANDRANGE(0, WINDOW_HEIGHT);
-    unsigned int spawnerCount = 0;;
+    gs.game.input = game_input;
+    gs.game.control = game_control;
+    gs.game.draw = game_draw;
+    gs.game.priv = &gs;
+    GameMode *mode = &(gs.game);
+    GameMode *nextMode = NULL;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -1607,12 +1953,12 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if(initialize_video(&win, &renderer, &format) < 0) {
+    if(initialize_video(&(gs.win), &(gs.renderer), &format) < 0) {
         fprintf(stderr, "Failed to initialize video.\n");
         goto error_sdl;
     }
 
-    if(SDL_RenderSetLogicalSize(renderer,
+    if(SDL_RenderSetLogicalSize(gs.renderer,
                                 WINDOW_WIDTH,
                                 WINDOW_HEIGHT) < 0) {
         fprintf(stderr, "Failed to set render logical size.\n");
@@ -1620,7 +1966,7 @@ int main(int argc, char **argv) {
     }
 
     /* initialize the layerlist */
-    gs.ll = layerlist_new(renderer, format,
+    gs.ll = layerlist_new(gs.renderer, format,
                           vprintf_cb, stderr);
     if(gs.ll == NULL) {
         fprintf(stderr, "Failed to create layerlist.\n");
@@ -1695,36 +2041,36 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    catlayer = create_sprite(&gs);
-    if(catlayer < 0) {
+    gs.catlayer = create_sprite(&gs);
+    if(gs.catlayer < 0) {
         goto error_synth;
     }
 
-    spawnerSprite = create_sprite(&gs);
-    if(spawnerSprite < 0) {
+    gs.spawnerSprite = create_sprite(&gs);
+    if(gs.spawnerSprite < 0) {
         goto error_synth;
     }
 
     /* load the sound effects and create players for them, as they may
      * eventually each have different parameters for volume balance or
      * whatever else */
-    meow1 = load_sound(s, "meow1.wav", &meow1_buf, 0.0);
-    if(meow1 < 0) {
+    gs.meow1 = load_sound(s, "meow1.wav", &meow1_buf, 0.0);
+    if(gs.meow1 < 0) {
         goto error_synth;
     }
-    meow2 = load_sound(s, "meow2.wav", &meow2_buf, -3.0);
-    if(meow2 < 0) {
+    gs.meow2 = load_sound(s, "meow2.wav", &meow2_buf, -3.0);
+    if(gs.meow2 < 0) {
         goto error_synth;
     }
-    cat_activation = load_sound(s, "cat_activation.wav", &cat_activation_buf, -12.0);
-    if(cat_activation < 0) {
+    gs.cat_activation = load_sound(s, "cat_activation.wav", &cat_activation_buf, -12.0);
+    if(gs.cat_activation < 0) {
         goto error_synth;
     }
-    purr = load_sound(s, "purr.wav", &purr_buf, -2.0);
-    if(purr < 0) {
+    gs.purr = load_sound(s, "purr.wav", &purr_buf, -2.0);
+    if(gs.purr < 0) {
         goto error_synth;
     }
-    if(synth_set_player_mode(s, purr, SYNTH_MODE_LOOP) < 0) {
+    if(synth_set_player_mode(s, gs.purr, SYNTH_MODE_LOOP) < 0) {
         fprintf(stderr, "Failed to set purr to looping.\n");
         goto error_synth;
     }
@@ -1743,7 +2089,7 @@ int main(int argc, char **argv) {
     }
 
     /* create and clear the gore texture */
-    gs.goreTex = SDL_CreateTexture(renderer, format,
+    gs.goreTex = SDL_CreateTexture(gs.renderer, format,
                                    SDL_TEXTUREACCESS_TARGET,
                                    WINDOW_WIDTH,
                                    WINDOW_HEIGHT);
@@ -1755,22 +2101,22 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set gore texture blend mode.\n");
         goto error_synth;
     }
-    if(SDL_SetRenderTarget(renderer, gs.goreTex) < 0) {
+    if(SDL_SetRenderTarget(gs.renderer, gs.goreTex) < 0) {
         fprintf(stderr, "Failed to set render target to gore texture.\n");
         goto error_synth;
     }
-    if(SDL_SetRenderDrawColor(renderer,
+    if(SDL_SetRenderDrawColor(gs.renderer,
                               0, 0, 0,
                               SDL_ALPHA_TRANSPARENT) < 0) {
         fprintf(stderr, "Failed to set render draw color.\n");
         goto error_synth;
     } 
-    if(SDL_RenderClear(renderer) < 0) {
+    if(SDL_RenderClear(gs.renderer) < 0) {
         fprintf(stderr, "Failed to clear gore texture.\n");
         goto error_synth;
     }
     /* restore screen rendering */
-    if(SDL_SetRenderTarget(renderer, NULL) < 0) {
+    if(SDL_SetRenderTarget(gs.renderer, NULL) < 0) {
         fprintf(stderr, "Failed to set render target to screen.\n");
         goto error_synth;
     }
@@ -1793,12 +2139,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set hud tileset.\n");
         goto error_synth;
     }
-    hud = tilemap_add_layer(gs.ll, gs.hudTilemap);
-    if(hud < 0) {
+    gs.hud = tilemap_add_layer(gs.ll, gs.hudTilemap);
+    if(gs.hud < 0) {
         fprintf(stderr, "Failed to create HUD layer.\n");
         goto error_synth;
     }
-    if(tilemap_set_layer_scale(gs.ll, hud, HUD_SCALE, HUD_SCALE) < 0) {
+    if(tilemap_set_layer_scale(gs.ll, gs.hud, HUD_SCALE, HUD_SCALE) < 0) {
         fprintf(stderr, "Failed to set hud scale.\n");
         goto error_synth;
     }
@@ -1819,112 +2165,39 @@ int main(int argc, char **argv) {
         return(-1);
     }
 
-    gs.catx = mousex;
-    gs.caty = mousey;
+    gs.zzzlayer = -1;
+
+    gs.mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
+    gs.mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
+    gs.catx = gs.mousex;
+    gs.caty = gs.mousey;
     for(i = 0; i < MAX_ENEMIES; i++) {
         gs.enemy[i].sprite = -1;
     }
+    gs.catState = CAT_ANIM0;
+    gs.catAnim = TEST_ANIM0;
+    gs.catAngle = 0.0;
+    gs.catIdleTime = 0;
     gs.eating = 0;
     gs.catSound = 0;
+    gs.animCounter = 0;
+    gs.zzzcycle = 0.0;
+    gs.spawner = SPAWN_NONE;
+    gs.spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+    gs.spawnerx = RANDRANGE(0, WINDOW_WIDTH);
+    gs.spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+    gs.spawnerCount = 0;;
 
-    spawner = SPAWN_NONE;
+    gs.fullscreen = 0;
 
     /* ##### MAIN LOOP ##### */
-    running = 1;
-    while(running) {
+    gs.running = 1;
+    while(gs.running) {
         /* check running since an event may end execution early */
-        while(running && SDL_PollEvent(&lastEvent)) {
+        while(gs.running && SDL_PollEvent(&lastEvent)) {
             /* handle inputs */
-            switch(lastEvent.type) {
-                SDL_KeyboardEvent *key;
-                SDL_MouseMotionEvent *motion;
-                SDL_MouseButtonEvent *click;
-                case SDL_QUIT:
-                    running = 0;
-                    continue;
-                case SDL_KEYDOWN:
-                    key = (SDL_KeyboardEvent *)&lastEvent;
-                    /* suppress repeat events */
-                    if(key->repeat) {
-                        continue;
-                    }
-
-                    if(key->keysym.sym == SDLK_q) {
-                        running = 0;
-                    } else if(key->keysym.sym == SDLK_e) {
-                        /* simulate an error, which will only only free the
-                         * whole layerlist, testing possible memory leaks */ 
-                        goto error_synth;
-                    } else if(key->keysym.sym == SDLK_f) {
-                        if(fullscreen) {
-                            if(SDL_SetWindowFullscreen(win, 0) < 0) {
-                                fprintf(stderr, "Failed to make window windowed.\n");
-                            } else {
-                                fullscreen = !fullscreen;
-                            }
-                        } else {
-                            if(SDL_SetWindowFullscreen(win, SDL_WINDOW_FULLSCREEN_DESKTOP) < 0) {
-                                fprintf(stderr, "Failed to make window full screen.\n");
-                            } else {
-                                fullscreen = !fullscreen;
-                            }
-                        }
-                    } else if(key->keysym.sym == SDLK_1) {
-                        stop_sound(gs.as, gs.catSound);
-                        gs.catSound = play_sound(gs.as, meow1, 1.0, CATPAN(gs.catx));
-                    } else if(key->keysym.sym == SDLK_2) {
-                        stop_sound(gs.as, gs.catSound);
-                        gs.catSound = play_sound(gs.as, meow2, 1.0, CATPAN(gs.catx));
-                    } else if(key->keysym.sym == SDLK_3) {
-                        stop_sound(gs.as, gs.catSound);
-                        gs.catSound = play_sound(gs.as, cat_activation, 1.0, CATPAN(gs.catx));
-                    } else if(key->keysym.sym == SDLK_4) {
-                        stop_sound(gs.as, gs.catSound);
-                        gs.catSound = play_sound(gs.as, purr, 1.0, CATPAN(gs.catx));
-                    }
-                    break;
-                case SDL_MOUSEMOTION:
-                    motion = (SDL_MouseMotionEvent *)&lastEvent;
-                    mousex = motion->x;
-                    mousey = motion->y;
-                    break;
-                case SDL_MOUSEBUTTONDOWN:
-                    click = (SDL_MouseButtonEvent *)&lastEvent;
-                    if(click->button == 1) {
-                        if(catState == CAT_RESTING) {
-                            catState = CAT_ANIM0;
-                            catAnim = TEST_ANIM0;
-                            if(tilemap_free_layer(gs.ll, zzzlayer) < 0) {
-                                fprintf(stderr, "Failed to free ZZZ layer.\n");
-                                goto error_synth;
-                            }
-
-                            stop_sound(gs.as, gs.catSound);
-                            gs.catSound = play_sound(gs.as, cat_activation, 1.0, CATPAN(gs.catx));
-                        } else {
-                            catState = CAT_RESTING;
-                            if(select_sprite(&gs, catlayer, TEST_RESTING) < 0) {
-                                goto error_synth;
-                            }
-
-                            zzzlayer = create_sprite(&gs);
-                            if(zzzlayer < 0) {
-                                goto error_synth;
-                            }
-                            if(select_sprite(&gs, zzzlayer, TEST_ZZZ) < 0) {
-                                goto error_synth;
-                            }
-                            
-                            stop_sound(gs.as, gs.catSound);
-                            gs.catSound = play_sound(gs.as, purr, 1.0, CATPAN(gs.catx));
-                        }
-                    } else if(click->button == 3) {
-                        gs.catx = mousex;
-                        gs.caty = mousey;
-                    }
-                    break;
-                default:
-                    break;
+            if(mode->input(mode->priv, &lastEvent) < 0) {
+                goto error_synth;
             }
         }
 
@@ -1944,239 +2217,22 @@ int main(int argc, char **argv) {
         while(thisTick >= nextMotion &&
               thisTick - processTime < MAX_PROCESS_TIME) {
             nextMotion += ACTOR_RATE;
-
-            if(gs.eating > 0) {
-                gs.eating -= ACTOR_RATE;
-            }
-
-            if(catState != CAT_RESTING) {
-                int lastCatIdleTime = catIdleTime;
-                update_movement(&(gs.catx), &(gs.caty),
-                                mousex, mousey,
-                                CAT_VELOCITY,
-                                WINDOW_WIDTH, WINDOW_HEIGHT,
-                                &catIdleTime,
-                                &catAngle, CAT_TURN_SPEED);
-                if(lastCatIdleTime - catIdleTime >= CAT_IDLE_MEOW) {
-                    if(rand() % 2 == 1) {
-                        stop_sound(gs.as, gs.catSound);
-                        gs.catSound = play_sound(gs.as, meow1, 1.0, CATPAN(gs.catx));
-                    } else {
-                        stop_sound(gs.as, gs.catSound);
-                        gs.catSound = play_sound(gs.as, meow2, 1.0, CATPAN(gs.catx));
-                    }
-                }
-                if(position_sprite(&gs, catlayer,
-                                   gs.catx, gs.caty) < 0) {
-                    goto error_synth;
-                }
-                if(tilemap_set_layer_rotation(gs.ll, catlayer,
-                                              radian_to_degree(catAngle)) < 0) {
-                    fprintf(stderr, "Failed to set layer rotation.\n");
-                    return(-1);
-                }
-
-                update_panning(gs.as, gs.catSound, CATPAN(gs.catx));
-
-                animCounter++;
-                if(animCounter >= CAT_ANIM_DIV) {
-                    if(catState == CAT_ANIM0) {
-                        catState = CAT_ANIM1;
-                        catAnim++;
-                    } else {
-                        catState = CAT_ANIM0;
-                        catAnim--;
-                    }
-
-                    if(select_sprite(&gs, catlayer, catAnim) < 0) {
-                        goto error_synth;
-                    }
-
-                    animCounter = 0;
-                }
-            } else { /* CAT_RESTING */
-                zzzcycle += ZZZ_CYCLE_SPEED;
-                if(zzzcycle >= M_PI * 2) {
-                    zzzcycle -= M_PI * 2;
-                }
-
-                if(position_sprite(&gs, zzzlayer,
-                                   gs.catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
-                                   gs.caty + (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
-                                   ((sin(zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE)) < 0) {
-                    goto error_synth;
-                }
-                if(tilemap_set_layer_colormod(gs.ll, zzzlayer,
-                                              color_from_angle(zzzcycle,
-                                                               ZZZ_COLOR_BIAS)) < 0) {
-                    fprintf(stderr, "Failed to set ZZZ colormod.\n");
-                    goto error_synth;
-                }
-            }
-
-            switch(spawner) {
-                case SPAWN_ANTS:
-                    spawnerTimer -= ACTOR_RATE;
-                    while(spawnerTimer < 0) {
-                        if(spawnerCount == 0) {
-                            spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-                            spawner = SPAWN_NONE;
-                            break;
-                        }
-
-                        spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
-                        if(create_enemy(&gs, SPAWN_ANTS,
-                                        spawnerx, spawnery,
-                                        SCALE((double)rand(),
-                                              0.0, RAND_MAX,
-                                              0.0, M_PI * 2.0)) < 0) {
-                            goto error_synth;
-                        }
-                        spawnerCount--;
-                    }
-                    break;
-                case SPAWN_SPIDERS:
-                    spawnerTimer -= ACTOR_RATE;
-                    while(spawnerTimer < 0) {
-                        if(spawnerCount == 0) {
-                            spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-                            spawner = SPAWN_NONE;
-                            break;
-                        }
-
-                        spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
-                        if(create_enemy(&gs, SPAWN_SPIDERS,
-                                        spawnerx, spawnery,
-                                        SCALE((double)rand(),
-                                              0.0, RAND_MAX,
-                                              0.0, M_PI * 2.0)) < 0) {
-                            goto error_synth;
-                        }
-                        spawnerCount--;
-                    }
-                    break;
-                case SPAWN_MICE:
-                    spawnerTimer -= ACTOR_RATE;
-                    while(spawnerTimer < 0) {
-                        if(spawnerCount == 0) {
-                            spawnerTimer += RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-                            spawner = SPAWN_NONE;
-                            break;
-                        }
-
-                        spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
-                        if(create_enemy(&gs, SPAWN_MICE,
-                                        spawnerx, spawnery,
-                                        SCALE((double)rand(),
-                                              0.0, RAND_MAX,
-                                              0.0, M_PI * 2.0)) < 0) {
-                            goto error_synth;
-                        }
-                        spawnerCount--;
-                    }
-                    break;
-                default:
-                    spawnerTimer -= ACTOR_RATE;
-                    if(spawnerTimer < 0) {
-                        spawnerx = RANDRANGE(0, WINDOW_WIDTH);
-                        spawnery = RANDRANGE(0, WINDOW_HEIGHT);
-                        if(select_sprite(&gs, spawnerSprite, TEST_BIGHOLE) < 0) {
-                            goto error_synth;
-                        }
-
-                        if(position_sprite(&gs, spawnerSprite,
-                                           spawnerx, spawnery) < 0) {
-                            goto error_synth;
-                        }
-
-                        switch(rand() % 3) {
-                            case 0:
-                                spawner = SPAWN_ANTS;
-                                spawnerCount = RANDRANGE(ANT_SPAWN_MIN, ANT_SPAWN_MAX);
-                                spawnerTimer += RANDRANGE(ANT_SPAWN_TIME_MIN, ANT_SPAWN_TIME_MAX);
-                                break;
-                            case 1:
-                                spawner = SPAWN_SPIDERS;
-                                spawnerCount = RANDRANGE(SPIDER_SPAWN_MIN, SPIDER_SPAWN_MAX);
-                                spawnerTimer += RANDRANGE(SPIDER_SPAWN_TIME_MIN, SPIDER_SPAWN_TIME_MAX);
-                                break;
-                            default:
-                                spawner = SPAWN_MICE;
-                                spawnerCount = RANDRANGE(MOUSE_SPAWN_MIN, MOUSE_SPAWN_MAX);
-                                spawnerTimer += RANDRANGE(MOUSE_SPAWN_TIME_MIN, MOUSE_SPAWN_TIME_MAX);
-                        }
-                    }
+            
+            nextMode = mode->control(mode->priv);
+            if(nextMode == NULL) {
+                goto error_synth;
             }
 
             thisTick = SDL_GetTicks();
         }
 
-        /* clear the display, otherwise it'll show flickery garbage */
-        if(SDL_SetRenderDrawColor(renderer,
-                                  0, 0, 0,
-                                  SDL_ALPHA_OPAQUE) < 0) {
-            fprintf(stderr, "Failed to set render draw color.\n");
-            goto error_synth;
-        } 
-        if(SDL_RenderClear(renderer) < 0) {
-            fprintf(stderr, "Failed to clear screen.\n");
-            goto error_synth;
-        }
-        if(SDL_SetRenderDrawColor(renderer,
-                                  BG_R, BG_G, BG_B,
-                                  SDL_ALPHA_OPAQUE) < 0) {
-            fprintf(stderr, "Failed to set render draw color.\n");
-            goto error_synth;
-        } 
-        if(SDL_RenderFillRect(renderer, NULL) < 0) {
-            fprintf(stderr, "Failed to fill background.\n");
+        if(mode->draw(mode->priv) < 0) {
             goto error_synth;
         }
 
-        /* needs to be transparent so tilemap updates work */
-        if(SDL_SetRenderDrawColor(renderer,
-                                  0, 0, 0,
-                                  SDL_ALPHA_TRANSPARENT) < 0) {
-            fprintf(stderr, "Failed to set render draw color.\n");
-            goto error_synth;
-        } 
+        SDL_RenderPresent(gs.renderer);
 
-        /* process enemies here since this call can draw things */
-        if(process_enemies(&gs) < 0) {
-            goto error_synth;
-        }
-
-        /* draw the gore layer below eveyrthing */
-        if(SDL_RenderCopy(renderer, gs.goreTex, NULL, NULL) < 0) {
-            fprintf(stderr, "Failed to copy gore layer.\n");
-            goto error_synth;
-        }
-
-        if(spawner != SPAWN_NONE) {
-            if(tilemap_draw_layer(gs.ll, spawnerSprite) < 0) {
-                fprintf(stderr, "Failed to draw cat layer.\n");
-                goto error_synth;
-            }
-        }
-
-        draw_enemies(&gs);
-        if(tilemap_draw_layer(gs.ll, catlayer) < 0) {
-            fprintf(stderr, "Failed to draw cat layer.\n");
-            goto error_synth;
-        }
-        if(catState == CAT_RESTING) {
-            if(tilemap_draw_layer(gs.ll, zzzlayer) < 0) {
-                fprintf(stderr, "Failed to draw ZZZ layer.\n");
-                goto error_synth;
-            }
-        }
-        /* draw the hud above everything */
-        if(tilemap_draw_layer(gs.ll, hud) < 0) {
-            fprintf(stderr, "Failed to hud layer.\n");
-            goto error_synth;
-        }
-
-        SDL_RenderPresent(renderer);
+        mode = nextMode;
     }
 
     /* test cleanup functions */
@@ -2184,26 +2240,26 @@ int main(int argc, char **argv) {
     synth_free_buffer(s, meat_buf);
     synth_free_player(s, gs.meat2);
     synth_free_buffer(s, meat2_buf);
-    synth_free_player(s, purr);
+    synth_free_player(s, gs.purr);
     synth_free_buffer(s, purr_buf);
-    synth_free_player(s, cat_activation);
+    synth_free_player(s, gs.cat_activation);
     synth_free_buffer(s, cat_activation_buf);
-    synth_free_player(s, meow1);
+    synth_free_player(s, gs.meow1);
     synth_free_buffer(s, meow1_buf);
-    synth_free_player(s, meow2);
+    synth_free_player(s, gs.meow2);
     synth_free_buffer(s, meow2_buf);
     free_audio_state(gs.as);
 
-    tilemap_free_layer(gs.ll, hud);
+    tilemap_free_layer(gs.ll, gs.hud);
     tilemap_free_tilemap(gs.ll, gs.hudTilemap);
     tilemap_free_tileset(gs.ll, font);
     tilemap_free_layer(gs.ll, gs.goreSprite);
-    tilemap_free_layer(gs.ll, catlayer);
+    tilemap_free_layer(gs.ll, gs.catlayer);
     tilemap_free_tilemap(gs.ll, gs.tilemap);
     tilemap_free_tileset(gs.ll, tileset);
     layerlist_free(gs.ll);
 
-    SDL_DestroyWindow(win);
+    SDL_DestroyWindow(gs.win);
     SDL_Quit();
 
     exit(EXIT_SUCCESS);
@@ -2216,7 +2272,7 @@ error_synth:
 error_ll:
     layerlist_free(gs.ll);
 error_video:
-    SDL_DestroyWindow(win);
+    SDL_DestroyWindow(gs.win);
 error_sdl:
     SDL_Quit();
 }
