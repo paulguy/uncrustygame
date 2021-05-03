@@ -2068,10 +2068,6 @@ int title_draw(void *priv) {
         return(-1);
     }
 
-    if(draw_hud(gs) < 0) {
-        return(-1);
-    }
-
     return(0);
 }
 
@@ -2241,11 +2237,6 @@ int game_draw(void *priv) {
     }
 
     if(draw_cat(gs) < 0) {
-        return(-1);
-    }
-
-    /* draw the hud above everything */
-    if(draw_hud(gs) < 0) {
         return(-1);
     }
 
@@ -2582,6 +2573,11 @@ int main(int argc, char **argv) {
 
             if(mode->draw(mode->priv) < 0) {
                 goto error_synth;
+            }
+
+            /* draw the hud above everything */
+            if(draw_hud(gs) < 0) {
+                return(-1);
             }
         }
 
