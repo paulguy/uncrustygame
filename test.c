@@ -212,6 +212,7 @@ typedef struct {
     int goreSprite;
     int hudTilemap;
     int hud;
+    int title;
 
     /* system state */
     int running;
@@ -1108,6 +1109,80 @@ void play_cat_sound(GameState *gs, int player) {
     gs->catSound = play_sound(gs->as, player, 1.0, CATPAN(gs->catx));
 }
 
+int load_graphic(LayerList *ll,
+                 const char *filename,
+                 unsigned int tWidth,
+                 unsigned int tHeight,
+                 int *tileset,
+                 int *tilemap,
+                 const unsigned int *values,
+                 const unsigned int *colormod,
+                 unsigned int tmWidth,
+                 unsigned int tmHeight) {
+    /* load the graphic, if needed */
+    if(*tileset < 0) {
+        *tileset = tilemap_tileset_from_bmp(ll,
+                                           filename,
+                                           tWidth,
+                                           tHeight);
+        if(*tileset < 0) {
+            fprintf(stderr, "Failed to load graphic.\n");
+            return(-1);
+        }
+    }
+    /* create the tilemap, if needed */
+    if(*tilemap < 0) {
+        *tilemap = tilemap_add_tilemap(ll, tmWidth, tmHeight);
+        if(*tilemap < 0) {
+            fprintf(stderr, "Failed to make tilemap.\n");
+            return(-1);
+        }
+    }
+    /* assign the tileset to the tilemap */
+    if(tilemap_set_tilemap_tileset(ll, *tilemap, *tileset) < 0) {
+        fprintf(stderr, "Failed to apply tileset to tilemap.\n");
+        return(-1);
+    }
+    /* set up its map for the first time if needed */
+    if(values != NULL) {
+        if(tilemap_set_tilemap_map(ll, *tilemap, 
+                                   0, 0, /* start x and y for destination rectangle */
+                                   tmWidth, /* row width for source rectangle */
+                                   tmWidth, tmHeight, /* size of rectangle */
+                                   values, /* the values of the map rect */
+                                   tmWidth * tmHeight /* number of values to expect */
+                                   ) < 0) {
+            fprintf(stderr, "Failed to set tilemap map.\n");
+            return(-1);
+        }
+    }
+    /* apply color modifications if needed, arguments are basically identical
+     * to setting the tilemap map */
+    if(colormod != NULL) {
+        if(tilemap_set_tilemap_attr_colormod(ll, *tilemap,
+                                             0, 0,
+                                             tmWidth,
+                                             tmWidth, tmHeight,
+                                             colormod,
+                                             tmWidth * tmHeight) < 0) {
+            fprintf(stderr, "Failed to set tilemap colormod.\n");
+            return(-1);
+        }
+    }
+    /* update/"render out" the tilemap for the first time, if needed */
+    if(values != NULL) {
+        if(tilemap_update_tilemap(ll, *tilemap,
+                                  0, 0, /* start rectangle to update */
+                                  tmWidth, tmHeight /* update rectangle size */
+                                  ) < 0) {
+            fprintf(stderr, "Failed to update tilemap.\n");
+            return(-1);
+        }
+    }
+
+    return(0);
+}
+
 int create_sprite(GameState *gs) {
     int sprite;
 
@@ -1889,11 +1964,6 @@ int game_draw(void *priv) {
         return(-1);
     } 
 
-    /* process enemies here since this call can draw things */
-    if(process_enemies(gs) < 0) {
-        return(-1);
-    }
-
     /* draw the gore layer below eveyrthing */
     if(SDL_RenderCopy(gs->renderer, gs->goreTex, NULL, NULL) < 0) {
         fprintf(stderr, "Failed to copy gore layer.\n");
@@ -1935,8 +2005,10 @@ int main(int argc, char **argv) {
     SDL_Event lastEvent;
     Synth *s;
     GameState gs;
-    int tileset;
-    int font;
+    int tileset = -1;
+    int font = -1;
+    int tsTitle = -1;
+    int tmTitle = -1;
     Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
@@ -1958,6 +2030,7 @@ int main(int argc, char **argv) {
         goto error_sdl;
     }
 
+    /* fix the logical resolution (play field size, in this case) */
     if(SDL_RenderSetLogicalSize(gs.renderer,
                                 WINDOW_WIDTH,
                                 WINDOW_HEIGHT) < 0) {
@@ -1987,57 +2060,13 @@ int main(int argc, char **argv) {
 
     gs.goreTex = NULL;
 
-    /* load the spritesheet */
-    tileset = tilemap_tileset_from_bmp(gs.ll,
-                                       TEST_SPRITESHEET,
-                                       TEST_SPRITE_WIDTH,
-                                       TEST_SPRITE_HEIGHT);
-    if(tileset < 0) {
-        fprintf(stderr, "Failed to load spritesheet.\n");
-        goto error_synth;
-    }
-    /* create the tilemap */
-    gs.tilemap = tilemap_add_tilemap(gs.ll, ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1);
-    if(gs.tilemap < 0) {
-        fprintf(stderr, "Failed to make tilemap.\n");
-        goto error_synth;
-    }
-    /* assign the spritesheet to the sprite */
-    if(tilemap_set_tilemap_tileset(gs.ll, gs.tilemap, tileset) < 0) {
-        fprintf(stderr, "Failed to apply tileset to tilemap.\n");
-        goto error_synth;
-    }
-    /* set up its map for the first time (not likely necessary in this case
-     * since it's probably already 0, but for demonstration purposes) */
-    if(tilemap_set_tilemap_map(gs.ll, gs.tilemap, 
-                               0, 0, /* start x and y for destination rectangle */
-                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES), /* row width for source rectangle */
-                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1, /* size of rectangle */
-                               TEST_SPRITESHEET_VALUES, /* the values of the
-                                                           map rect */
-                               ARRAY_COUNT(TEST_SPRITESHEET_VALUES)
-                               /* number of values to expect */
-                               ) < 0) {
-        fprintf(stderr, "Failed to set tilemap map.\n");
-        goto error_synth;
-    }
-    /* apply color modifications, arguments are basically identical to setting
-     * the tilemap map */
-    if(tilemap_set_tilemap_attr_colormod(gs.ll, gs.tilemap,
-                                         0, 0,
-                                         ARRAY_COUNT(TEST_SPRITESHEET_VALUES),
-                                         ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1,
-                                         TEST_SPRITESHEET_COLORMOD,
-                                         ARRAY_COUNT(TEST_SPRITESHEET_COLORMOD)
-                                        ) < 0) {
-        fprintf(stderr, "Failed to set tilemap colormod.\n");
-        goto error_synth;
-    }
-    /* update/"render out" the tilemap for the first time */
-    if(tilemap_update_tilemap(gs.ll, gs.tilemap,
-                              0, 0, /* start rectangle to update */
-                              ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1) /* update rectangle size */ < 0) {
-        fprintf(stderr, "Failed to update tilemap.\n");
+    gs.tilemap = -1;
+    if(load_graphic(gs.ll, TEST_SPRITESHEET,
+                    TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
+                    &tileset, &(gs.tilemap),
+                    TEST_SPRITESHEET_VALUES,
+                    TEST_SPRITESHEET_COLORMOD,
+                    ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1) < 0) {
         goto error_synth;
     }
 
@@ -2051,40 +2080,41 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    /* load the sound effects and create players for them, as they may
-     * eventually each have different parameters for volume balance or
-     * whatever else */
-    gs.meow1 = load_sound(s, "meow1.wav", &meow1_buf, 0.0);
-    if(gs.meow1 < 0) {
+    gs.hudTilemap = -1;
+    if(load_graphic(gs.ll, "font.bmp",
+                    8, 8,
+                    &font, &(gs.hudTilemap),
+                    NULL,
+                    NULL,
+                    HUD_WIDTH, HUD_HEIGHT) < 0) {
         goto error_synth;
     }
-    gs.meow2 = load_sound(s, "meow2.wav", &meow2_buf, -3.0);
-    if(gs.meow2 < 0) {
+    gs.hud = tilemap_add_layer(gs.ll, gs.hudTilemap);
+    if(gs.hud < 0) {
+        fprintf(stderr, "Failed to create HUD layer.\n");
         goto error_synth;
     }
-    gs.cat_activation = load_sound(s, "cat_activation.wav", &cat_activation_buf, -12.0);
-    if(gs.cat_activation < 0) {
-        goto error_synth;
-    }
-    gs.purr = load_sound(s, "purr.wav", &purr_buf, -2.0);
-    if(gs.purr < 0) {
-        goto error_synth;
-    }
-    if(synth_set_player_mode(s, gs.purr, SYNTH_MODE_LOOP) < 0) {
-        fprintf(stderr, "Failed to set purr to looping.\n");
-        goto error_synth;
-    }
-    gs.meat = load_sound(s, "meat.wav", &meat_buf, 0.0);
-    if(gs.meat < 0) {
-        goto error_synth;
-    }
-    gs.meat2 = load_sound(s, "meat2.wav", &meat2_buf, 0.0);
-    if(gs.meat2 < 0) {
+    if(tilemap_set_layer_scale(gs.ll, gs.hud, HUD_SCALE, HUD_SCALE) < 0) {
+        fprintf(stderr, "Failed to set hud scale.\n");
         goto error_synth;
     }
 
-    if(synth_set_enabled(s, 1) < 0) {
-        fprintf(stderr, "Failed to enable synth.\n");
+    unsigned int titleTilemap = 0;
+    if(load_graphic(gs.ll, "title.bmp",
+                    256, 192,
+                    &tsTitle, &tmTitle,
+                    &titleTilemap,
+                    NULL,
+                    1, 1) < 0) {
+        goto error_synth;
+    }
+    gs.title = tilemap_add_layer(gs.ll, tmTitle);
+    if(gs.title < 0) {
+        fprintf(stderr, "Failed to create title layer.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_scale(gs.ll, gs.title, SPRITE_SCALE, SPRITE_SCALE) < 0) {
+        fprintf(stderr, "Failed to set title scale.\n");
         goto error_synth;
     }
 
@@ -2125,29 +2155,44 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    font = tilemap_tileset_from_bmp(gs.ll, "font.bmp", 8, 8);
-    if(font < 0) {
-        fprintf(stderr, "Failed to load font.\n");
+    /* load the sound effects and create players for them, as they may
+     * eventually each have different parameters for volume balance or
+     * whatever else */
+    gs.meow1 = load_sound(s, "meow1.wav", &meow1_buf, 0.0);
+    if(gs.meow1 < 0) {
         goto error_synth;
     }
-    gs.hudTilemap = tilemap_add_tilemap(gs.ll, HUD_WIDTH, HUD_HEIGHT);
-    if(gs.hudTilemap < 0) {
-        fprintf(stderr, "Failed to create HUD tilemap.\n");
+    gs.meow2 = load_sound(s, "meow2.wav", &meow2_buf, -3.0);
+    if(gs.meow2 < 0) {
         goto error_synth;
     }
-    if(tilemap_set_tilemap_tileset(gs.ll, gs.hudTilemap, font) < 0) {
-        fprintf(stderr, "Failed to set hud tileset.\n");
+    gs.cat_activation = load_sound(s, "cat_activation.wav", &cat_activation_buf, -12.0);
+    if(gs.cat_activation < 0) {
         goto error_synth;
     }
-    gs.hud = tilemap_add_layer(gs.ll, gs.hudTilemap);
-    if(gs.hud < 0) {
-        fprintf(stderr, "Failed to create HUD layer.\n");
+    gs.purr = load_sound(s, "purr.wav", &purr_buf, -2.0);
+    if(gs.purr < 0) {
         goto error_synth;
     }
-    if(tilemap_set_layer_scale(gs.ll, gs.hud, HUD_SCALE, HUD_SCALE) < 0) {
-        fprintf(stderr, "Failed to set hud scale.\n");
+    if(synth_set_player_mode(s, gs.purr, SYNTH_MODE_LOOP) < 0) {
+        fprintf(stderr, "Failed to set purr to looping.\n");
         goto error_synth;
     }
+    gs.meat = load_sound(s, "meat.wav", &meat_buf, 0.0);
+    if(gs.meat < 0) {
+        goto error_synth;
+    }
+    gs.meat2 = load_sound(s, "meat2.wav", &meat2_buf, 0.0);
+    if(gs.meat2 < 0) {
+        goto error_synth;
+    }
+
+    if(synth_set_enabled(s, 1) < 0) {
+        fprintf(stderr, "Failed to enable synth.\n");
+        goto error_synth;
+    }
+
+    /* create initial hud */
     if(print_to_tilemap(gs.ll, gs.hudTilemap,
                         TEXT_SCORE_X, TEXT_SCORE_Y,
                         sizeof(TEXT_SCORE) - 1, TEXT_SCORE) < 0) {
