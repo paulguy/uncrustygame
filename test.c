@@ -63,6 +63,7 @@
 #define MAX_ENEMIES      (256)
 #define MIN_SPAWNER_TIME (500)
 #define MAX_SPAWNER_TIME (2000)
+#define SPAWNER_DEADZONE (0.1)
 #define ANT_SPAWN_MIN    (20)
 #define ANT_SPAWN_MAX    (100)
 #define ANT_SPAWN_TIME_MIN (10)
@@ -87,6 +88,13 @@
 #define MOUSE_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.3)
 #define MOUSE_VALUE      (200)
 #define MOUSE_EAT_TIME   (1000)
+
+#define MAX_COLOR_BOX    (8)
+#define CBOX_MIN_COLOR   (0.1)
+#define CBOX_MAX_COLOR   (0.4)
+#define CBOX_MIN_DIM     (8)
+#define CBOX_MAX_DIM     (480)
+#define CBOX_MAX_AREA    (100000)
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
@@ -150,6 +158,9 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 
 #define CATPAN(XPOS) ((float)((XPOS) - (WINDOW_WIDTH / 2.0)) / \
                       ((float)WINDOW_WIDTH / 2.0) * CAT_PAN_FACTOR)
+#define SPAWNERMIN(LENGTH) ((float)LENGTH * SPAWNER_DEADZONE)
+#define SPAWNERMAX(LENGTH) ((float)LENGTH * (1.0 - SPAWNER_DEADZONE))
+#define SPAWNERRAND(LENGTH) RANDRANGE((int)SPAWNERMIN(LENGTH), (int)SPAWNERMAX(LENGTH))
 
 #define NANOSECOND (1000000000)
 
@@ -205,6 +216,14 @@ typedef enum {
 } SpawnerType;
 
 typedef struct {
+    int tmBackground, tmForeground;
+    int lBackground, lForeground;
+    Uint32 bgColor;
+    int x, y;
+    int shadowOffset;
+} ColorBox;
+
+typedef struct {
     /* game modes */
     GameMode title;
     GameMode game;
@@ -222,6 +241,7 @@ typedef struct {
     int hudTilemap;
     int hud;
     int titleLayer;
+    ColorBox cbox[MAX_COLOR_BOX];
 
     /* system state */
     int mousex, mousey;
@@ -1782,8 +1802,8 @@ void reset_state(GameState *gs) {
     gs->zzzcycle = 0.0;
     gs->spawner = SPAWN_NONE;
     gs->spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-    gs->spawnerx = RANDRANGE(0, WINDOW_WIDTH);
-    gs->spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+    gs->spawnerx = SPAWNERRAND(WINDOW_WIDTH);
+    gs->spawnery = SPAWNERRAND(WINDOW_HEIGHT);
     gs->spawnerCount = 0;
     for(i = 0; i < MAX_ENEMIES; i++) {
         gs->enemy[i].sprite = -1;
@@ -2170,8 +2190,8 @@ GameMode* game_control(void *priv) {
         default:
             gs->spawnerTimer -= ACTOR_RATE;
             if(gs->spawnerTimer < 0) {
-                gs->spawnerx = RANDRANGE(0, WINDOW_WIDTH);
-                gs->spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+                gs->spawnerx = SPAWNERRAND(WINDOW_WIDTH);
+                gs->spawnery = SPAWNERRAND(WINDOW_HEIGHT);
                 if(select_sprite(gs, gs->spawnerSprite, TEST_BIGHOLE) < 0) {
                     return(NULL);
                 }
