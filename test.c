@@ -141,6 +141,7 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define SCALEINV(VAL, SMIN, SMAX, DMIN, DMAX) \
     ((DMAX) - (((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))))
 #define RANDRANGE(MIN, MAX) ((rand() % (MAX - MIN)) + MIN)
+#define CENTER(OUTERW, INNERW) (((OUTERW) - (INNERW)) / 2)
 
 #define CATPAN(XPOS) ((float)((XPOS) - (WINDOW_WIDTH / 2.0)) / \
                       ((float)WINDOW_WIDTH / 2.0) * CAT_PAN_FACTOR)
@@ -198,10 +199,11 @@ typedef enum {
 
 typedef struct {
     /* game modes */
+    GameMode title;
     GameMode game;
+    GameMode *nextMode;
 
     /* resources */
-    SDL_Window *win;
     SDL_Renderer *renderer;
     LayerList *ll;
     AudioState *as;
@@ -212,11 +214,9 @@ typedef struct {
     int goreSprite;
     int hudTilemap;
     int hud;
-    int title;
+    int titleLayer;
 
     /* system state */
-    int running;
-    int fullscreen;
     int mousex, mousey;
 
     /* game state */
@@ -242,9 +242,13 @@ typedef struct {
     int catSound;
 } GameState;
 
+const char TEXT_SCORE[] = "Score: ";
 #define TEXT_SCORE_X (0)
 #define TEXT_SCORE_Y (0)
-const char *TEXT_SCORE = "Score: ";
+
+const char TEXT_START[] = "Press [ENTER] to start";
+#define TEXT_START_X CENTER(HUD_WIDTH, sizeof(TEXT_START) - 1)
+#define TEXT_START_Y (HUD_HEIGHT - 4)
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -448,6 +452,28 @@ int print_to_tilemap(LayerList *ll,
                                w, h,
                                textTilemap, w * h) < 0) {
         fprintf(stderr, "Failed to print to tilemap.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+int print_to_hud(GameState *gs,
+                 const char *text,
+                 unsigned int x,
+                 unsigned int y) {
+    int len = strlen(text);
+
+    if(print_to_tilemap(gs->ll, gs->hudTilemap,
+                        x, y,
+                        len, text) < 0) {
+        fprintf(stderr, "failed to print hud text.\n");
+        return(-1);
+    }
+    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
+                              x, y,
+                              len, 1) < 0) {
+        fprintf(stderr, "Failed to update hud tilemap.\n");
         return(-1);
     }
 
@@ -1508,7 +1534,33 @@ void update_movement(float *thisx, float *thisy,
     }
 }
 
-int print_score_to_tilemap(GameState *gs) {
+int clear_hud(GameState *gs) {
+    unsigned int temp[HUD_WIDTH * HUD_HEIGHT];
+    unsigned int i;
+
+    for(i = 0; i < HUD_WIDTH * HUD_HEIGHT; i++) {
+        temp[i] = ' ';
+    }
+
+    if(tilemap_set_tilemap_map(gs->ll, gs->hudTilemap,
+                               0, 0,
+                               HUD_WIDTH,
+                               HUD_WIDTH, HUD_HEIGHT,
+                               temp, HUD_WIDTH * HUD_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to set clear tilemap.\n");
+        return(-1);
+    }
+    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
+                              0, 0,
+                              HUD_WIDTH, HUD_HEIGHT) < 0) {
+        fprintf(stderr, "Failed to clear hud tilemap.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+int print_score_to_hud(GameState *gs) {
     int scorelen;
 
     /* a potentially unbound operation, but the number should never be
@@ -1551,7 +1603,7 @@ int process_enemies(GameState *gs) {
             if(gs->score < 0) {
                 gs->score = 0;
             }
-            if(print_score_to_tilemap(gs) < 0) {
+            if(print_score_to_hud(gs) < 0) {
                 return(-1);
             }
 
@@ -1673,91 +1725,33 @@ int draw_enemies(GameState *gs) {
     return(0);
 }
 
-int game_input(void *priv, SDL_Event *event) {
-    GameState *gs = (GameState *)priv;
-    SDL_KeyboardEvent *key = (SDL_KeyboardEvent *)event;
-    SDL_MouseMotionEvent *motion = (SDL_MouseMotionEvent *)event;
-    SDL_MouseButtonEvent *click = (SDL_MouseButtonEvent *)event;
+void reset_state(GameState *gs) {
+    unsigned int i;
 
-    switch(event->type) {
-        case SDL_QUIT:
-            gs->running = 0;
-            break;
-        case SDL_KEYDOWN:
-            /* suppress repeat events */
-            if(key->repeat) {
-                break;
-            }
+    stop_sound(gs->as, gs->catSound);
 
-            if(key->keysym.sym == SDLK_q) {
-                gs->running = 0;
-            } else if(key->keysym.sym == SDLK_e) {
-                /* simulate an error, which will only only free the
-                 * whole layerlist, testing possible memory leaks */ 
-                return(-1);
-            } else if(key->keysym.sym == SDLK_f) {
-                if(gs->fullscreen) {
-                    if(SDL_SetWindowFullscreen(gs->win, 0) < 0) {
-                        fprintf(stderr, "Failed to make window windowed.\n");
-                    } else {
-                        gs->fullscreen = !gs->fullscreen;
-                    }
-                } else {
-                    if(SDL_SetWindowFullscreen(gs->win, SDL_WINDOW_FULLSCREEN_DESKTOP) < 0) {
-                        fprintf(stderr, "Failed to make window full screen.\n");
-                    } else {
-                        gs->fullscreen = !gs->fullscreen;
-                    }
-                }
-            }
-            break;
-        case SDL_MOUSEMOTION:
-            gs->mousex = motion->x;
-            gs->mousey = motion->y;
-            break;
-        case SDL_MOUSEBUTTONDOWN:
-            if(click->button == 1) {
-                if(gs->catState == CAT_RESTING) {
-                    gs->catState = CAT_ANIM0;
-                    gs->catAnim = TEST_ANIM0;
-                    if(tilemap_free_layer(gs->ll, gs->zzzlayer) < 0) {
-                        fprintf(stderr, "Failed to free ZZZ layer.\n");
-                        return(-1);
-                    }
-
-                    play_cat_sound(gs, gs->cat_activation);
-                } else {
-                    gs->catState = CAT_RESTING;
-                    if(select_sprite(gs, gs->catlayer, TEST_RESTING) < 0) {
-                        return(-1);
-                    }
-
-                    gs->zzzlayer = create_sprite(gs);
-                    if(gs->zzzlayer < 0) {
-                        return(-1);
-                    }
-                    if(select_sprite(gs, gs->zzzlayer, TEST_ZZZ) < 0) {
-                        return(-1);
-                    }
-                    
-                    play_cat_sound(gs, gs->purr);
-                }
-            }
-            break;
-        default:
-            break;
+    gs->catx = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
+    gs->caty = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
+    gs->catState = CAT_ANIM0;
+    gs->catAnim = TEST_ANIM0;
+    gs->catAngle = 0.0;
+    gs->catIdleTime = 0;
+    gs->eating = 0;
+    gs->catSound = 0;
+    gs->animCounter = 0;
+    gs->zzzcycle = 0.0;
+    gs->spawner = SPAWN_NONE;
+    gs->spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
+    gs->spawnerx = RANDRANGE(0, WINDOW_WIDTH);
+    gs->spawnery = RANDRANGE(0, WINDOW_HEIGHT);
+    gs->spawnerCount = 0;
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        gs->enemy[i].sprite = -1;
     }
-
-    return(0);
+    gs->score = 0;
 }
 
-GameMode* game_control(void *priv) {
-    GameState *gs = (GameState *)priv;
-
-    if(gs->eating > 0) {
-        gs->eating -= ACTOR_RATE;
-    }
-
+int update_cat(GameState *gs) {
     if(gs->catState != CAT_RESTING) {
         int lastCatIdleTime = gs->catIdleTime;
         update_movement(&(gs->catx), &(gs->caty),
@@ -1775,12 +1769,12 @@ GameMode* game_control(void *priv) {
         }
         if(position_sprite(gs, gs->catlayer,
                            gs->catx, gs->caty) < 0) {
-            return(NULL);
+            return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->catlayer,
                                       radian_to_degree(gs->catAngle)) < 0) {
             fprintf(stderr, "Failed to set layer rotation.\n");
-            return(NULL);
+            return(-1);
         }
 
         update_panning(gs->as, gs->catSound, CATPAN(gs->catx));
@@ -1796,7 +1790,7 @@ GameMode* game_control(void *priv) {
             }
 
             if(select_sprite(gs, gs->catlayer, gs->catAnim) < 0) {
-                return(NULL);
+                return(-1);
             }
 
             gs->animCounter = 0;
@@ -1811,14 +1805,227 @@ GameMode* game_control(void *priv) {
                            gs->catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
                            gs->caty + (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
                            ((sin(gs->zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE)) < 0) {
-            return(NULL);
+            return(-1);
         }
         if(tilemap_set_layer_colormod(gs->ll, gs->zzzlayer,
                                       color_from_angle(gs->zzzcycle,
                                                        ZZZ_COLOR_BIAS)) < 0) {
             fprintf(stderr, "Failed to set ZZZ colormod.\n");
-            return(NULL);
+            return(-1);
         }
+    }
+
+    return(0);
+}
+
+int toggle_cat_mode(GameState *gs) {
+    if(gs->catState == CAT_RESTING) {
+        gs->catState = CAT_ANIM0;
+        gs->catAnim = TEST_ANIM0;
+        if(tilemap_free_layer(gs->ll, gs->zzzlayer) < 0) {
+            fprintf(stderr, "Failed to free ZZZ layer.\n");
+            return(-1);
+        }
+
+        play_cat_sound(gs, gs->cat_activation);
+    } else {
+        gs->catState = CAT_RESTING;
+        if(select_sprite(gs, gs->catlayer, TEST_RESTING) < 0) {
+            return(-1);
+        }
+
+        gs->zzzlayer = create_sprite(gs);
+        if(gs->zzzlayer < 0) {
+            return(-1);
+        }
+        if(select_sprite(gs, gs->zzzlayer, TEST_ZZZ) < 0) {
+            return(-1);
+        }
+        
+        play_cat_sound(gs, gs->purr);
+    }
+
+    return(0);
+}
+
+int prepare_frame(GameState *gs) {
+    /* clear the display, otherwise it'll show flickery garbage */
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_OPAQUE) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+    if(SDL_RenderClear(gs->renderer) < 0) {
+        fprintf(stderr, "Failed to clear screen.\n");
+        return(-1);
+    }
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              BG_R, BG_G, BG_B,
+                              SDL_ALPHA_OPAQUE) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+    if(SDL_RenderFillRect(gs->renderer, NULL) < 0) {
+        fprintf(stderr, "Failed to fill background.\n");
+        return(-1);
+    }
+
+    /* needs to be transparent so tilemap updates work */
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_TRANSPARENT) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+
+    return(0);
+}
+
+int draw_cat(GameState *gs) {
+    if(tilemap_draw_layer(gs->ll, gs->catlayer) < 0) {
+        fprintf(stderr, "Failed to draw cat layer.\n");
+        return(-1);
+    }
+    if(gs->catState == CAT_RESTING) {
+        if(tilemap_draw_layer(gs->ll, gs->zzzlayer) < 0) {
+            fprintf(stderr, "Failed to draw ZZZ layer.\n");
+            return(-1);
+        }
+    }
+
+    return(0);
+}
+
+int game_setup(GameState *gs) {
+    reset_state(gs);
+
+    if(clear_hud(gs) < 0) {
+        return(-1);
+    }
+    if(print_to_hud(gs, TEXT_SCORE, TEXT_SCORE_X, TEXT_SCORE_Y) < 0) {
+        return(-1);
+    }
+    if(print_score_to_hud(gs) < 0) {
+        return(-1);
+    }
+
+    return(0);
+}
+
+int title_input(void *priv, SDL_Event *event) {
+    GameState *gs = (GameState *)priv;
+    SDL_KeyboardEvent *key = (SDL_KeyboardEvent *)event;
+    SDL_MouseMotionEvent *motion = (SDL_MouseMotionEvent *)event;
+    SDL_MouseButtonEvent *click = (SDL_MouseButtonEvent *)event;
+
+    switch(event->type) {
+        case SDL_KEYDOWN:
+            /* suppress repeat events */
+            if(key->repeat) {
+                break;
+            }
+
+            if(key->keysym.sym == SDLK_RETURN) {
+                if(game_setup(gs) < 0) {
+                    return(-1);
+                }
+
+                gs->nextMode = &(gs->game);
+            }
+            break;
+        case SDL_MOUSEMOTION:
+            gs->mousex = motion->x;
+            gs->mousey = motion->y;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            if(click->button == 1) {
+                if(toggle_cat_mode(gs) < 0) {
+                    return(-1);
+                }
+            }
+            break;
+        default:
+            break;
+    }
+
+    return(0);
+}
+
+GameMode* title_control(void *priv) {
+    GameState *gs = (GameState *)priv;
+    GameMode *next;
+
+    if(update_cat(gs) < 0) {
+        return(NULL);
+    }
+
+    if(gs->nextMode != NULL) {
+        next = gs->nextMode;
+        gs->nextMode = NULL;
+        return(next);
+    }
+
+    return(&(gs->title));
+}
+
+int title_draw(void *priv) {
+    GameState *gs = (GameState *)priv;
+
+    if(prepare_frame(gs) < 0) {
+        return(-1);
+    }
+
+    if(draw_cat(gs) < 0) {
+        return(-1);
+    }
+
+    if(tilemap_draw_layer(gs->ll, gs->titleLayer) < 0) {
+        fprintf(stderr, "Failed to draw title layer.\n");
+        return(-1);
+    }
+
+    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
+        fprintf(stderr, "Failed to draw hud layer.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+int game_input(void *priv, SDL_Event *event) {
+    GameState *gs = (GameState *)priv;
+    SDL_MouseMotionEvent *motion = (SDL_MouseMotionEvent *)event;
+    SDL_MouseButtonEvent *click = (SDL_MouseButtonEvent *)event;
+
+    switch(event->type) {
+        case SDL_MOUSEMOTION:
+            gs->mousex = motion->x;
+            gs->mousey = motion->y;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            if(click->button == 1) {
+                if(toggle_cat_mode(gs) < 0) {
+                    return(-1);
+                }
+            }
+            break;
+        default:
+            break;
+    }
+
+    return(0);
+}
+
+GameMode* game_control(void *priv) {
+    GameState *gs = (GameState *)priv;
+
+    if(gs->eating > 0) {
+        gs->eating -= ACTOR_RATE;
+    }
+
+    if(update_cat(gs) < 0) {
+        return(NULL);
     }
 
     switch(gs->spawner) {
@@ -1934,35 +2141,9 @@ GameMode* game_control(void *priv) {
 int game_draw(void *priv) {
     GameState *gs = (GameState *)priv;
 
-    /* clear the display, otherwise it'll show flickery garbage */
-    if(SDL_SetRenderDrawColor(gs->renderer,
-                              0, 0, 0,
-                              SDL_ALPHA_OPAQUE) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-    if(SDL_RenderClear(gs->renderer) < 0) {
-        fprintf(stderr, "Failed to clear screen.\n");
+    if(prepare_frame(gs) < 0) {
         return(-1);
     }
-    if(SDL_SetRenderDrawColor(gs->renderer,
-                              BG_R, BG_G, BG_B,
-                              SDL_ALPHA_OPAQUE) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-    if(SDL_RenderFillRect(gs->renderer, NULL) < 0) {
-        fprintf(stderr, "Failed to fill background.\n");
-        return(-1);
-    }
-
-    /* needs to be transparent so tilemap updates work */
-    if(SDL_SetRenderDrawColor(gs->renderer,
-                              0, 0, 0,
-                              SDL_ALPHA_TRANSPARENT) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
 
     /* draw the gore layer below eveyrthing */
     if(SDL_RenderCopy(gs->renderer, gs->goreTex, NULL, NULL) < 0) {
@@ -1972,7 +2153,7 @@ int game_draw(void *priv) {
 
     if(gs->spawner != SPAWN_NONE) {
         if(tilemap_draw_layer(gs->ll, gs->spawnerSprite) < 0) {
-            fprintf(stderr, "Failed to draw cat layer.\n");
+            fprintf(stderr, "Failed to draw spawner.\n");
             return(-1);
         }
     }
@@ -1980,19 +2161,14 @@ int game_draw(void *priv) {
     if(draw_enemies(gs) < 0) {
         return(-1);
     }
-    if(tilemap_draw_layer(gs->ll, gs->catlayer) < 0) {
-        fprintf(stderr, "Failed to draw cat layer.\n");
+
+    if(draw_cat(gs) < 0) {
         return(-1);
     }
-    if(gs->catState == CAT_RESTING) {
-        if(tilemap_draw_layer(gs->ll, gs->zzzlayer) < 0) {
-            fprintf(stderr, "Failed to draw ZZZ layer.\n");
-            return(-1);
-        }
-    }
+
     /* draw the hud above everything */
     if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
-        fprintf(stderr, "Failed to hud layer.\n");
+        fprintf(stderr, "Failed to draw hud layer.\n");
         return(-1);
     }
 
@@ -2000,11 +2176,12 @@ int game_draw(void *priv) {
 }
 
 int main(int argc, char **argv) {
-    unsigned int i;
+    SDL_Window *win;
     Uint32 format;
     SDL_Event lastEvent;
     Synth *s;
     GameState gs;
+    int fullscreen;
     int tileset = -1;
     int font = -1;
     int tsTitle = -1;
@@ -2012,12 +2189,17 @@ int main(int argc, char **argv) {
     Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
+    GameMode *mode = &(gs.title);
+
     gs.game.input = game_input;
     gs.game.control = game_control;
     gs.game.draw = game_draw;
     gs.game.priv = &gs;
-    GameMode *mode = &(gs.game);
-    GameMode *nextMode = NULL;
+    gs.title.input = title_input;
+    gs.title.control = title_control;
+    gs.title.draw = title_draw;
+    gs.title.priv = &gs;
+    gs.nextMode = NULL;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -2025,7 +2207,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if(initialize_video(&(gs.win), &(gs.renderer), &format) < 0) {
+    if(initialize_video(&win, &(gs.renderer), &format) < 0) {
         fprintf(stderr, "Failed to initialize video.\n");
         goto error_sdl;
     }
@@ -2108,13 +2290,20 @@ int main(int argc, char **argv) {
                     1, 1) < 0) {
         goto error_synth;
     }
-    gs.title = tilemap_add_layer(gs.ll, tmTitle);
-    if(gs.title < 0) {
+    gs.titleLayer = tilemap_add_layer(gs.ll, tmTitle);
+    if(gs.titleLayer < 0) {
         fprintf(stderr, "Failed to create title layer.\n");
         goto error_synth;
     }
-    if(tilemap_set_layer_scale(gs.ll, gs.title, SPRITE_SCALE, SPRITE_SCALE) < 0) {
+    if(tilemap_set_layer_scale(gs.ll, gs.titleLayer,
+                               SPRITE_SCALE, SPRITE_SCALE) < 0) {
         fprintf(stderr, "Failed to set title scale.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_pos(gs.ll, gs.titleLayer,
+                             CENTER(WINDOW_WIDTH, 256 * SPRITE_SCALE),
+                             (WINDOW_HEIGHT - (192 * SPRITE_SCALE)) / 4) < 0) {
+        fprintf(stderr, "Failed to set title pos.\n");
         goto error_synth;
     }
 
@@ -2192,62 +2381,60 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    /* create initial hud */
-    if(print_to_tilemap(gs.ll, gs.hudTilemap,
-                        TEXT_SCORE_X, TEXT_SCORE_Y,
-                        sizeof(TEXT_SCORE) - 1, TEXT_SCORE) < 0) {
-        fprintf(stderr, "failed to print score text.\n");
+    if(clear_hud(&gs) < 0) {
         goto error_synth;
     }
-    if(tilemap_update_tilemap(gs.ll, gs.hudTilemap,
-                              TEXT_SCORE_X, TEXT_SCORE_Y,
-                              sizeof(TEXT_SCORE) - 1, 1) < 0) {
-        fprintf(stderr, "Failed to update hud tilemap.\n");
+    if(print_to_hud(&gs, TEXT_START, TEXT_START_X, TEXT_START_Y) < 0) {
         goto error_synth;
     }
-    gs.score = 0;
-    if(print_score_to_tilemap(&gs) < 0) {
-        return(-1);
-    }
 
-    gs.zzzlayer = -1;
-
-    gs.mousex = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
-    gs.mousey = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
-    gs.catx = gs.mousex;
-    gs.caty = gs.mousey;
-    for(i = 0; i < MAX_ENEMIES; i++) {
-        gs.enemy[i].sprite = -1;
-    }
-    gs.catState = CAT_ANIM0;
-    gs.catAnim = TEST_ANIM0;
-    gs.catAngle = 0.0;
-    gs.catIdleTime = 0;
-    gs.eating = 0;
-    gs.catSound = 0;
-    gs.animCounter = 0;
-    gs.zzzcycle = 0.0;
-    gs.spawner = SPAWN_NONE;
-    gs.spawnerTimer = RANDRANGE(MIN_SPAWNER_TIME, MAX_SPAWNER_TIME);
-    gs.spawnerx = RANDRANGE(0, WINDOW_WIDTH);
-    gs.spawnery = RANDRANGE(0, WINDOW_HEIGHT);
-    gs.spawnerCount = 0;;
-
-    gs.fullscreen = 0;
+    reset_state(&gs);
+    gs.mousex = gs.catx;
+    gs.mousey = gs.caty;
+    fullscreen = 0;
 
     /* ##### MAIN LOOP ##### */
-    gs.running = 1;
-    while(gs.running) {
-        /* check running since an event may end execution early */
-        while(gs.running && SDL_PollEvent(&lastEvent)) {
-            /* handle inputs */
+    while(mode != NULL) {
+        /* check mode since an event may end execution early */
+        while(mode != NULL && SDL_PollEvent(&lastEvent)) {
+            /* handle SDL_QUIT and some global hotkeys */
+            if(lastEvent.type == SDL_QUIT) {
+                mode = NULL;
+                continue;
+            } else if(lastEvent.type == SDL_KEYDOWN) {
+                switch(((SDL_KeyboardEvent *)&lastEvent)->keysym.sym) {
+                    case SDLK_q:
+                        mode = NULL;
+                        continue;
+                    case SDLK_e:
+                        /* simulate an error */
+                        goto error_synth;
+                    case SDLK_f:
+                        if(fullscreen) {
+                            if(SDL_SetWindowFullscreen(win, 0) < 0) {
+                                fprintf(stderr, "Failed to make window windowed.\n");
+                            } else {
+                                fullscreen = !fullscreen;
+                            }
+                        } else {
+                            if(SDL_SetWindowFullscreen(win, SDL_WINDOW_FULLSCREEN_DESKTOP) < 0) {
+                                fprintf(stderr, "Failed to make window full screen.\n");
+                            } else {
+                                fullscreen = !fullscreen;
+                            }
+                        }
+                        continue;
+                }
+            }
+
+            /* handle all other inputs */
             if(mode->input(mode->priv, &lastEvent) < 0) {
                 goto error_synth;
             }
         }
 
         /* run the synth */
-        if(synth_frame(s) < 0) {
+        if(mode != NULL && synth_frame(s) < 0) {
             fprintf(stderr, "Audio failed.\n");
             goto error_synth;
         }
@@ -2259,25 +2446,24 @@ int main(int argc, char **argv) {
          * and poll for events */
         Uint32 thisTick = SDL_GetTicks();
         Uint32 processTime = thisTick;
-        while(thisTick >= nextMotion &&
+        while(mode != NULL &&
+              thisTick >= nextMotion &&
               thisTick - processTime < MAX_PROCESS_TIME) {
             nextMotion += ACTOR_RATE;
             
-            nextMode = mode->control(mode->priv);
-            if(nextMode == NULL) {
+            mode = mode->control(mode->priv);
+            if(mode == NULL) {
                 goto error_synth;
             }
 
             thisTick = SDL_GetTicks();
         }
 
-        if(mode->draw(mode->priv) < 0) {
+        if(mode != NULL && mode->draw(mode->priv) < 0) {
             goto error_synth;
         }
 
         SDL_RenderPresent(gs.renderer);
-
-        mode = nextMode;
     }
 
     /* test cleanup functions */
@@ -2304,11 +2490,13 @@ int main(int argc, char **argv) {
     tilemap_free_tileset(gs.ll, tileset);
     layerlist_free(gs.ll);
 
-    SDL_DestroyWindow(gs.win);
+    SDL_DestroyWindow(win);
     SDL_Quit();
 
     exit(EXIT_SUCCESS);
 
+    /* don't try to call any free methods other than the subsystems to test
+     * behavior on exiting if that's left out */
 error_synth:
     free_audio_state(gs.as);
     if(gs.goreTex != NULL) {
@@ -2317,7 +2505,9 @@ error_synth:
 error_ll:
     layerlist_free(gs.ll);
 error_video:
-    SDL_DestroyWindow(gs.win);
+    SDL_DestroyWindow(win);
 error_sdl:
     SDL_Quit();
+
+    exit(EXIT_FAILURE);
 }
