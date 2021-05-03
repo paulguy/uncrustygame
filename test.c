@@ -38,7 +38,6 @@
 #define RENDERER_FLAGS  (0)
 #define SHOW_FPS
 #define DEFAULT_RATE    (48000)
-#define SPRITE_SCALE    (2.0)
 #define MAX_ACTIVE_PLAYERS (32)
 #define BG_R (47)
 #define BG_G (17)
@@ -110,9 +109,10 @@ const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
 #define C_OPAQUE TILEMAP_COLOR(255, 255, 255, 255)
 #define C_TRANSL TILEMAP_COLOR(255, 255, 255, ZZZ_TRANSLUCENCY)
 #define C_MOUSEBLOOD TILEMAP_COLOR(145, 0, 0, 255)
-#define C_ANTBLOOD TILEMAP_COLOR(37, 70, 0, 255)
-#define C_SPIDERBLOOD TILEMAP_COLOR(0, 34, 72, 255)
+#define C_ANTBLOOD TILEMAP_COLOR(37, 70, 0, 192)
+#define C_SPIDERBLOOD TILEMAP_COLOR(0, 34, 72, 192)
 #define C_HUD_SHADOW TILEMAP_COLOR(255, 255, 255, HUD_SHADOW_TRANSLUCENCY)
+#define C_BGTILES TILEMAP_COLOR(255, 192, 128, 48)
 const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_OPAQUE, C_TRANSL,
     C_OPAQUE, C_OPAQUE,
@@ -123,6 +123,7 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_ANTBLOOD, C_OPAQUE,
     C_SPIDERBLOOD, C_MOUSEBLOOD
 };
+/* sprite tilemap indices */
 #define TEST_RESTING (0)
 #define TEST_ZZZ     (1)
 #define TEST_ANIM0   (2)
@@ -140,6 +141,12 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_SPIDER_GORE   (14)
 #define TEST_MOUSE_GORE   (15)
 
+/* tileset indices */
+#define TEST_MARBLE0 (14)
+#define TEST_MARBLE1 (15)
+#define TEST_MARBLE2 (16)
+#define TEST_MARBLE3 (17)
+
 #define CAT_DISTANCE     (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)
 
 #define FONT_WIDTH  (8)
@@ -147,6 +154,9 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define HUD_SCALE   (2)
 #define HUD_WIDTH   (WINDOW_WIDTH / (FONT_WIDTH * HUD_SCALE))
 #define HUD_HEIGHT  (WINDOW_HEIGHT / (FONT_HEIGHT * HUD_SCALE))
+#define SPRITE_SCALE    (2)
+#define WINDOW_TILE_WIDTH (WINDOW_WIDTH / (TEST_SPRITE_WIDTH * SPRITE_SCALE))
+#define WINDOW_TILE_HEIGHT (WINDOW_HEIGHT / (TEST_SPRITE_HEIGHT * SPRITE_SCALE))
 
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 #define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
@@ -216,8 +226,8 @@ typedef enum {
 } SpawnerType;
 
 typedef struct {
-    int tmBackground, tmForeground;
-    int lBackground, lForeground;
+    int tmForeground;
+    int lForeground;
     Uint32 bgColor;
     int x, y;
     int shadowOffset;
@@ -241,6 +251,7 @@ typedef struct {
     int hudTilemap;
     int hud;
     int titleLayer;
+    int lBackground;
     ColorBox cbox[MAX_COLOR_BOX];
 
     /* system state */
@@ -268,6 +279,11 @@ typedef struct {
     int meow1, meow2, cat_activation, purr, meat, meat2;
     int catSound;
 } GameState;
+
+const unsigned int BG_PATTERN[] = {TEST_MARBLE0, TEST_MARBLE1,
+                                   TEST_MARBLE2, TEST_MARBLE3};
+#define BG_PATTERN_WIDTH  (2)
+#define BG_PATTERN_HEIGHT (2)
 
 const char TEXT_SCORE[] = "Score: ";
 #define TEXT_SCORE_X (0)
@@ -1173,10 +1189,12 @@ int load_graphic(LayerList *ll,
                  unsigned int tHeight,
                  int *tileset,
                  int *tilemap,
+                 int *layer,
                  const unsigned int *values,
                  const unsigned int *colormod,
                  unsigned int tmWidth,
-                 unsigned int tmHeight) {
+                 unsigned int tmHeight,
+                 float layerScale) {
     /* load the graphic, if needed */
     if(*tileset < 0) {
         *tileset = tilemap_tileset_from_bmp(ll,
@@ -1234,6 +1252,20 @@ int load_graphic(LayerList *ll,
                                   tmWidth, tmHeight /* update rectangle size */
                                   ) < 0) {
             fprintf(stderr, "Failed to update tilemap.\n");
+            return(-1);
+        }
+    }
+    /* create a layer if needed */
+    if(*layer < 0) {
+        *layer = tilemap_add_layer(ll, *tilemap);
+        if(*layer < 0) {
+            fprintf(stderr, "Failed to create layer.\n");
+            return(-1);
+        }
+
+        /* don't modify a layer fed in as if it wasn't to be created */
+        if(tilemap_set_layer_scale(ll, *layer, layerScale, layerScale) < 0) {
+            fprintf(stderr, "Failed to set scale.\n");
             return(-1);
         }
     }
@@ -1939,6 +1971,11 @@ int prepare_frame(GameState *gs) {
         return(-1);
     } 
 
+    if(tilemap_draw_layer(gs->ll, gs->lBackground) < 0) {
+        fprintf(stderr, "Failed to draw background layer.\n");
+        return(-1);
+    }
+
     return(0);
 }
 
@@ -2263,6 +2300,22 @@ int game_draw(void *priv) {
     return(0);
 }
 
+void fill_tilemap_with_pattern(unsigned int *values,
+                               unsigned int vWidth,
+                               unsigned int vHeight,
+                               const unsigned int *pattern,
+                               unsigned int pWidth,
+                               unsigned int pHeight) {
+    unsigned int x, y;
+
+    for(y = 0; y < vHeight; y++) {
+        for(x = 0; x < vWidth; x++) {
+            values[y * vWidth + x] = 
+                pattern[(y % pHeight) * pWidth + (x % pWidth)];
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     SDL_Window *win;
     Uint32 format;
@@ -2278,6 +2331,7 @@ int main(int argc, char **argv) {
     int font = -1;
     int tsTitle = -1;
     int tmTitle = -1;
+    int tmBackground = -1;
     Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
@@ -2292,6 +2346,8 @@ int main(int argc, char **argv) {
     gs.title.draw = title_draw;
     gs.title.priv = &gs;
     gs.nextMode = NULL;
+
+    int NOLAYER = 0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Failed to initialize SDL: %s\n",
@@ -2337,10 +2393,11 @@ int main(int argc, char **argv) {
     gs.tilemap = -1;
     if(load_graphic(gs.ll, TEST_SPRITESHEET,
                     TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
-                    &tileset, &(gs.tilemap),
+                    &tileset, &(gs.tilemap), &NOLAYER,
                     TEST_SPRITESHEET_VALUES,
                     TEST_SPRITESHEET_COLORMOD,
-                    ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1) < 0) {
+                    ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1,
+                    1.0) < 0) {
         goto error_synth;
     }
 
@@ -2355,47 +2412,59 @@ int main(int argc, char **argv) {
     }
 
     gs.hudTilemap = -1;
+    gs.hud = -1;
     if(load_graphic(gs.ll, "font.bmp",
                     8, 8,
-                    &font, &(gs.hudTilemap),
+                    &font, &(gs.hudTilemap), &(gs.hud),
                     NULL,
                     NULL,
-                    HUD_WIDTH, HUD_HEIGHT) < 0) {
-        goto error_synth;
-    }
-    gs.hud = tilemap_add_layer(gs.ll, gs.hudTilemap);
-    if(gs.hud < 0) {
-        fprintf(stderr, "Failed to create HUD layer.\n");
-        goto error_synth;
-    }
-    if(tilemap_set_layer_scale(gs.ll, gs.hud, HUD_SCALE, HUD_SCALE) < 0) {
-        fprintf(stderr, "Failed to set hud scale.\n");
+                    HUD_WIDTH, HUD_HEIGHT,
+                    HUD_SCALE) < 0) {
         goto error_synth;
     }
 
     unsigned int titleTilemap = 0;
+    gs.titleLayer = -1;
     if(load_graphic(gs.ll, "title.bmp",
                     256, 192,
-                    &tsTitle, &tmTitle,
+                    &tsTitle, &tmTitle, &(gs.titleLayer),
                     &titleTilemap,
                     NULL,
-                    1, 1) < 0) {
-        goto error_synth;
-    }
-    gs.titleLayer = tilemap_add_layer(gs.ll, tmTitle);
-    if(gs.titleLayer < 0) {
-        fprintf(stderr, "Failed to create title layer.\n");
-        goto error_synth;
-    }
-    if(tilemap_set_layer_scale(gs.ll, gs.titleLayer,
-                               SPRITE_SCALE, SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set title scale.\n");
+                    1, 1,
+                    SPRITE_SCALE) < 0) {
         goto error_synth;
     }
     if(tilemap_set_layer_pos(gs.ll, gs.titleLayer,
                              CENTER(WINDOW_WIDTH, 256 * SPRITE_SCALE),
                              (WINDOW_HEIGHT - (192 * SPRITE_SCALE)) / 4) < 0) {
         fprintf(stderr, "Failed to set title pos.\n");
+        goto error_synth;
+    }
+
+    /* create background tilemap */
+    unsigned int bgTilemap[WINDOW_TILE_WIDTH * WINDOW_TILE_HEIGHT];
+    fill_tilemap_with_pattern(bgTilemap,
+                              WINDOW_TILE_WIDTH, WINDOW_TILE_HEIGHT,
+                              BG_PATTERN,
+                              BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT);
+    gs.lBackground = -1;
+    if(load_graphic(gs.ll, NULL,
+                    TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
+                    &tileset, &tmBackground, &(gs.lBackground),
+                    bgTilemap,
+                    NULL,
+                    WINDOW_TILE_WIDTH, WINDOW_TILE_HEIGHT,
+                    SPRITE_SCALE) < 0) {
+        goto error_synth;
+    }
+    if(tilemap_set_layer_blendmode(gs.ll, gs.lBackground,
+                                   TILEMAP_BLENDMODE_ADD) < 0) {
+        fprintf(stderr, "Failed to set background blend mode.\n");
+        goto error_synth;
+    }
+    if(tilemap_set_layer_colormod(gs.ll, gs.lBackground,
+                                  C_BGTILES) < 0) {
+        fprintf(stderr, "Failed to set background colormod.\n");
         goto error_synth;
     }
 
@@ -2619,9 +2688,14 @@ int main(int argc, char **argv) {
     synth_free_buffer(s, meow2_buf);
     free_audio_state(gs.as);
 
+    tilemap_free_layer(gs.ll, gs.titleLayer);
+    tilemap_free_tilemap(gs.ll, tmTitle);
+    tilemap_free_tileset(gs.ll, tsTitle);
     tilemap_free_layer(gs.ll, gs.hud);
     tilemap_free_tilemap(gs.ll, gs.hudTilemap);
     tilemap_free_tileset(gs.ll, font);
+    tilemap_free_layer(gs.ll, gs.lBackground);
+    tilemap_free_tilemap(gs.ll, tmBackground);
     tilemap_free_layer(gs.ll, gs.goreSprite);
     tilemap_free_layer(gs.ll, gs.catlayer);
     tilemap_free_tilemap(gs.ll, gs.tilemap);
