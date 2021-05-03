@@ -11,8 +11,9 @@ RUNNING TEST CASE:
 
 mouse position - where the cat will chase
 left click     - toggle cat mode
-right click    - teleport cat
 q              - quit
 e              - simulate error quit
 f              - toggle fullscreen
-1,2,3,4        - play various cat sounds
+
+Try to get as many points as you can, eventually with a time limit, and who
+knows maybe a high score table or something eventually.
