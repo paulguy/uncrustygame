@@ -34,6 +34,9 @@
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (1024)
 #define WINDOW_HEIGHT   (768)
+//#define RENDERER_FLAGS  (SDL_RENDERER_PRESENTVSYNC)
+#define RENDERER_FLAGS  (0)
+#define SHOW_FPS
 #define DEFAULT_RATE    (48000)
 #define SPRITE_SCALE    (2.0)
 #define MAX_ACTIVE_PLAYERS (32)
@@ -148,6 +151,8 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define CATPAN(XPOS) ((float)((XPOS) - (WINDOW_WIDTH / 2.0)) / \
                       ((float)WINDOW_WIDTH / 2.0) * CAT_PAN_FACTOR)
 
+#define NANOSECOND (1000000000)
+
 typedef struct GameMode_s {
     int (*input)(void *priv, SDL_Event *event);
     struct GameMode_s* (*control)(void *priv);
@@ -250,7 +255,11 @@ const char TEXT_SCORE[] = "Score: ";
 
 const char TEXT_START[] = "Press [ENTER] to start";
 #define TEXT_START_X CENTER(HUD_WIDTH, sizeof(TEXT_START) - 1)
-#define TEXT_START_Y (HUD_HEIGHT - 4)
+#define TEXT_START_Y (HUD_HEIGHT - 6)
+
+const char TEXT_FPS[] = "FPS: ";
+#define TEXT_FPS_X (0)
+#define TEXT_FPS_Y (HUD_HEIGHT - 1)
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -262,7 +271,8 @@ void vprintf_cb(void *priv, const char *fmt, ...) {
 
 int initialize_video(SDL_Window **win,
                      SDL_Renderer **renderer,
-                     Uint32 *format) {
+                     Uint32 *format,
+                     Uint32 flags) {
     int drivers;
     int nameddrv, bestdrv, softdrv, selectdrv;
     int selectfmt;
@@ -403,7 +413,7 @@ int initialize_video(SDL_Window **win,
     /* might make some different?  dunno */
     setenv("SDL_HINT_RENDER_BATCHING", "1", 0);
 
-    *renderer = SDL_CreateRenderer(*win, selectdrv, SDL_RENDERER_PRESENTVSYNC);
+    *renderer = SDL_CreateRenderer(*win, selectdrv, flags);
     if(*renderer == NULL) {
         fprintf(stderr, "Failed to create SDL renderer.\n");
         goto error;
@@ -1563,28 +1573,56 @@ int clear_hud(GameState *gs) {
 }
 
 int print_score_to_hud(GameState *gs) {
-    int scorelen;
+    int len;
 
     /* a potentially unbound operation, but the number should never be
      * long enough to extend past the tilemap bounds, and the tielmap
      * engine should error if that ends up the case */
-    scorelen = printf_to_tilemap(gs->ll, gs->hudTilemap,
-                                 TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
-                                 HUD_WIDTH - TEXT_SCORE_X - (sizeof(TEXT_SCORE) - 1),
-                                 "%d", gs->score);
-    if(scorelen < 0) {
+    len = printf_to_tilemap(gs->ll, gs->hudTilemap,
+                            TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
+                            HUD_WIDTH - TEXT_SCORE_X - (sizeof(TEXT_SCORE) - 1),
+                            "%d", gs->score);
+    if(len < 0) {
         fprintf(stderr, "Failed to print score.\n");
         return(-1);
     }
     if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
                               TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
-                              scorelen, 1) < 0) {
+                              len, 1) < 0) {
         fprintf(stderr, "Failed to update hud tilemap.\n");
         return(-1);
     }
 
     return(0);
 }
+
+#ifdef SHOW_FPS
+int print_fps_to_hud(GameState *gs, float fps) {
+    int len;
+
+    /* a potentially unbound operation, but the number should never be
+     * long enough to extend past the tilemap bounds, and the tielmap
+     * engine should error if that ends up the case */
+    /* put a bunch of spaces to make sure different lengths of numbers clear
+     * properly */
+    len = printf_to_tilemap(gs->ll, gs->hudTilemap,
+                            TEXT_FPS_X + (sizeof(TEXT_FPS) - 1), TEXT_FPS_Y,
+                            HUD_WIDTH - TEXT_FPS_X - (sizeof(TEXT_FPS) - 1),
+                            "%.1f       ", fps);
+    if(len < 0) {
+        fprintf(stderr, "Failed to print fps.\n");
+        return(-1);
+    }
+    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
+                              TEXT_FPS_X + (sizeof(TEXT_FPS) - 1), TEXT_FPS_Y,
+                              len, 1) < 0) {
+        fprintf(stderr, "Failed to update hud tilemap.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+#endif
 
 int process_enemies(GameState *gs) {
     unsigned int i;
@@ -1953,6 +1991,11 @@ int game_setup(GameState *gs) {
     if(print_score_to_hud(gs) < 0) {
         return(-1);
     }
+#ifdef SHOW_FPS
+    if(print_to_hud(gs, TEXT_FPS, TEXT_FPS_X, TEXT_FPS_Y) < 0) {
+        return(-1);
+    }
+#endif
 
     return(0);
 }
@@ -2212,6 +2255,10 @@ int game_draw(void *priv) {
 int main(int argc, char **argv) {
     SDL_Window *win;
     Uint32 format;
+#ifdef SHOW_FPS
+    struct timespec thisTime;
+    struct timespec lastTime;
+#endif
     SDL_Event lastEvent;
     Synth *s;
     GameState gs;
@@ -2241,7 +2288,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if(initialize_video(&win, &(gs.renderer), &format) < 0) {
+    if(initialize_video(&win, &(gs.renderer), &format, RENDERER_FLAGS) < 0) {
         fprintf(stderr, "Failed to initialize video.\n");
         goto error_sdl;
     }
@@ -2421,8 +2468,20 @@ int main(int argc, char **argv) {
     if(print_to_hud(&gs, TEXT_START, TEXT_START_X, TEXT_START_Y) < 0) {
         goto error_synth;
     }
+#ifdef SHOW_FPS
+    if(print_to_hud(&gs, TEXT_FPS, TEXT_FPS_X, TEXT_FPS_Y) < 0) {
+        goto error_synth;
+    }
+    if(clock_gettime(CLOCK_MONOTONIC, &lastTime) < 0) {
+        fprintf(stderr, "clock_gettime returned error.\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
 
     reset_state(&gs);
+    /* make sure the mouse position is set to _something_ sensical.  Just make
+     * it think the mouse is positioned where the cat is so it starts idle
+     * until a mouse motion event comes in. */
     gs.mousex = gs.catx;
     gs.mousey = gs.caty;
     fullscreen = 0;
@@ -2492,6 +2551,29 @@ int main(int argc, char **argv) {
 
             thisTick = SDL_GetTicks();
         }
+
+#ifdef SHOW_FPS
+        if(clock_gettime(CLOCK_MONOTONIC, &thisTime) < 0) {
+            fprintf(stderr, "clock_gettime returned error.\n");
+            exit(EXIT_FAILURE);
+        }
+
+        unsigned int nanoseconds;
+        if(thisTime.tv_sec > lastTime.tv_sec) {
+            nanoseconds = NANOSECOND - lastTime.tv_nsec;
+            nanoseconds += thisTime.tv_nsec;
+            nanoseconds += (thisTime.tv_sec - lastTime.tv_sec - 1) * NANOSECOND;
+        } else {
+            nanoseconds = thisTime.tv_nsec - lastTime.tv_nsec;
+        }
+
+        if(print_fps_to_hud(&gs, (float)NANOSECOND / (float)nanoseconds) < 0) {
+            goto error_synth;
+        }
+
+        lastTime.tv_sec = thisTime.tv_sec;
+        lastTime.tv_nsec = thisTime.tv_nsec;
+#endif
 
         if(mode != NULL) {
             if(prepare_frame(&gs) < 0) {
