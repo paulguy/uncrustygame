@@ -2474,7 +2474,7 @@ int main(int argc, char **argv) {
     }
     if(clock_gettime(CLOCK_MONOTONIC, &lastTime) < 0) {
         fprintf(stderr, "clock_gettime returned error.\n");
-        exit(EXIT_FAILURE);
+        goto error_synth;
     }
 #endif
 
@@ -2555,7 +2555,7 @@ int main(int argc, char **argv) {
 #ifdef SHOW_FPS
         if(clock_gettime(CLOCK_MONOTONIC, &thisTime) < 0) {
             fprintf(stderr, "clock_gettime returned error.\n");
-            exit(EXIT_FAILURE);
+            goto error_synth;
         }
 
         unsigned int nanoseconds;
