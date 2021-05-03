@@ -55,6 +55,7 @@
 /* from bottom-left */
 #define ZZZ_POS_X        (0.75)
 #define ZZZ_POS_Y        (-0.5)
+#define HUD_SHADOW_TRANSLUCENCY (192)
 
 #define MAX_ENEMIES      (256)
 #define MIN_SPAWNER_TIME (500)
@@ -100,6 +101,7 @@ const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
 #define C_MOUSEBLOOD TILEMAP_COLOR(145, 0, 0, 255)
 #define C_ANTBLOOD TILEMAP_COLOR(37, 70, 0, 255)
 #define C_SPIDERBLOOD TILEMAP_COLOR(0, 34, 72, 255)
+#define C_HUD_SHADOW TILEMAP_COLOR(255, 255, 255, HUD_SHADOW_TRANSLUCENCY)
 const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
     C_OPAQUE, C_TRANSL,
     C_OPAQUE, C_OPAQUE,
@@ -1897,6 +1899,48 @@ int draw_cat(GameState *gs) {
     return(0);
 }
 
+int draw_hud(GameState *gs) {
+    if(tilemap_set_layer_pos(gs->ll, gs->hud,
+                             HUD_SCALE, HUD_SCALE) < 0) {
+        fprintf(stderr, "Failed to set hud layer pos.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_blendmode(gs->ll, gs->hud,
+                                   TILEMAP_BLENDMODE_SUB) < 0) {
+        fprintf(stderr, "Failed to set hud blend mode.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_colormod(gs->ll, gs->hud,
+                                  C_HUD_SHADOW) < 0) {
+        fprintf(stderr, "Failed to set hud colormod.\n");
+        return(-1);
+    }
+    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
+        fprintf(stderr, "Failed to draw hud layer.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_pos(gs->ll, gs->hud, 0, 0) < 0) {
+        fprintf(stderr, "Failed to set hud layer pos.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_blendmode(gs->ll, gs->hud,
+                                   TILEMAP_BLENDMODE_BLEND) < 0) {
+        fprintf(stderr, "Failed to set hud blend mode.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_colormod(gs->ll, gs->hud,
+                                  C_OPAQUE) < 0) {
+        fprintf(stderr, "Failed to set hud colormod.\n");
+        return(-1);
+    }
+    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
+        fprintf(stderr, "Failed to draw hud layer.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
 int game_setup(GameState *gs) {
     reset_state(gs);
 
@@ -1985,8 +2029,7 @@ int title_draw(void *priv) {
         return(-1);
     }
 
-    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
-        fprintf(stderr, "Failed to draw hud layer.\n");
+    if(draw_hud(gs) < 0) {
         return(-1);
     }
 
@@ -2167,8 +2210,7 @@ int game_draw(void *priv) {
     }
 
     /* draw the hud above everything */
-    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
-        fprintf(stderr, "Failed to draw hud layer.\n");
+    if(draw_hud(gs) < 0) {
         return(-1);
     }
 
