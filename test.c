@@ -2495,7 +2495,7 @@ int main(int argc, char **argv) {
 
         if(mode != NULL) {
             if(prepare_frame(&gs) < 0) {
-                return(-1);
+                goto error_synth;
             }
 
             if(mode->draw(mode->priv) < 0) {
