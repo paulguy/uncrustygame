@@ -2016,10 +2016,6 @@ GameMode* title_control(void *priv) {
 int title_draw(void *priv) {
     GameState *gs = (GameState *)priv;
 
-    if(prepare_frame(gs) < 0) {
-        return(-1);
-    }
-
     if(draw_cat(gs) < 0) {
         return(-1);
     }
@@ -2183,10 +2179,6 @@ GameMode* game_control(void *priv) {
 
 int game_draw(void *priv) {
     GameState *gs = (GameState *)priv;
-
-    if(prepare_frame(gs) < 0) {
-        return(-1);
-    }
 
     /* draw the gore layer below eveyrthing */
     if(SDL_RenderCopy(gs->renderer, gs->goreTex, NULL, NULL) < 0) {
@@ -2501,8 +2493,14 @@ int main(int argc, char **argv) {
             thisTick = SDL_GetTicks();
         }
 
-        if(mode != NULL && mode->draw(mode->priv) < 0) {
-            goto error_synth;
+        if(mode != NULL) {
+            if(prepare_frame(gs) < 0) {
+                return(-1);
+            }
+
+            if(mode->draw(mode->priv) < 0) {
+                goto error_synth;
+            }
         }
 
         SDL_RenderPresent(gs.renderer);
