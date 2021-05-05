@@ -254,11 +254,6 @@ typedef struct {
 } ColorBox;
 
 typedef struct {
-    /* game modes */
-    GameMode title;
-    GameMode game;
-    GameMode *nextMode;
-
     /* resources */
     SDL_Renderer *renderer;
     LayerList *ll;
@@ -275,6 +270,7 @@ typedef struct {
     int lBackground;
 
     /* system state */
+    GameMode *nextMode;
     int mousex, mousey;
 
     /* game state */
@@ -316,6 +312,27 @@ const char TEXT_START[] = "Press [ENTER] to start";
 const char TEXT_FPS[] = "FPS: ";
 #define TEXT_FPS_X (0)
 #define TEXT_FPS_Y (HUD_HEIGHT - 1)
+
+GameState gs;
+int title_input(void *priv, SDL_Event *event);
+GameMode* generic_control(void *priv);
+int title_draw(void *priv);
+int game_input(void *priv, SDL_Event *event);
+GameMode* game_control(void *priv);
+int game_draw(void *priv);
+
+GameMode title = {
+    .input = title_input,
+    .control = generic_control,
+    .draw = title_draw,
+    .priv = &gs
+};
+GameMode game = {
+    .input = game_input,
+    .control = game_control,
+    .draw = game_draw,
+    .priv = &gs
+};
 
 void vprintf_cb(void *priv, const char *fmt, ...) {
     va_list ap;
@@ -2093,6 +2110,14 @@ int game_setup(GameState *gs) {
     return(0);
 }
 
+/* for when no extra control other than passing on the next mode fromt he input
+ * function was set */
+GameMode* generic_control(void *priv) {
+    GameState *gs = (GameState *)priv;
+
+    return(gs->nextMode);
+}
+
 int title_input(void *priv, SDL_Event *event) {
     GameState *gs = (GameState *)priv;
     SDL_KeyboardEvent *key = (SDL_KeyboardEvent *)event;
@@ -2111,7 +2136,7 @@ int title_input(void *priv, SDL_Event *event) {
                     return(-1);
                 }
 
-                gs->nextMode = &(gs->game);
+                gs->nextMode = &game;
             }
             break;
         case SDL_MOUSEMOTION:
@@ -2132,29 +2157,8 @@ int title_input(void *priv, SDL_Event *event) {
     return(0);
 }
 
-GameMode* title_control(void *priv) {
-    GameState *gs = (GameState *)priv;
-    GameMode *next;
-
-    if(update_cat(gs) < 0) {
-        return(NULL);
-    }
-
-    if(gs->nextMode != NULL) {
-        next = gs->nextMode;
-        gs->nextMode = NULL;
-        return(next);
-    }
-
-    return(&(gs->title));
-}
-
 int title_draw(void *priv) {
     GameState *gs = (GameState *)priv;
-
-    if(draw_cat(gs) < 0) {
-        return(-1);
-    }
 
     if(tilemap_draw_layer(gs->ll, gs->titleLayer) < 0) {
         fprintf(stderr, "Failed to draw title layer.\n");
@@ -2193,10 +2197,6 @@ GameMode* game_control(void *priv) {
 
     if(gs->eating > 0) {
         gs->eating -= ACTOR_RATE;
-    }
-
-    if(update_cat(gs) < 0) {
-        return(NULL);
     }
 
     switch(gs->spawner) {
@@ -2306,7 +2306,7 @@ GameMode* game_control(void *priv) {
         return(NULL);
     }
 
-    return(&(gs->game));
+    return(&game);
 }
 
 int game_draw(void *priv) {
@@ -2326,10 +2326,6 @@ int game_draw(void *priv) {
     }
 
     if(draw_enemies(gs) < 0) {
-        return(-1);
-    }
-
-    if(draw_cat(gs) < 0) {
         return(-1);
     }
 
@@ -2574,7 +2570,6 @@ int main(int argc, char **argv) {
 #endif
     SDL_Event lastEvent;
     Synth *s;
-    GameState gs;
     int fullscreen;
     int font = -1;
     int tsTitle = -1;
@@ -2583,20 +2578,12 @@ int main(int argc, char **argv) {
     Uint32 nextMotion = SDL_GetTicks() + ACTOR_RATE;
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
-    GameMode *mode = &(gs.title);
+    GameMode *mode;
     ColorBox cbox[MAX_COLOR_BOX];
     int nextColorBox;
 
-    gs.game.input = game_input;
-    gs.game.control = game_control;
-    gs.game.draw = game_draw;
-    gs.game.priv = &gs;
-    gs.title.input = title_input;
-    gs.title.control = title_control;
-    gs.title.draw = title_draw;
-    gs.title.priv = &gs;
-    gs.nextMode = NULL;
-
+    /* just a non-negative value to pass as pointer to load_graphic tomake it
+     * simply not create a new layer itself, nor modify any layer properties. */
     int NOLAYER = 0;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
@@ -2823,6 +2810,8 @@ int main(int argc, char **argv) {
     nextColorBox = 0;
 
     /* ##### MAIN LOOP ##### */
+    gs.nextMode = &title;
+    mode = &title;
     while(mode != NULL) {
         /* check mode since an event may end execution early */
         while(mode != NULL && SDL_PollEvent(&lastEvent)) {
@@ -2879,7 +2868,12 @@ int main(int argc, char **argv) {
               thisTick >= nextMotion &&
               thisTick - processTime < MAX_PROCESS_TIME) {
             nextMotion += ACTOR_RATE;
-            
+
+            /* always update the cat */
+            if(update_cat(&gs) < 0) {
+                goto error_synth;
+            }
+
             mode = mode->control(mode->priv);
             if(mode == NULL) {
                 goto error_synth;
@@ -2941,6 +2935,11 @@ int main(int argc, char **argv) {
             }
 
             if(mode->draw(mode->priv) < 0) {
+                goto error_synth;
+            }
+
+            /* always draw the cat */
+            if(draw_cat(&gs) < 0) {
                 goto error_synth;
             }
 
