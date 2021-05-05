@@ -105,6 +105,7 @@
 #define CBOX_MAX_AREA    (100000)
 #define CBOX_MIN_SPEED   (16)
 #define CBOX_MAX_SPEED   (80)
+#define OPAQUE_COLOR_BOXES
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
@@ -2522,12 +2523,14 @@ int update_color_boxes(GameState *gs, ColorBox *cbox) {
 
 int draw_color_boxes(GameState *gs, ColorBox *cbox) {
     unsigned int i;
-    SDL_Rect rect;
 
     for(i = 0; i < MAX_COLOR_BOX; i++) {
         if(cbox[i].tilemap == -1) {
             continue;
         }
+
+#ifdef OPAQUE_COLOR_BOXES
+        SDL_Rect rect;
 
         rect.w = cbox[i].w * SPRITE_SCALE;
         rect.h = cbox[i].h * SPRITE_SCALE;
@@ -2545,6 +2548,7 @@ int draw_color_boxes(GameState *gs, ColorBox *cbox) {
                                SDL_ALPHA_OPAQUE) < 0) {
             return(-1);
         }
+#endif
 
         if(tilemap_set_layer_pos(gs->ll, cbox[i].layer,
                                  cbox[i].x, cbox[i].y) < 0) {
