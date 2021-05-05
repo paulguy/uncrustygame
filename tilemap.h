@@ -38,18 +38,22 @@
 
 /* comment that was here doesn't matter, this is just for creating colormod
  * values which are converted to what they should be internally */
-#define TILEMAP_BMASK (0xFF000000)
 #define TILEMAP_BSHIFT (24)
-#define TILEMAP_GMASK (0x00FF0000)
+#define TILEMAP_BMASK (0xFF << TILEMAP_BSHIFT)
 #define TILEMAP_GSHIFT (16)
-#define TILEMAP_RMASK (0x0000FF00)
+#define TILEMAP_GMASK (0xFF << TILEMAP_GSHIFT)
 #define TILEMAP_RSHIFT (8)
-#define TILEMAP_AMASK (0x000000FF)
+#define TILEMAP_RMASK (0xFF << TILEMAP_RSHIFT)
 #define TILEMAP_ASHIFT (0)
+#define TILEMAP_AMASK (0xFF << TILEMAP_ASHIFT)
 #define TILEMAP_COLOR(CR, CG, CB, CA) (((CR) << TILEMAP_RSHIFT) | \
                                        ((CG) << TILEMAP_GSHIFT) | \
                                        ((CB) << TILEMAP_BSHIFT) | \
                                        ((CA) << TILEMAP_ASHIFT))
+#define TILEMAP_COLOR_B(VAL) ((VAL & TILEMAP_BMASK) >> TILEMAP_BSHIFT)
+#define TILEMAP_COLOR_G(VAL) ((VAL & TILEMAP_GMASK) >> TILEMAP_GSHIFT)
+#define TILEMAP_COLOR_R(VAL) ((VAL & TILEMAP_RMASK) >> TILEMAP_RSHIFT)
+#define TILEMAP_COLOR_A(VAL) ((VAL & TILEMAP_AMASK) >> TILEMAP_ASHIFT)
 
 typedef struct LayerList_t LayerList;
 typedef void (*layerlist_log_cb_t)(void *priv, const char *fmt, ...);

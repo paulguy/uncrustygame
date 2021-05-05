@@ -401,9 +401,12 @@ int tilemap_add_tileset(LayerList *ll,
 int tilemap_free_tileset(LayerList *ll, unsigned int index) {
     /* can't free a vacant slot, nor one with open references */
     if(index >= ll->tilesetsmem ||
-       ll->tileset[index].tex == NULL ||
-       ll->tileset[index].refs > 0) {
-        LOG_PRINTF(ll, "Invalid tileset index or index referenced.\n");
+       ll->tileset[index].tex == NULL) {
+        LOG_PRINTF(ll, "Invalid tileset index.\n");
+        return(-1);
+    }
+    if(ll->tileset[index].refs > 0) {
+        LOG_PRINTF(ll, "Tileset index referenced.\n");
         return(-1);
     }
 
@@ -504,11 +507,15 @@ int tilemap_add_tilemap(LayerList *ll,
 int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
     /* can't free a vacant slot, nor one with open references */
     if(index >= ll->tilemapsmem ||
-       ll->tilemap[index].map == NULL ||
-       ll->tilemap[index].refs > 0) {
-        LOG_PRINTF(ll, "Invalid tilemap index or tilemap is referenced.\n");
+       ll->tilemap[index].map == NULL) {
+        LOG_PRINTF(ll, "Invalid tilemap index.\n");
         return(-1);
     }
+    if(ll->tilemap[index].refs > 0) {
+        LOG_PRINTF(ll, "Tilemap index referenced.\n");
+        return(-1);
+    }
+
 
     /* decrement reference from tileset from this tilemap */
     if(ll->tilemap[index].tileset >= 0) {

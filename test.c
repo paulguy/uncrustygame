@@ -29,13 +29,16 @@
 #include "tilemap.h"
 #include "synth.h"
 
+#define MILLISECOND (1000)
+#define NANOSECOND  (1000000000)
+
 /* initial settings */
 #define MAX_PROCESS_TIME (200)
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (1024)
 #define WINDOW_HEIGHT   (768)
-//#define RENDERER_FLAGS  (SDL_RENDERER_PRESENTVSYNC)
-#define RENDERER_FLAGS  (0)
+#define RENDERER_FLAGS  (SDL_RENDERER_PRESENTVSYNC)
+//#define RENDERER_FLAGS  (0)
 #define SHOW_FPS
 #define DEFAULT_RATE    (48000)
 #define MAX_ACTIVE_PLAYERS (32)
@@ -43,10 +46,10 @@
 #define BG_G (17)
 #define BG_B (49)
 #define ACTOR_FPS      (60)
-#define ACTOR_RATE     (1000 / ACTOR_FPS)
-#define CAT_VELOCITY   (5.0)
+#define ACTOR_RATE     (MILLISECOND / ACTOR_FPS)
+#define CAT_VELOCITY   (300.0)
 #define CAT_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS)
-#define CAT_ANIM_DIV   (6)
+#define CAT_ANIM_DIV   (75)
 #define CAT_OFFSCREEN_DIST_FACTOR (0.1)
 #define CAT_IDLE_MEOW    (2000) /* milliseconds */
 #define CAT_PAN_FACTOR   (0.75)
@@ -67,7 +70,7 @@
 #define ANT_SPAWN_MAX    (100)
 #define ANT_SPAWN_TIME_MIN (10)
 #define ANT_SPAWN_TIME_MAX (30)
-#define ANT_VELOCITY     (1.0)
+#define ANT_VELOCITY     (60.0)
 #define ANT_TURN_SPEED   (M_PI * 2.0 / ACTOR_FPS * 2.0)
 #define ANT_VALUE        (10)
 #define ANT_EAT_TIME     (100)
@@ -75,7 +78,7 @@
 #define SPIDER_SPAWN_MAX (50)
 #define SPIDER_SPAWN_TIME_MIN (20)
 #define SPIDER_SPAWN_TIME_MAX (50)
-#define SPIDER_VELOCITY  (2.0)
+#define SPIDER_VELOCITY  (120.0)
 #define SPIDER_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.8)
 #define SPIDER_VALUE     (50)
 #define SPIDER_EAT_TIME  (500)
@@ -83,17 +86,25 @@
 #define MOUSE_SPAWN_MAX  (10)
 #define MOUSE_SPAWN_TIME_MIN (100)
 #define MOUSE_SPAWN_TIME_MAX (500)
-#define MOUSE_VELOCITY   (4.0)
+#define MOUSE_VELOCITY   (240.0)
 #define MOUSE_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS * 1.3)
 #define MOUSE_VALUE      (200)
 #define MOUSE_EAT_TIME   (1000)
 
 #define MAX_COLOR_BOX    (8)
+#define CBOX_MIN_TIME    (1000)
+#define CBOX_MAX_TIME    (5000)
+#define CBOX_SHADOW_MIN  (1)
+#define CBOX_SHADOW_MAX  (5)
+#define CBOX_SHADOW_TRANSLUCENCY (128)
 #define CBOX_MIN_COLOR   (0.1)
 #define CBOX_MAX_COLOR   (0.4)
 #define CBOX_MIN_DIM     (8)
 #define CBOX_MAX_DIM     (480)
+#define CBOX_MIN_AREA    (1000)
 #define CBOX_MAX_AREA    (100000)
+#define CBOX_MIN_SPEED   (16)
+#define CBOX_MAX_SPEED   (80)
 
 #define TEST_SPRITESHEET   "cat.bmp"
 #define TEST_SPRITE_WIDTH  (32)
@@ -172,8 +183,6 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define SPAWNERMAX(LENGTH) ((float)LENGTH * (1.0 - SPAWNER_DEADZONE))
 #define SPAWNERRAND(LENGTH) RANDRANGE((int)SPAWNERMIN(LENGTH), (int)SPAWNERMAX(LENGTH))
 
-#define NANOSECOND (1000000000)
-
 typedef struct GameMode_s {
     int (*input)(void *priv, SDL_Event *event);
     struct GameMode_s* (*control)(void *priv);
@@ -225,12 +234,22 @@ typedef enum {
     SPAWN_MICE
 } SpawnerType;
 
+typedef enum {
+    DIR_LEFT,
+    DIR_RIGHT,
+    DIR_UP,
+    DIR_DOWN
+} Direction;
+
 typedef struct {
-    int tmForeground;
-    int lForeground;
+    int tilemap;
+    int layer;
     Uint32 bgColor;
-    int x, y;
+    float x, y;
+    int w, h;
     int shadowOffset;
+    Direction dir;
+    float speed;
 } ColorBox;
 
 typedef struct {
@@ -243,6 +262,7 @@ typedef struct {
     SDL_Renderer *renderer;
     LayerList *ll;
     AudioState *as;
+    int tileset;
     int tilemap;
     int catlayer;
     int zzzlayer;
@@ -252,7 +272,6 @@ typedef struct {
     int hud;
     int titleLayer;
     int lBackground;
-    ColorBox cbox[MAX_COLOR_BOX];
 
     /* system state */
     int mousex, mousey;
@@ -452,6 +471,12 @@ int initialize_video(SDL_Window **win,
     *renderer = SDL_CreateRenderer(*win, selectdrv, flags);
     if(*renderer == NULL) {
         fprintf(stderr, "Failed to create SDL renderer.\n");
+        goto error;
+    }
+
+    if(SDL_SetRenderDrawBlendMode(*renderer, SDL_BLENDMODE_BLEND) < 0) {
+        fprintf(stderr, "Failed to set render draw mode to blend.\n");
+        SDL_DestroyRenderer(*renderer);
         goto error;
     }
 
@@ -737,54 +762,56 @@ void xy_from_angle(float *x, float *y, float angle) {
     *y = cos(angle);
 }
 
-unsigned int color_from_angle(float angle, unsigned int bias) {
+Uint32 color_from_angle(float angle,
+                        unsigned int min,
+                        unsigned int max) {
     const float COLORDIV = ((M_PI * 2.0) / 6.0);
 
     if(angle >= 0.0 && angle < COLORDIV) {
-        return(TILEMAP_COLOR(255,
-                             bias,
+        return(TILEMAP_COLOR(max,
+                             min,
                              (unsigned int)SCALEINV(angle,
                                                     0.0, COLORDIV,
-                                                    (float)bias, 255.0),
+                                                    (float)min, (float)max),
                              255));
     } else if(angle >= COLORDIV &&
        angle < COLORDIV * 2.0) {
-        return(TILEMAP_COLOR(255,
+        return(TILEMAP_COLOR(max,
                              (unsigned int)SCALE(angle,
                                                  COLORDIV, COLORDIV * 2.0,
-                                                 (float)bias, 255.0),
-                             bias,
+                                                 (float)min, (float)max),
+                             min,
                              255));
     } else if(angle >= COLORDIV * 2.0 &&
        angle < COLORDIV * 3.0) {
         return(TILEMAP_COLOR((unsigned int)SCALEINV(angle,
                                                     COLORDIV * 2.0, COLORDIV * 3.0,
-                                                    (float)bias, 255.0),
-                             255,
-                             bias,
+                                                    (float)min, (float)max),
+                             max,
+                             min,
                              255));
     } else if(angle >= COLORDIV * 3.0 &&
        angle < COLORDIV * 4.0) {
-        return(TILEMAP_COLOR(bias,
-                             255,
+        return(TILEMAP_COLOR(min,
+                             max,
                              (unsigned int)SCALE(angle,
                                                  COLORDIV * 3.0, COLORDIV * 4.0,
-                                                 (float)bias, 255.0),
+                                                 (float)min, (float)max),
                              255));
     } else if(angle >= COLORDIV * 4.0 &&
        angle < COLORDIV * 5.0) {
-        return(TILEMAP_COLOR(bias,
+        return(TILEMAP_COLOR(min,
                              (unsigned int)SCALEINV(angle,
                                                     COLORDIV * 4.0, COLORDIV * 5.0,
-                                                    (float)bias, 255.0),
-                             255,
+                                                    (float)min, (float)max),
+                             max,
                              255));
     }
     return(TILEMAP_COLOR((unsigned int)SCALE(angle,
                                              COLORDIV * 5.0, COLORDIV * 6.0,
-                                             (float)bias, 255.0),
-                         bias,
-                         255,
+                                             (float)min, (float)max),
+                         min,
+                         max,
                          255));
 }
 
@@ -1409,6 +1436,7 @@ float find_object_velocity(float curdist, float angle,
                            int x, int y,
                            int width, int height,
                            float velocity) {
+    velocity = velocity * ACTOR_RATE / MILLISECOND;
     if(x < 0) {
         if(y < 0) {
             if(angle > M_PI * 1.5 && angle <= M_PI * 1.75) {
@@ -1771,7 +1799,7 @@ int process_enemies(GameState *gs) {
             }
         }
 
-        gs->enemy[i].animCounter++;
+        gs->enemy[i].animCounter += ACTOR_RATE;
         if(gs->enemy[i].animCounter >= CAT_ANIM_DIV) {
             if(gs->enemy[i].state == CAT_ANIM0) {
                 gs->enemy[i].state = CAT_ANIM1;
@@ -1784,7 +1812,7 @@ int process_enemies(GameState *gs) {
             if(select_sprite(gs, gs->enemy[i].sprite, gs->enemy[i].anim) < 0) {
                 return(-1);
             }
-            gs->enemy[i].animCounter = 0;
+            gs->enemy[i].animCounter -= CAT_ANIM_DIV;
         }
 
         if(position_sprite(gs, gs->enemy[i].sprite,
@@ -1871,7 +1899,7 @@ int update_cat(GameState *gs) {
 
         update_panning(gs->as, gs->catSound, CATPAN(gs->catx));
 
-        gs->animCounter++;
+        gs->animCounter += ACTOR_RATE;
         if(gs->animCounter >= CAT_ANIM_DIV) {
             if(gs->catState == CAT_ANIM0) {
                 gs->catState = CAT_ANIM1;
@@ -1885,7 +1913,7 @@ int update_cat(GameState *gs) {
                 return(-1);
             }
 
-            gs->animCounter = 0;
+            gs->animCounter -= CAT_ANIM_DIV;
         }
     } else { /* CAT_RESTING */
         gs->zzzcycle += ZZZ_CYCLE_SPEED;
@@ -1901,7 +1929,8 @@ int update_cat(GameState *gs) {
         }
         if(tilemap_set_layer_colormod(gs->ll, gs->zzzlayer,
                                       color_from_angle(gs->zzzcycle,
-                                                       ZZZ_COLOR_BIAS)) < 0) {
+                                                       ZZZ_COLOR_BIAS,
+                                                       255)) < 0) {
             fprintf(stderr, "Failed to set ZZZ colormod.\n");
             return(-1);
         }
@@ -1940,6 +1969,28 @@ int toggle_cat_mode(GameState *gs) {
     return(0);
 }
 
+int box_fill(GameState *gs, SDL_Rect *rect,
+             Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              r, g, b, a) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+    if(SDL_RenderFillRect(gs->renderer, rect) < 0) {
+        fprintf(stderr, "Failed to fill rect.\n");
+        return(-1);
+    }
+    /* needs to be transparent so tilemap updates work */
+    if(SDL_SetRenderDrawColor(gs->renderer,
+                              0, 0, 0,
+                              SDL_ALPHA_TRANSPARENT) < 0) {
+        fprintf(stderr, "Failed to set render draw color.\n");
+        return(-1);
+    } 
+
+    return(0);
+}
+
 int prepare_frame(GameState *gs) {
     /* clear the display, otherwise it'll show flickery garbage */
     if(SDL_SetRenderDrawColor(gs->renderer,
@@ -1952,25 +2003,9 @@ int prepare_frame(GameState *gs) {
         fprintf(stderr, "Failed to clear screen.\n");
         return(-1);
     }
-    if(SDL_SetRenderDrawColor(gs->renderer,
-                              BG_R, BG_G, BG_B,
-                              SDL_ALPHA_OPAQUE) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-    if(SDL_RenderFillRect(gs->renderer, NULL) < 0) {
-        fprintf(stderr, "Failed to fill background.\n");
+    if(box_fill(gs, NULL, BG_R, BG_G, BG_B, SDL_ALPHA_OPAQUE) < 0) {
         return(-1);
     }
-
-    /* needs to be transparent so tilemap updates work */
-    if(SDL_SetRenderDrawColor(gs->renderer,
-                              0, 0, 0,
-                              SDL_ALPHA_TRANSPARENT) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-
     if(tilemap_draw_layer(gs->ll, gs->lBackground) < 0) {
         fprintf(stderr, "Failed to draw background layer.\n");
         return(-1);
@@ -2316,7 +2351,217 @@ void fill_tilemap_with_pattern(unsigned int *values,
     }
 }
 
+#define MAKE_COLOR_BOX_COLOR \
+    color_from_angle(SCALE((double)rand(), \
+                           0.0, RAND_MAX, \
+                           0.0, M_PI * 2.0), \
+                           0, RANDRANGE((int)(CBOX_MIN_COLOR * 255.0), \
+                                        (int)(CBOX_MAX_COLOR * 255.0)))
+int create_color_box(GameState *gs, ColorBox *cbox) {
+    cbox->shadowOffset = RANDRANGE(CBOX_SHADOW_MIN, CBOX_SHADOW_MAX) * SPRITE_SCALE;
+    cbox->speed = (float)RANDRANGE(CBOX_MIN_SPEED, CBOX_MAX_SPEED) * SPRITE_SCALE * ACTOR_RATE / MILLISECOND;
+    cbox->w = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / SPRITE_SCALE;
+    cbox->h = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / SPRITE_SCALE;
+    /* if the area is too big or small, prefer rectangles to squares */
+    if(cbox->w * cbox->h > CBOX_MAX_AREA) {
+        if(cbox->w > cbox->h) {
+            cbox->h = CBOX_MAX_AREA / cbox->w;
+        } else {
+            cbox->w = CBOX_MAX_AREA / cbox->h;
+        }
+    } else if(cbox->w * cbox->h < CBOX_MIN_AREA) {
+        if(cbox->w > cbox->h) {
+            cbox->w = CBOX_MIN_AREA / cbox->h;
+        } else {
+            cbox->h = CBOX_MIN_AREA / cbox->w;
+        }
+    }
+    /* prefer to go along the strip's length */
+    if(cbox->w < cbox->h) {
+        cbox->x = RANDRANGE(0, WINDOW_WIDTH - cbox->w * SPRITE_SCALE);
+        if(rand() % 2 == 0) {
+            cbox->dir = DIR_DOWN;
+            cbox->y = -(cbox->h) * SPRITE_SCALE - cbox->shadowOffset;
+        } else {
+            cbox->dir = DIR_UP;
+            cbox->y = WINDOW_HEIGHT;
+        }
+    } else {
+        cbox->y = RANDRANGE(0, WINDOW_HEIGHT - cbox->h * SPRITE_SCALE);
+        if(rand() % 2 == 0) {
+            cbox->dir = DIR_LEFT;
+            cbox->x = WINDOW_WIDTH;
+        } else {
+            cbox->dir = DIR_RIGHT;
+            cbox->x = -(cbox->w) * SPRITE_SCALE - cbox->shadowOffset;
+        }
+    }
+
+    cbox->bgColor = MAKE_COLOR_BOX_COLOR;
+    Uint32 fgColor = MAKE_COLOR_BOX_COLOR;
+    unsigned int cboxTileWidth = cbox->w / TEST_SPRITE_WIDTH;
+    if(cbox->w % TEST_SPRITE_WIDTH > 0) {
+        cboxTileWidth++;
+    }
+    unsigned int cboxTileHeight = cbox->h / TEST_SPRITE_HEIGHT;
+    if(cbox->h % TEST_SPRITE_HEIGHT > 0) {
+        cboxTileHeight++;
+    }
+    unsigned int cboxTilemap[cboxTileWidth * cboxTileHeight];
+    fill_tilemap_with_pattern(cboxTilemap,
+                              cboxTileWidth, cboxTileHeight,
+                              BG_PATTERN,
+                              BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT);
+    /* tilemap is already -1 */
+    cbox->layer = -1;
+    if(load_graphic(gs->ll, NULL,
+                    TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
+                    &(gs->tileset), &(cbox->tilemap), &(cbox->layer),
+                    cboxTilemap,
+                    NULL,
+                    cboxTileWidth, cboxTileHeight,
+                    SPRITE_SCALE) < 0) {
+        return(-1);
+    }
+    if(tilemap_set_layer_blendmode(gs->ll, cbox->layer,
+                                   TILEMAP_BLENDMODE_ADD) < 0) {
+        fprintf(stderr, "Failed to set colorbox blend mode.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_colormod(gs->ll, cbox->layer,
+                                  fgColor) < 0) {
+        fprintf(stderr, "Failed to set colorbox colormod.\n");
+        return(-1);
+    }
+    if(tilemap_set_layer_window(gs->ll, cbox->layer,
+                                cbox->w, cbox->h) < 0) {
+        fprintf(stderr, "Failed to set colorbox window.\n");
+        return(-1);
+    }
+    unsigned int xscroll = 0;
+    unsigned int yscroll = 0;
+    if(cbox->w % TEST_SPRITE_WIDTH > 0) {
+        xscroll = RANDRANGE(0, (cboxTileWidth * TEST_SPRITE_WIDTH) - cbox->w);
+    }
+    if(cbox->h % TEST_SPRITE_HEIGHT > 0) {
+        yscroll = RANDRANGE(0, (cboxTileHeight * TEST_SPRITE_HEIGHT) - cbox->h);
+    }
+    if(tilemap_set_layer_scroll_pos(gs->ll, cbox->layer,
+                                    xscroll, yscroll) < 0) {
+        fprintf(stderr, "Failed to set colorbox scroll.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
+int free_color_box(GameState *gs, ColorBox *cbox) {
+    if(tilemap_free_layer(gs->ll, cbox->layer) < 0) {
+        fprintf(stderr, "Failed to free colorbox layer.\n");
+        return(-1);
+    }
+    if(tilemap_free_tilemap(gs->ll, cbox->tilemap) < 0) {
+        fprintf(stderr, "Failed to free colorbox tilemap.\n");
+        return(-1);
+    }
+    cbox->tilemap = -1;
+
+    return(0);
+}
+
+int update_color_boxes(GameState *gs, ColorBox *cbox) {
+    unsigned int i;
+
+    for(i = 0; i < MAX_COLOR_BOX; i++) {
+        if(cbox[i].tilemap == -1) {
+            continue;
+        }
+
+        switch(cbox[i].dir) {
+            case DIR_LEFT:
+                cbox[i].x -= cbox[i].speed;
+                if(cbox[i].x <= -(cbox[i].w) * SPRITE_SCALE - cbox[i].shadowOffset) {
+                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                        return(-1);
+                    }
+                    continue;
+                }
+                break;
+            case DIR_RIGHT:
+                cbox[i].x += cbox[i].speed;
+                if(cbox[i].x >= WINDOW_WIDTH) {
+                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                        return(-1);
+                    }
+                    continue;
+                }
+                break;
+            case DIR_UP:
+                cbox[i].y -= cbox[i].speed;
+                if(cbox[i].y <= -(cbox[i].h) * SPRITE_SCALE - cbox[i].shadowOffset) {
+                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                        return(-1);
+                    }
+                    continue;
+                }
+                break;
+            default: /* DIR_DOWN */
+                cbox[i].y += cbox[i].speed;
+                if(cbox[i].y >= WINDOW_HEIGHT) {
+                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                        return(-1);
+                    }
+                    continue;
+                }
+                break;
+        }
+    }
+
+    return(0);
+}
+
+int draw_color_boxes(GameState *gs, ColorBox *cbox) {
+    unsigned int i;
+    SDL_Rect rect;
+
+    for(i = 0; i < MAX_COLOR_BOX; i++) {
+        if(cbox[i].tilemap == -1) {
+            continue;
+        }
+
+        rect.w = cbox[i].w * SPRITE_SCALE;
+        rect.h = cbox[i].h * SPRITE_SCALE;
+        rect.x = cbox[i].x + cbox[i].shadowOffset;
+        rect.y = cbox[i].y + cbox[i].shadowOffset;
+        if(box_fill(gs, &rect, 0, 0, 0, CBOX_SHADOW_TRANSLUCENCY) < 0) {
+            return(-1);
+        }
+
+        rect.x = cbox[i].x;
+        rect.y = cbox[i].y;
+        if(box_fill(gs, &rect, TILEMAP_COLOR_R(cbox[i].bgColor),
+                               TILEMAP_COLOR_G(cbox[i].bgColor),
+                               TILEMAP_COLOR_B(cbox[i].bgColor),
+                               SDL_ALPHA_OPAQUE) < 0) {
+            return(-1);
+        }
+
+        if(tilemap_set_layer_pos(gs->ll, cbox[i].layer,
+                                 cbox[i].x, cbox[i].y) < 0) {
+            fprintf(stderr, "Failed to set color box pos.\n");
+            return(-1);
+        }
+        if(tilemap_draw_layer(gs->ll, cbox[i].layer) < 0) {
+            fprintf(stderr, "Failed to draw color box layer.\n");
+            return(-1);
+        }
+    }
+
+    return(0);
+}
+
 int main(int argc, char **argv) {
+    unsigned int i;
     SDL_Window *win;
     Uint32 format;
 #ifdef SHOW_FPS
@@ -2327,7 +2572,6 @@ int main(int argc, char **argv) {
     Synth *s;
     GameState gs;
     int fullscreen;
-    int tileset = -1;
     int font = -1;
     int tsTitle = -1;
     int tmTitle = -1;
@@ -2336,6 +2580,8 @@ int main(int argc, char **argv) {
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
     GameMode *mode = &(gs.title);
+    ColorBox cbox[MAX_COLOR_BOX];
+    int nextColorBox;
 
     gs.game.input = game_input;
     gs.game.control = game_control;
@@ -2390,10 +2636,11 @@ int main(int argc, char **argv) {
 
     gs.goreTex = NULL;
 
+    gs.tileset = -1;
     gs.tilemap = -1;
     if(load_graphic(gs.ll, TEST_SPRITESHEET,
                     TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
-                    &tileset, &(gs.tilemap), &NOLAYER,
+                    &(gs.tileset), &(gs.tilemap), &NOLAYER,
                     TEST_SPRITESHEET_VALUES,
                     TEST_SPRITESHEET_COLORMOD,
                     ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1,
@@ -2450,7 +2697,7 @@ int main(int argc, char **argv) {
     gs.lBackground = -1;
     if(load_graphic(gs.ll, NULL,
                     TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
-                    &tileset, &tmBackground, &(gs.lBackground),
+                    &(gs.tileset), &tmBackground, &(gs.lBackground),
                     bgTilemap,
                     NULL,
                     WINDOW_TILE_WIDTH, WINDOW_TILE_HEIGHT,
@@ -2566,6 +2813,11 @@ int main(int argc, char **argv) {
     gs.mousey = gs.caty;
     fullscreen = 0;
 
+    for(i = 0; i < MAX_COLOR_BOX; i++) {
+        cbox[i].tilemap = -1;
+    }
+    nextColorBox = 0;
+
     /* ##### MAIN LOOP ##### */
     while(mode != NULL) {
         /* check mode since an event may end execution early */
@@ -2629,6 +2881,26 @@ int main(int argc, char **argv) {
                 goto error_synth;
             }
 
+            nextColorBox -= ACTOR_RATE;
+            if(nextColorBox <= 0) {
+                for(i = 0; i < MAX_COLOR_BOX; i++) {
+                    if(cbox[i].tilemap == -1) {
+                        break;
+                    }
+                }
+                /* if there's no open slots, just do nothing and let it go around */
+                if(i < MAX_COLOR_BOX) {
+                    if(create_color_box(&gs, &(cbox[i])) < 0) {
+                        goto error_synth;
+                    }
+                }
+                nextColorBox += RANDRANGE(CBOX_MIN_TIME, CBOX_MAX_TIME);
+            }
+
+            if(update_color_boxes(&gs, cbox) < 0) {
+                goto error_synth;
+            }
+
             thisTick = SDL_GetTicks();
         }
 
@@ -2660,6 +2932,10 @@ int main(int argc, char **argv) {
                 goto error_synth;
             }
 
+            if(draw_color_boxes(&gs, cbox) < 0) {
+                goto error_synth;
+            }
+
             if(mode->draw(mode->priv) < 0) {
                 goto error_synth;
             }
@@ -2688,6 +2964,13 @@ int main(int argc, char **argv) {
     synth_free_buffer(s, meow2_buf);
     free_audio_state(gs.as);
 
+    for(i = 0; i < MAX_COLOR_BOX; i++) {
+        if(cbox[i].tilemap == -1) {
+            continue;
+        }
+        tilemap_free_layer(gs.ll, cbox[i].layer);
+        tilemap_free_tilemap(gs.ll, cbox[i].tilemap);
+    }
     tilemap_free_layer(gs.ll, gs.titleLayer);
     tilemap_free_tilemap(gs.ll, tmTitle);
     tilemap_free_tileset(gs.ll, tsTitle);
@@ -2699,7 +2982,7 @@ int main(int argc, char **argv) {
     tilemap_free_layer(gs.ll, gs.goreSprite);
     tilemap_free_layer(gs.ll, gs.catlayer);
     tilemap_free_tilemap(gs.ll, gs.tilemap);
-    tilemap_free_tileset(gs.ll, tileset);
+    tilemap_free_tileset(gs.ll, gs.tileset);
     layerlist_free(gs.ll);
 
     SDL_DestroyWindow(win);
