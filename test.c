@@ -255,7 +255,6 @@ typedef struct {
 
 typedef struct {
     /* resources */
-    SDL_Renderer *renderer;
     LayerList *ll;
     AudioState *as;
     int tileset;
@@ -2231,15 +2230,6 @@ GameMode* game_control(void *priv) {
             }
     }
 
-    /* needs to be transparent since process enemies can draw to the gore
-     * layer */
-    if(SDL_SetRenderDrawColor(gs->renderer,
-                              0, 0, 0,
-                              SDL_ALPHA_TRANSPARENT) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(NULL);
-    } 
-
     if(process_enemies(gs) < 0) {
         return(NULL);
     }
@@ -2249,12 +2239,6 @@ GameMode* game_control(void *priv) {
 
 int game_draw(void *priv) {
     GameState *gs = (GameState *)priv;
-
-    /* draw the gore layer below eveyrthing */
-    if(SDL_RenderCopy(gs->renderer, gs->goreTex, NULL, NULL) < 0) {
-        fprintf(stderr, "Failed to copy gore layer.\n");
-        return(-1);
-    }
 
     if(gs->spawner != SPAWN_NONE) {
         if(tilemap_draw_layer(gs->ll, gs->spawnerSprite) < 0) {
@@ -2507,6 +2491,7 @@ int draw_color_boxes(LayerList *ll, ColorBox *cbox) {
 int main(int argc, char **argv) {
     unsigned int i;
     SDL_Window *win;
+    SDL_Renderer *renderer;
     Uint32 format;
 #ifdef SHOW_FPS
     struct timespec thisTime;
@@ -2536,13 +2521,13 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if(initialize_video(&win, &(gs.renderer), &format, RENDERER_FLAGS) < 0) {
+    if(initialize_video(&win, &renderer, &format, RENDERER_FLAGS) < 0) {
         fprintf(stderr, "Failed to initialize video.\n");
         goto error_sdl;
     }
 
     /* fix the logical resolution (play field size, in this case) */
-    if(SDL_RenderSetLogicalSize(gs.renderer,
+    if(SDL_RenderSetLogicalSize(renderer,
                                 WINDOW_WIDTH,
                                 WINDOW_HEIGHT) < 0) {
         fprintf(stderr, "Failed to set render logical size.\n");
@@ -2550,7 +2535,7 @@ int main(int argc, char **argv) {
     }
 
     /* initialize the layerlist */
-    gs.ll = layerlist_new(gs.renderer, format,
+    gs.ll = layerlist_new(renderer, format,
                           vprintf_cb, stderr);
     if(gs.ll == NULL) {
         fprintf(stderr, "Failed to create layerlist.\n");
@@ -2651,7 +2636,7 @@ int main(int argc, char **argv) {
     }
 
     /* create and clear the gore texture */
-    gs.goreTex = SDL_CreateTexture(gs.renderer, format,
+    gs.goreTex = SDL_CreateTexture(renderer, format,
                                    SDL_TEXTUREACCESS_TARGET,
                                    WINDOW_WIDTH,
                                    WINDOW_HEIGHT);
@@ -2663,22 +2648,22 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set gore texture blend mode.\n");
         goto error_synth;
     }
-    if(SDL_SetRenderTarget(gs.renderer, gs.goreTex) < 0) {
+    if(SDL_SetRenderTarget(renderer, gs.goreTex) < 0) {
         fprintf(stderr, "Failed to set render target to gore texture.\n");
         goto error_synth;
     }
-    if(SDL_SetRenderDrawColor(gs.renderer,
+    if(SDL_SetRenderDrawColor(renderer,
                               0, 0, 0,
                               SDL_ALPHA_TRANSPARENT) < 0) {
         fprintf(stderr, "Failed to set render draw color.\n");
         goto error_synth;
     } 
-    if(SDL_RenderClear(gs.renderer) < 0) {
+    if(SDL_RenderClear(renderer) < 0) {
         fprintf(stderr, "Failed to clear gore texture.\n");
         goto error_synth;
     }
     /* restore screen rendering */
-    if(SDL_SetRenderTarget(gs.renderer, NULL) < 0) {
+    if(SDL_SetRenderTarget(renderer, NULL) < 0) {
         fprintf(stderr, "Failed to set render target to screen.\n");
         goto error_synth;
     }
@@ -2882,12 +2867,18 @@ int main(int argc, char **argv) {
 #endif
 
         if(mode != NULL) {
+            /* always draw the background, boxes and gore layer */
             if(prepare_frame(gs.ll, gs.lBackground) < 0) {
                 goto error_synth;
             }
 
             if(draw_color_boxes(gs.ll, cbox) < 0) {
                 goto error_synth;
+            }
+
+            if(SDL_RenderCopy(renderer, gs.goreTex, NULL, NULL) < 0) {
+                fprintf(stderr, "Failed to copy gore layer.\n");
+                return(-1);
             }
 
             if(mode->draw(mode->priv) < 0) {
@@ -2905,7 +2896,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        SDL_RenderPresent(gs.renderer);
+        SDL_RenderPresent(renderer);
     }
 
     /* test cleanup functions */
