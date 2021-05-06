@@ -268,6 +268,10 @@ void layerlist_free(LayerList *ll) {
     free(ll);
 }
 
+SDL_Renderer *layerlist_get_renderer(LayerList *ll) {
+    return(ll->renderer);
+}
+
 int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,
                         unsigned int tw,

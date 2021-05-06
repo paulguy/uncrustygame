@@ -74,6 +74,7 @@ LayerList *layerlist_new(SDL_Renderer *renderer,
                          layerlist_log_cb_t log_cb,
                          void *log_priv);
 void layerlist_free(LayerList *ll);
+SDL_Renderer *layerlist_get_renderer(LayerList *ll);
 
 int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,

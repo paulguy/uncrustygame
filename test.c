@@ -314,8 +314,8 @@ const char TEXT_FPS[] = "FPS: ";
 #define TEXT_FPS_Y (HUD_HEIGHT - 1)
 
 GameState gs;
-int title_input(void *priv, SDL_Event *event);
 GameMode* generic_control(void *priv);
+int title_input(void *priv, SDL_Event *event);
 int title_draw(void *priv);
 int game_input(void *priv, SDL_Event *event);
 GameMode* game_control(void *priv);
@@ -520,48 +520,22 @@ int print_to_tilemap(LayerList *ll,
                      unsigned int tilemap,
                      unsigned int x,
                      unsigned int y,
-                     unsigned int w,
                      const char *text) {
-    unsigned int textLen = strlen(text);
-    unsigned int h = textLen / w;
-    if(textLen % w > 0) {
-        h++;
-    }
-    unsigned int textTilemap[w * h];
+    unsigned int len = strlen(text);
+    unsigned int textTilemap[len];
+
     /* convert the char array to a tilemap */
-    ascii_to_int(textTilemap,
-                 text,
-                 textLen);
-    /* clear the rest, if there was a remainder */
-    memset(&(textTilemap[textLen]),
-           0,
-           ((w * h) - textLen) * sizeof(unsigned int));
+    ascii_to_int(textTilemap, text, len);
     /* apply it */
     if(tilemap_set_tilemap_map(ll, tilemap,
                                x, y,
-                               w,
-                               w, h,
-                               textTilemap, w * h) < 0) {
+                               len,
+                               len, 1,
+                               textTilemap, len) < 0) {
         fprintf(stderr, "Failed to print to tilemap.\n");
         return(-1);
     }
-
-    return(0);
-}
-
-int print_to_hud(GameState *gs,
-                 const char *text,
-                 unsigned int x,
-                 unsigned int y) {
-    int len = strlen(text);
-
-    if(print_to_tilemap(gs->ll, gs->hudTilemap,
-                        x, y,
-                        len, text) < 0) {
-        fprintf(stderr, "failed to print hud text.\n");
-        return(-1);
-    }
-    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
+    if(tilemap_update_tilemap(ll, tilemap,
                               x, y,
                               len, 1) < 0) {
         fprintf(stderr, "Failed to update hud tilemap.\n");
@@ -575,48 +549,47 @@ int printf_to_tilemap(LayerList *ll,
                       unsigned int tilemap,
                       unsigned int x,
                       unsigned int y,
-                      unsigned int w,
                       const char *fmt,
                       ...) {
     va_list ap;
 
     va_start(ap, fmt);
-    unsigned int textLen = vsnprintf(NULL, 0, fmt, ap);
+    int len = vsnprintf(NULL, 0, fmt, ap);
     va_end(ap);
-    unsigned int h = textLen / w;
-    if(textLen % w > 0) {
-        h++;
+    if(len < 0) {
+        fprintf(stderr, "Failed to get string length.\n");
+        return(-1);
     }
     /* just use the stack for simplicity */
-    char text[textLen + 1];
-    unsigned int textTilemap[w * h];
+    char text[len + 1];
+    unsigned int textTilemap[len];
 
     va_start(ap, fmt);
-    if(vsnprintf(text, textLen + 1, fmt, ap) < (int)textLen) {
+    if(vsnprintf(text, len + 1, fmt, ap) < len) {
         fprintf(stderr, "Failed to printf to text buf.\n");
         return(-1);
     }
     va_end(ap);
 
     /* convert the char array to a tilemap */
-    ascii_to_int(textTilemap,
-                 text,
-                 textLen);
-    /* clear the rest, if there was a remainder */
-    memset(&(textTilemap[textLen]),
-           0,
-           ((w * h) - textLen) * sizeof(unsigned int));
+    ascii_to_int(textTilemap, text, len);
     /* apply it */
     if(tilemap_set_tilemap_map(ll, tilemap,
                                x, y,
-                               w,
-                               w, h,
-                               textTilemap, w * h) < 0) {
+                               len,
+                               len, 1,
+                               textTilemap, len) < 0) {
         fprintf(stderr, "Failed to printf to tilemap.\n");
         return(-1);
     }
+    if(tilemap_update_tilemap(ll, tilemap,
+                              x, y,
+                              len, 1) < 0) {
+        fprintf(stderr, "Failed to update hud tilemap.\n");
+        return(-1);
+    }
 
-    return(textLen);
+    return(len);
 }
 
 int ascii_wrap_to_int(unsigned int *dst,
@@ -1318,17 +1291,17 @@ int load_graphic(LayerList *ll,
     return(0);
 }
 
-int create_sprite(GameState *gs) {
+int create_sprite(LayerList *ll, unsigned int spritemap) {
     int sprite;
 
-    sprite = tilemap_add_layer(gs->ll, gs->tilemap);
+    sprite = tilemap_add_layer(ll, spritemap);
     if(sprite < 0) {
         fprintf(stderr, "Failed to add layer for sprite.\n");
         return(-1);
     }
 
     /* make the tilemap window the size of a single sprite */
-    if(tilemap_set_layer_window(gs->ll, sprite,
+    if(tilemap_set_layer_window(ll, sprite,
                                 TEST_SPRITE_WIDTH,
                                 TEST_SPRITE_HEIGHT) < 0) {
         fprintf(stderr, "Failed to set sprite window size.\n");
@@ -1336,14 +1309,14 @@ int create_sprite(GameState *gs) {
     }
     /* make the rotation center in the center of the sprite so it rotates
      * about where it aims for the cursor */
-    if(tilemap_set_layer_rotation_center(gs->ll, sprite,
+    if(tilemap_set_layer_rotation_center(ll, sprite,
                                          TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
                                          TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
         fprintf(stderr, "Failed to set sprite rotation center.\n");
         return(-1);
     }
     /* Makes the sprite more visible without me having to draw a larger sprite */
-    if(tilemap_set_layer_scale(gs->ll, sprite,
+    if(tilemap_set_layer_scale(ll, sprite,
                                SPRITE_SCALE, SPRITE_SCALE) < 0) {
         fprintf(stderr, "Failed to set sprite scale.\n");
         return(-1);
@@ -1352,10 +1325,10 @@ int create_sprite(GameState *gs) {
     return(sprite);
 }
 
-int select_sprite(GameState *gs,
+int select_sprite(LayerList *ll,
                   int layer,
                   int sprite) {
-    if(tilemap_set_layer_scroll_pos(gs->ll, layer,
+    if(tilemap_set_layer_scroll_pos(ll, layer,
                                     sprite * TEST_SPRITE_WIDTH,
                                     0) < 0) {
         fprintf(stderr, "Failed to set layer scroll for sprite.\n");
@@ -1365,12 +1338,12 @@ int select_sprite(GameState *gs,
     return(0);
 }
 
-int position_sprite(GameState *gs,
+int position_sprite(LayerList *ll,
                     int layer,
                     int x,
                     int y) {
     /* position sprite based on center */
-    if(tilemap_set_layer_pos(gs->ll, layer,
+    if(tilemap_set_layer_pos(ll, layer,
                              x - (TEST_SPRITE_WIDTH * SPRITE_SCALE / 2),
                              y - (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)) < 0) {
         fprintf(stderr, "Failed to set sprite pos.\n");
@@ -1442,12 +1415,12 @@ int create_enemy(GameState *gs,
             return(-1);
     }
 
-    gs->enemy[i].sprite = create_sprite(gs);
+    gs->enemy[i].sprite = create_sprite(gs->ll, gs->tilemap);
     if(gs->enemy[i].sprite < 0) {
         return(-1);
     }
 
-    return(select_sprite(gs, gs->enemy[i].sprite, gs->enemy[i].anim));
+    return(select_sprite(gs->ll, gs->enemy[i].sprite, gs->enemy[i].anim));
 }
 
 float find_object_velocity(float curdist, float angle,
@@ -1644,83 +1617,34 @@ void update_movement(float *thisx, float *thisy,
     }
 }
 
-int clear_hud(GameState *gs) {
-    unsigned int temp[HUD_WIDTH * HUD_HEIGHT];
+int clear_tilemap(LayerList *ll,
+                  unsigned int tilemap,
+                  unsigned int w,
+                  unsigned int h) {
+    unsigned int temp[w * h];
     unsigned int i;
 
-    for(i = 0; i < HUD_WIDTH * HUD_HEIGHT; i++) {
+    for(i = 0; i < w * h; i++) {
         temp[i] = ' ';
     }
 
-    if(tilemap_set_tilemap_map(gs->ll, gs->hudTilemap,
+    if(tilemap_set_tilemap_map(ll, tilemap,
                                0, 0,
-                               HUD_WIDTH,
-                               HUD_WIDTH, HUD_HEIGHT,
-                               temp, HUD_WIDTH * HUD_HEIGHT) < 0) {
+                               w,
+                               w, h,
+                               temp, w * h) < 0) {
         fprintf(stderr, "Failed to set clear tilemap.\n");
         return(-1);
     }
-    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
+    if(tilemap_update_tilemap(ll, tilemap,
                               0, 0,
-                              HUD_WIDTH, HUD_HEIGHT) < 0) {
-        fprintf(stderr, "Failed to clear hud tilemap.\n");
+                              w, h) < 0) {
+        fprintf(stderr, "Failed to clear tilemap.\n");
         return(-1);
     }
 
     return(0);
 }
-
-int print_score_to_hud(GameState *gs) {
-    int len;
-
-    /* a potentially unbound operation, but the number should never be
-     * long enough to extend past the tilemap bounds, and the tielmap
-     * engine should error if that ends up the case */
-    len = printf_to_tilemap(gs->ll, gs->hudTilemap,
-                            TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
-                            HUD_WIDTH - TEXT_SCORE_X - (sizeof(TEXT_SCORE) - 1),
-                            "%d", gs->score);
-    if(len < 0) {
-        fprintf(stderr, "Failed to print score.\n");
-        return(-1);
-    }
-    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
-                              TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
-                              len, 1) < 0) {
-        fprintf(stderr, "Failed to update hud tilemap.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
-#ifdef SHOW_FPS
-int print_fps_to_hud(GameState *gs, float fps) {
-    int len;
-
-    /* a potentially unbound operation, but the number should never be
-     * long enough to extend past the tilemap bounds, and the tielmap
-     * engine should error if that ends up the case */
-    /* put a bunch of spaces to make sure different lengths of numbers clear
-     * properly */
-    len = printf_to_tilemap(gs->ll, gs->hudTilemap,
-                            TEXT_FPS_X + (sizeof(TEXT_FPS) - 1), TEXT_FPS_Y,
-                            HUD_WIDTH - TEXT_FPS_X - (sizeof(TEXT_FPS) - 1),
-                            "%.1f       ", fps);
-    if(len < 0) {
-        fprintf(stderr, "Failed to print fps.\n");
-        return(-1);
-    }
-    if(tilemap_update_tilemap(gs->ll, gs->hudTilemap,
-                              TEXT_FPS_X + (sizeof(TEXT_FPS) - 1), TEXT_FPS_Y,
-                              len, 1) < 0) {
-        fprintf(stderr, "Failed to update hud tilemap.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-#endif
 
 int process_enemies(GameState *gs) {
     unsigned int i;
@@ -1741,7 +1665,10 @@ int process_enemies(GameState *gs) {
             if(gs->score < 0) {
                 gs->score = 0;
             }
-            if(print_score_to_hud(gs) < 0) {
+            if(printf_to_tilemap(gs->ll, gs->hudTilemap,
+                                    TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
+                                    "%d", gs->score) < 0) {
+                fprintf(stderr, "Failed to print score.\n");
                 return(-1);
             }
 
@@ -1752,7 +1679,7 @@ int process_enemies(GameState *gs) {
                 return(-1);
             }
 
-            if(position_sprite(gs, gs->goreSprite,
+            if(position_sprite(gs->ll, gs->goreSprite,
                                gs->enemy[i].x, gs->enemy[i].y) < 0) {
                 return(-1);
             }
@@ -1766,7 +1693,7 @@ int process_enemies(GameState *gs) {
 
             gore = (rand() % 3) + 1;
             if(gore & 1) {
-                if(select_sprite(gs, gs->goreSprite,
+                if(select_sprite(gs->ll, gs->goreSprite,
                                  gs->enemy[i].deadSprite) < 0) {
                     return(-1);
                 }
@@ -1776,7 +1703,7 @@ int process_enemies(GameState *gs) {
                 }
             }
             if(gore & 2) {
-                if(select_sprite(gs, gs->goreSprite,
+                if(select_sprite(gs->ll, gs->goreSprite,
                                  TEST_BONES) < 0) {
                     return(-1);
                 }
@@ -1827,13 +1754,13 @@ int process_enemies(GameState *gs) {
                 gs->enemy[i].anim--;
             }
 
-            if(select_sprite(gs, gs->enemy[i].sprite, gs->enemy[i].anim) < 0) {
+            if(select_sprite(gs->ll, gs->enemy[i].sprite, gs->enemy[i].anim) < 0) {
                 return(-1);
             }
             gs->enemy[i].animCounter -= CAT_ANIM_DIV;
         }
 
-        if(position_sprite(gs, gs->enemy[i].sprite,
+        if(position_sprite(gs->ll, gs->enemy[i].sprite,
                            gs->enemy[i].x, gs->enemy[i].y) < 0) {
             return(-1);
         }
@@ -1905,7 +1832,7 @@ int update_cat(GameState *gs) {
                 play_cat_sound(gs, gs->meow2);
             }
         }
-        if(position_sprite(gs, gs->catlayer,
+        if(position_sprite(gs->ll, gs->catlayer,
                            gs->catx, gs->caty) < 0) {
             return(-1);
         }
@@ -1927,7 +1854,7 @@ int update_cat(GameState *gs) {
                 gs->catAnim--;
             }
 
-            if(select_sprite(gs, gs->catlayer, gs->catAnim) < 0) {
+            if(select_sprite(gs->ll, gs->catlayer, gs->catAnim) < 0) {
                 return(-1);
             }
 
@@ -1939,7 +1866,7 @@ int update_cat(GameState *gs) {
             gs->zzzcycle -= M_PI * 2;
         }
 
-        if(position_sprite(gs, gs->zzzlayer,
+        if(position_sprite(gs->ll, gs->zzzlayer,
                            gs->catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
                            gs->caty + (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
                            ((sin(gs->zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE)) < 0) {
@@ -1969,15 +1896,15 @@ int toggle_cat_mode(GameState *gs) {
         play_cat_sound(gs, gs->cat_activation);
     } else {
         gs->catState = CAT_RESTING;
-        if(select_sprite(gs, gs->catlayer, TEST_RESTING) < 0) {
+        if(select_sprite(gs->ll, gs->catlayer, TEST_RESTING) < 0) {
             return(-1);
         }
 
-        gs->zzzlayer = create_sprite(gs);
+        gs->zzzlayer = create_sprite(gs->ll, gs->tilemap);
         if(gs->zzzlayer < 0) {
             return(-1);
         }
-        if(select_sprite(gs, gs->zzzlayer, TEST_ZZZ) < 0) {
+        if(select_sprite(gs->ll, gs->zzzlayer, TEST_ZZZ) < 0) {
             return(-1);
         }
         
@@ -1987,19 +1914,19 @@ int toggle_cat_mode(GameState *gs) {
     return(0);
 }
 
-int box_fill(GameState *gs, SDL_Rect *rect,
+int box_fill(SDL_Renderer *renderer, SDL_Rect *rect,
              Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
-    if(SDL_SetRenderDrawColor(gs->renderer,
+    if(SDL_SetRenderDrawColor(renderer,
                               r, g, b, a) < 0) {
         fprintf(stderr, "Failed to set render draw color.\n");
         return(-1);
     } 
-    if(SDL_RenderFillRect(gs->renderer, rect) < 0) {
+    if(SDL_RenderFillRect(renderer, rect) < 0) {
         fprintf(stderr, "Failed to fill rect.\n");
         return(-1);
     }
     /* needs to be transparent so tilemap updates work */
-    if(SDL_SetRenderDrawColor(gs->renderer,
+    if(SDL_SetRenderDrawColor(renderer,
                               0, 0, 0,
                               SDL_ALPHA_TRANSPARENT) < 0) {
         fprintf(stderr, "Failed to set render draw color.\n");
@@ -2009,22 +1936,25 @@ int box_fill(GameState *gs, SDL_Rect *rect,
     return(0);
 }
 
-int prepare_frame(GameState *gs) {
+int prepare_frame(LayerList *ll,
+                  unsigned int bgLayer) {
+    SDL_Renderer *renderer = layerlist_get_renderer(ll);
+
     /* clear the display, otherwise it'll show flickery garbage */
-    if(SDL_SetRenderDrawColor(gs->renderer,
+    if(SDL_SetRenderDrawColor(renderer,
                               0, 0, 0,
                               SDL_ALPHA_OPAQUE) < 0) {
         fprintf(stderr, "Failed to set render draw color.\n");
         return(-1);
     } 
-    if(SDL_RenderClear(gs->renderer) < 0) {
+    if(SDL_RenderClear(renderer) < 0) {
         fprintf(stderr, "Failed to clear screen.\n");
         return(-1);
     }
-    if(box_fill(gs, NULL, BG_R, BG_G, BG_B, SDL_ALPHA_OPAQUE) < 0) {
+    if(box_fill(renderer, NULL, BG_R, BG_G, BG_B, SDL_ALPHA_OPAQUE) < 0) {
         return(-1);
     }
-    if(tilemap_draw_layer(gs->ll, gs->lBackground) < 0) {
+    if(tilemap_draw_layer(ll, bgLayer) < 0) {
         fprintf(stderr, "Failed to draw background layer.\n");
         return(-1);
     }
@@ -2092,17 +2022,25 @@ int draw_hud(GameState *gs) {
 int game_setup(GameState *gs) {
     reset_state(gs);
 
-    if(clear_hud(gs) < 0) {
+    if(clear_tilemap(gs->ll, gs->hudTilemap,
+                     HUD_WIDTH, HUD_HEIGHT) < 0) {
         return(-1);
     }
-    if(print_to_hud(gs, TEXT_SCORE, TEXT_SCORE_X, TEXT_SCORE_Y) < 0) {
+    if(print_to_tilemap(gs->ll, gs->hudTilemap,
+                        TEXT_SCORE_X, TEXT_SCORE_Y,
+                        TEXT_SCORE) < 0) {
         return(-1);
     }
-    if(print_score_to_hud(gs) < 0) {
+    if(printf_to_tilemap(gs->ll, gs->hudTilemap,
+                            TEXT_SCORE_X + (sizeof(TEXT_SCORE) - 1), TEXT_SCORE_Y,
+                            "%d", gs->score) < 0) {
+        fprintf(stderr, "Failed to print score.\n");
         return(-1);
     }
 #ifdef SHOW_FPS
-    if(print_to_hud(gs, TEXT_FPS, TEXT_FPS_X, TEXT_FPS_Y) < 0) {
+    if(print_to_tilemap(gs->ll, gs->hudTilemap,
+                        TEXT_FPS_X, TEXT_FPS_Y,
+                        TEXT_FPS) < 0) {
         return(-1);
     }
 #endif
@@ -2265,11 +2203,11 @@ GameMode* game_control(void *priv) {
             if(gs->spawnerTimer < 0) {
                 gs->spawnerx = SPAWNERRAND(WINDOW_WIDTH);
                 gs->spawnery = SPAWNERRAND(WINDOW_HEIGHT);
-                if(select_sprite(gs, gs->spawnerSprite, TEST_BIGHOLE) < 0) {
+                if(select_sprite(gs->ll, gs->spawnerSprite, TEST_BIGHOLE) < 0) {
                     return(NULL);
                 }
 
-                if(position_sprite(gs, gs->spawnerSprite,
+                if(position_sprite(gs->ll, gs->spawnerSprite,
                                    gs->spawnerx, gs->spawnery) < 0) {
                     return(NULL);
                 }
@@ -2354,7 +2292,12 @@ void fill_tilemap_with_pattern(unsigned int *values,
                            0.0, M_PI * 2.0), \
                            0, RANDRANGE((int)(CBOX_MIN_COLOR * 255.0), \
                                         (int)(CBOX_MAX_COLOR * 255.0)))
-int create_color_box(GameState *gs, ColorBox *cbox) {
+int create_color_box(LayerList *ll,
+                     ColorBox *cbox,
+                     int pTileset,
+                     unsigned int pWidth,
+                     unsigned int pHeight,
+                     const unsigned int *pattern) {
     cbox->shadowOffset = RANDRANGE(CBOX_SHADOW_MIN, CBOX_SHADOW_MAX) * SPRITE_SCALE;
     cbox->speed = (float)RANDRANGE(CBOX_MIN_SPEED, CBOX_MAX_SPEED) * SPRITE_SCALE * ACTOR_RATE / MILLISECOND;
     cbox->w = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / SPRITE_SCALE;
@@ -2407,30 +2350,30 @@ int create_color_box(GameState *gs, ColorBox *cbox) {
     unsigned int cboxTilemap[cboxTileWidth * cboxTileHeight];
     fill_tilemap_with_pattern(cboxTilemap,
                               cboxTileWidth, cboxTileHeight,
-                              BG_PATTERN,
-                              BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT);
+                              pattern,
+                              pWidth, pHeight);
     /* tilemap is already -1 */
     cbox->layer = -1;
-    if(load_graphic(gs->ll, NULL,
+    if(load_graphic(ll, NULL,
                     TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
-                    &(gs->tileset), &(cbox->tilemap), &(cbox->layer),
+                    &pTileset, &(cbox->tilemap), &(cbox->layer),
                     cboxTilemap,
                     NULL,
                     cboxTileWidth, cboxTileHeight,
                     SPRITE_SCALE) < 0) {
         return(-1);
     }
-    if(tilemap_set_layer_blendmode(gs->ll, cbox->layer,
+    if(tilemap_set_layer_blendmode(ll, cbox->layer,
                                    TILEMAP_BLENDMODE_ADD) < 0) {
         fprintf(stderr, "Failed to set colorbox blend mode.\n");
         return(-1);
     }
-    if(tilemap_set_layer_colormod(gs->ll, cbox->layer,
+    if(tilemap_set_layer_colormod(ll, cbox->layer,
                                   fgColor) < 0) {
         fprintf(stderr, "Failed to set colorbox colormod.\n");
         return(-1);
     }
-    if(tilemap_set_layer_window(gs->ll, cbox->layer,
+    if(tilemap_set_layer_window(ll, cbox->layer,
                                 cbox->w, cbox->h) < 0) {
         fprintf(stderr, "Failed to set colorbox window.\n");
         return(-1);
@@ -2443,7 +2386,7 @@ int create_color_box(GameState *gs, ColorBox *cbox) {
     if(cbox->h % TEST_SPRITE_HEIGHT > 0) {
         yscroll = RANDRANGE(0, (cboxTileHeight * TEST_SPRITE_HEIGHT) - cbox->h);
     }
-    if(tilemap_set_layer_scroll_pos(gs->ll, cbox->layer,
+    if(tilemap_set_layer_scroll_pos(ll, cbox->layer,
                                     xscroll, yscroll) < 0) {
         fprintf(stderr, "Failed to set colorbox scroll.\n");
         return(-1);
@@ -2452,12 +2395,12 @@ int create_color_box(GameState *gs, ColorBox *cbox) {
     return(0);
 }
 
-int free_color_box(GameState *gs, ColorBox *cbox) {
-    if(tilemap_free_layer(gs->ll, cbox->layer) < 0) {
+int free_color_box(LayerList *ll, ColorBox *cbox) {
+    if(tilemap_free_layer(ll, cbox->layer) < 0) {
         fprintf(stderr, "Failed to free colorbox layer.\n");
         return(-1);
     }
-    if(tilemap_free_tilemap(gs->ll, cbox->tilemap) < 0) {
+    if(tilemap_free_tilemap(ll, cbox->tilemap) < 0) {
         fprintf(stderr, "Failed to free colorbox tilemap.\n");
         return(-1);
     }
@@ -2466,7 +2409,7 @@ int free_color_box(GameState *gs, ColorBox *cbox) {
     return(0);
 }
 
-int update_color_boxes(GameState *gs, ColorBox *cbox) {
+int update_color_boxes(LayerList *ll, ColorBox *cbox) {
     unsigned int i;
 
     for(i = 0; i < MAX_COLOR_BOX; i++) {
@@ -2478,7 +2421,7 @@ int update_color_boxes(GameState *gs, ColorBox *cbox) {
             case DIR_LEFT:
                 cbox[i].x -= cbox[i].speed;
                 if(cbox[i].x <= -(cbox[i].w) * SPRITE_SCALE - cbox[i].shadowOffset) {
-                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                    if(free_color_box(ll, &(cbox[i])) < 0) {
                         return(-1);
                     }
                     continue;
@@ -2487,7 +2430,7 @@ int update_color_boxes(GameState *gs, ColorBox *cbox) {
             case DIR_RIGHT:
                 cbox[i].x += cbox[i].speed;
                 if(cbox[i].x >= WINDOW_WIDTH) {
-                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                    if(free_color_box(ll, &(cbox[i])) < 0) {
                         return(-1);
                     }
                     continue;
@@ -2496,7 +2439,7 @@ int update_color_boxes(GameState *gs, ColorBox *cbox) {
             case DIR_UP:
                 cbox[i].y -= cbox[i].speed;
                 if(cbox[i].y <= -(cbox[i].h) * SPRITE_SCALE - cbox[i].shadowOffset) {
-                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                    if(free_color_box(ll, &(cbox[i])) < 0) {
                         return(-1);
                     }
                     continue;
@@ -2505,7 +2448,7 @@ int update_color_boxes(GameState *gs, ColorBox *cbox) {
             default: /* DIR_DOWN */
                 cbox[i].y += cbox[i].speed;
                 if(cbox[i].y >= WINDOW_HEIGHT) {
-                    if(free_color_box(gs, &(cbox[i])) < 0) {
+                    if(free_color_box(ll, &(cbox[i])) < 0) {
                         return(-1);
                     }
                     continue;
@@ -2517,8 +2460,9 @@ int update_color_boxes(GameState *gs, ColorBox *cbox) {
     return(0);
 }
 
-int draw_color_boxes(GameState *gs, ColorBox *cbox) {
+int draw_color_boxes(LayerList *ll, ColorBox *cbox) {
     unsigned int i;
+    SDL_Renderer *renderer = layerlist_get_renderer(ll);
 
     for(i = 0; i < MAX_COLOR_BOX; i++) {
         if(cbox[i].tilemap == -1) {
@@ -2532,26 +2476,26 @@ int draw_color_boxes(GameState *gs, ColorBox *cbox) {
         rect.h = cbox[i].h * SPRITE_SCALE;
         rect.x = cbox[i].x + cbox[i].shadowOffset;
         rect.y = cbox[i].y + cbox[i].shadowOffset;
-        if(box_fill(gs, &rect, 0, 0, 0, CBOX_SHADOW_TRANSLUCENCY) < 0) {
+        if(box_fill(renderer, &rect, 0, 0, 0, CBOX_SHADOW_TRANSLUCENCY) < 0) {
             return(-1);
         }
 
         rect.x = cbox[i].x;
         rect.y = cbox[i].y;
-        if(box_fill(gs, &rect, TILEMAP_COLOR_R(cbox[i].bgColor),
-                               TILEMAP_COLOR_G(cbox[i].bgColor),
-                               TILEMAP_COLOR_B(cbox[i].bgColor),
-                               SDL_ALPHA_OPAQUE) < 0) {
+        if(box_fill(renderer, &rect, TILEMAP_COLOR_R(cbox[i].bgColor),
+                                     TILEMAP_COLOR_G(cbox[i].bgColor),
+                                     TILEMAP_COLOR_B(cbox[i].bgColor),
+                                     SDL_ALPHA_OPAQUE) < 0) {
             return(-1);
         }
 #endif
 
-        if(tilemap_set_layer_pos(gs->ll, cbox[i].layer,
+        if(tilemap_set_layer_pos(ll, cbox[i].layer,
                                  cbox[i].x, cbox[i].y) < 0) {
             fprintf(stderr, "Failed to set color box pos.\n");
             return(-1);
         }
-        if(tilemap_draw_layer(gs->ll, cbox[i].layer) < 0) {
+        if(tilemap_draw_layer(ll, cbox[i].layer) < 0) {
             fprintf(stderr, "Failed to draw color box layer.\n");
             return(-1);
         }
@@ -2639,12 +2583,12 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    gs.catlayer = create_sprite(&gs);
+    gs.catlayer = create_sprite(gs.ll, gs.tilemap);
     if(gs.catlayer < 0) {
         goto error_synth;
     }
 
-    gs.spawnerSprite = create_sprite(&gs);
+    gs.spawnerSprite = create_sprite(gs.ll, gs.tilemap);
     if(gs.spawnerSprite < 0) {
         goto error_synth;
     }
@@ -2738,7 +2682,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set render target to screen.\n");
         goto error_synth;
     }
-    gs.goreSprite = create_sprite(&gs);
+    gs.goreSprite = create_sprite(gs.ll, gs.tilemap);
     if(gs.goreSprite < 0) {
         goto error_synth;
     }
@@ -2780,14 +2724,19 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    if(clear_hud(&gs) < 0) {
+    if(clear_tilemap(gs.ll, gs.hudTilemap,
+                     HUD_WIDTH, HUD_HEIGHT) < 0) {
         goto error_synth;
     }
-    if(print_to_hud(&gs, TEXT_START, TEXT_START_X, TEXT_START_Y) < 0) {
+    if(print_to_tilemap(gs.ll, gs.hudTilemap,
+                        TEXT_START_X, TEXT_START_Y,
+                        TEXT_START) < 0) {
         goto error_synth;
     }
 #ifdef SHOW_FPS
-    if(print_to_hud(&gs, TEXT_FPS, TEXT_FPS_X, TEXT_FPS_Y) < 0) {
+    if(print_to_tilemap(gs.ll, gs.hudTilemap,
+                        TEXT_FPS_X, TEXT_FPS_Y,
+                        TEXT_FPS) < 0) {
         goto error_synth;
     }
     if(clock_gettime(CLOCK_MONOTONIC, &lastTime) < 0) {
@@ -2888,14 +2837,17 @@ int main(int argc, char **argv) {
                 }
                 /* if there's no open slots, just do nothing and let it go around */
                 if(i < MAX_COLOR_BOX) {
-                    if(create_color_box(&gs, &(cbox[i])) < 0) {
+                    if(create_color_box(gs.ll, &(cbox[i]),
+                                        gs.tileset,
+                                        BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT,
+                                        BG_PATTERN) < 0) {
                         goto error_synth;
                     }
                 }
                 nextColorBox += RANDRANGE(CBOX_MIN_TIME, CBOX_MAX_TIME);
             }
 
-            if(update_color_boxes(&gs, cbox) < 0) {
+            if(update_color_boxes(gs.ll, cbox) < 0) {
                 goto error_synth;
             }
 
@@ -2916,9 +2868,13 @@ int main(int argc, char **argv) {
         } else {
             nanoseconds = thisTime.tv_nsec - lastTime.tv_nsec;
         }
-
-        if(print_fps_to_hud(&gs, (float)NANOSECOND / (float)nanoseconds) < 0) {
-            goto error_synth;
+        /* put a bunch of spaces to make sure different lengths of numbers clear
+         * properly */
+        if(printf_to_tilemap(gs.ll, gs.hudTilemap,
+                                TEXT_FPS_X + (sizeof(TEXT_FPS) - 1), TEXT_FPS_Y,
+                                "%.1f       ", (float)NANOSECOND / nanoseconds) < 0) {
+            fprintf(stderr, "Failed to print fps.\n");
+            return(-1);
         }
 
         lastTime.tv_sec = thisTime.tv_sec;
@@ -2926,11 +2882,11 @@ int main(int argc, char **argv) {
 #endif
 
         if(mode != NULL) {
-            if(prepare_frame(&gs) < 0) {
+            if(prepare_frame(gs.ll, gs.lBackground) < 0) {
                 goto error_synth;
             }
 
-            if(draw_color_boxes(&gs, cbox) < 0) {
+            if(draw_color_boxes(gs.ll, cbox) < 0) {
                 goto error_synth;
             }
 
