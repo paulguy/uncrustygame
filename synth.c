@@ -75,7 +75,7 @@ typedef struct {
 typedef struct {
 } SynthEffect;
 */
-typedef struct Synth_t {
+struct Synth_s {
     SDL_AudioDeviceID audiodev;
     unsigned int rate;
     unsigned int fragmentsize;
@@ -108,7 +108,7 @@ typedef struct Synth_t {
 */
     synth_log_cb_t synth_log_cb;
     void *synth_log_priv;
-} Synth;
+};
 
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format) {
     switch(format) {

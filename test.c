@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
-#include <stdarg.h>
 #include <string.h>
 #include <limits.h>
 #include <SDL.h>
@@ -29,19 +28,22 @@
 #include "tilemap.h"
 #include "synth.h"
 
-#define MILLISECOND (1000)
-#define NANOSECOND  (1000000000)
+#include "text.h"
+#include "extramath.h"
+#include "testaudio.h"
+#include "testgfx.h"
+#include "vprintf_cb.h"
 
 /* initial settings */
 #define MAX_PROCESS_TIME (200)
 #define WINDOW_TITLE    "UnCrustyGame Test"
 #define WINDOW_WIDTH    (1024)
 #define WINDOW_HEIGHT   (768)
+#define WINDOW_FLAGS    (SDL_WINDOW_RESIZABLE)
 #define RENDERER_FLAGS  (SDL_RENDERER_PRESENTVSYNC)
 //#define RENDERER_FLAGS  (0)
 #define SHOW_FPS
 #define DEFAULT_RATE    (48000)
-#define MAX_ACTIVE_PLAYERS (32)
 #define BG_R (47)
 #define BG_G (17)
 #define BG_B (49)
@@ -50,7 +52,6 @@
 #define CAT_VELOCITY   (300.0)
 #define CAT_TURN_SPEED (M_PI * 2.0 / ACTOR_FPS)
 #define CAT_ANIM_DIV   (75)
-#define CAT_OFFSCREEN_DIST_FACTOR (0.1)
 #define CAT_IDLE_MEOW    (2000) /* milliseconds */
 #define CAT_PAN_FACTOR   (0.75)
 #define ZZZ_TRANSLUCENCY (128)
@@ -92,24 +93,9 @@
 #define MOUSE_EAT_TIME   (1000)
 
 #define MAX_COLOR_BOX    (8)
-#define CBOX_MIN_TIME    (1000)
-#define CBOX_MAX_TIME    (5000)
-#define CBOX_SHADOW_MIN  (1)
-#define CBOX_SHADOW_MAX  (5)
-#define CBOX_SHADOW_TRANSLUCENCY (128)
-#define CBOX_MIN_COLOR   (0.1)
-#define CBOX_MAX_COLOR   (0.4)
-#define CBOX_MIN_DIM     (8)
-#define CBOX_MAX_DIM     (480)
-#define CBOX_MIN_AREA    (1000)
-#define CBOX_MAX_AREA    (100000)
-#define CBOX_MIN_SPEED   (16)
-#define CBOX_MAX_SPEED   (80)
-#define OPAQUE_COLOR_BOXES
 
 #define TEST_SPRITESHEET   "cat.bmp"
-#define TEST_SPRITE_WIDTH  (32)
-#define TEST_SPRITE_HEIGHT (32)
+#define TEST_SPRITE_DIM    (32)
 const unsigned int TEST_SPRITESHEET_VALUES[] = {0, 1,
                                                 2, 3,
                                                 4, 5,
@@ -159,7 +145,7 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_MARBLE2 (16)
 #define TEST_MARBLE3 (17)
 
-#define CAT_DISTANCE     (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)
+#define CAT_DISTANCE     (TEST_SPRITE_DIM * SPRITE_SCALE / 2)
 
 #define FONT_WIDTH  (8)
 #define FONT_HEIGHT (8)
@@ -167,16 +153,10 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define HUD_WIDTH   (WINDOW_WIDTH / (FONT_WIDTH * HUD_SCALE))
 #define HUD_HEIGHT  (WINDOW_HEIGHT / (FONT_HEIGHT * HUD_SCALE))
 #define SPRITE_SCALE    (2)
-#define WINDOW_TILE_WIDTH (WINDOW_WIDTH / (TEST_SPRITE_WIDTH * SPRITE_SCALE))
-#define WINDOW_TILE_HEIGHT (WINDOW_HEIGHT / (TEST_SPRITE_HEIGHT * SPRITE_SCALE))
+#define WINDOW_TILE_WIDTH (WINDOW_WIDTH / (TEST_SPRITE_DIM * SPRITE_SCALE))
+#define WINDOW_TILE_HEIGHT (WINDOW_HEIGHT / (TEST_SPRITE_DIM * SPRITE_SCALE))
 
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
-#define SCALE(VAL, SMIN, SMAX, DMIN, DMAX) \
-    ((((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))) + (DMIN))
-#define SCALEINV(VAL, SMIN, SMAX, DMIN, DMAX) \
-    ((DMAX) - (((VAL) - (SMIN)) / ((SMAX) - (SMIN)) * ((DMAX) - (DMIN))))
-#define RANDRANGE(MIN, MAX) ((rand() % (MAX - MIN)) + MIN)
-#define CENTER(OUTERW, INNERW) (((OUTERW) - (INNERW)) / 2)
 
 #define CATPAN(XPOS) ((float)((XPOS) - (WINDOW_WIDTH / 2.0)) / \
                       ((float)WINDOW_WIDTH / 2.0) * CAT_PAN_FACTOR)
@@ -198,23 +178,6 @@ typedef enum {
 } CatState;
 
 typedef struct {
-    int player;
-    float volume;
-    float panning;
-    int token;
-} ActivePlayer;
-
-typedef struct {
-    Synth *s;
-    int fragments;
-    ActivePlayer player[MAX_ACTIVE_PLAYERS];
-    int mixBuffer;
-    int leftBuffer;
-    int rightBuffer;
-    int mixPlayer;
-} AudioState;
-
-typedef struct {
     int sprite;
     unsigned int anim;
     unsigned int animCounter;
@@ -234,24 +197,6 @@ typedef enum {
     SPAWN_SPIDERS,
     SPAWN_MICE
 } SpawnerType;
-
-typedef enum {
-    DIR_LEFT,
-    DIR_RIGHT,
-    DIR_UP,
-    DIR_DOWN
-} Direction;
-
-typedef struct {
-    int tilemap;
-    int layer;
-    Uint32 bgColor;
-    float x, y;
-    int w, h;
-    int shadowOffset;
-    Direction dir;
-    float speed;
-} ColorBox;
 
 typedef struct {
     /* resources */
@@ -333,18 +278,14 @@ GameMode game = {
     .priv = &gs
 };
 
-void vprintf_cb(void *priv, const char *fmt, ...) {
-    va_list ap;
-    FILE *out = priv;
-
-    va_start(ap, fmt);
-    vfprintf(out, fmt, ap);
-}
-
 int initialize_video(SDL_Window **win,
                      SDL_Renderer **renderer,
                      Uint32 *format,
-                     Uint32 flags) {
+                     Uint32 initialWidth,
+                     Uint32 initialHeight,
+                     const char *initialTitle,
+                     Uint32 winFlags,
+                     Uint32 rendererFlags) {
     int drivers;
     int nameddrv, bestdrv, softdrv, selectdrv;
     int selectfmt;
@@ -434,12 +375,12 @@ int initialize_video(SDL_Window **win,
     }
 
     /* create the window then try to create a renderer for it */
-    *win = SDL_CreateWindow(WINDOW_TITLE,
+    *win = SDL_CreateWindow(initialTitle,
                             SDL_WINDOWPOS_UNDEFINED,
                             SDL_WINDOWPOS_UNDEFINED,
-                            WINDOW_WIDTH,
-                            WINDOW_HEIGHT,
-                            SDL_WINDOW_RESIZABLE);
+                            initialWidth,
+                            initialHeight,
+                            winFlags);
     if(*win == NULL) {
         fprintf(stderr, "Failed to create SDL window.\n");
         goto error;
@@ -485,12 +426,13 @@ int initialize_video(SDL_Window **win,
     /* might make some different?  dunno */
     setenv("SDL_HINT_RENDER_BATCHING", "1", 0);
 
-    *renderer = SDL_CreateRenderer(*win, selectdrv, flags);
+    *renderer = SDL_CreateRenderer(*win, selectdrv, rendererFlags);
     if(*renderer == NULL) {
         fprintf(stderr, "Failed to create SDL renderer.\n");
         goto error;
     }
 
+    /* Draw operations with alpha need this set */
     if(SDL_SetRenderDrawBlendMode(*renderer, SDL_BLENDMODE_BLEND) < 0) {
         fprintf(stderr, "Failed to set render draw mode to blend.\n");
         SDL_DestroyRenderer(*renderer);
@@ -505,851 +447,9 @@ error:
     return(-1);
 }
 
-void ascii_to_int(unsigned int *dst,
-                  const char *src,
-                  unsigned int len) {
-    unsigned int i;
-
-    for(i = 0; i < len; i++) {
-        dst[i] = (unsigned int)(src[i]);
-    }
-}
-
-int print_to_tilemap(LayerList *ll,
-                     unsigned int tilemap,
-                     unsigned int x,
-                     unsigned int y,
-                     const char *text) {
-    unsigned int len = strlen(text);
-    unsigned int textTilemap[len];
-
-    /* convert the char array to a tilemap */
-    ascii_to_int(textTilemap, text, len);
-    /* apply it */
-    if(tilemap_set_tilemap_map(ll, tilemap,
-                               x, y,
-                               len,
-                               len, 1,
-                               textTilemap, len) < 0) {
-        fprintf(stderr, "Failed to print to tilemap.\n");
-        return(-1);
-    }
-    if(tilemap_update_tilemap(ll, tilemap,
-                              x, y,
-                              len, 1) < 0) {
-        fprintf(stderr, "Failed to update hud tilemap.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
-int printf_to_tilemap(LayerList *ll,
-                      unsigned int tilemap,
-                      unsigned int x,
-                      unsigned int y,
-                      const char *fmt,
-                      ...) {
-    va_list ap;
-
-    va_start(ap, fmt);
-    int len = vsnprintf(NULL, 0, fmt, ap);
-    va_end(ap);
-    if(len < 0) {
-        fprintf(stderr, "Failed to get string length.\n");
-        return(-1);
-    }
-    /* just use the stack for simplicity */
-    char text[len + 1];
-    unsigned int textTilemap[len];
-
-    va_start(ap, fmt);
-    if(vsnprintf(text, len + 1, fmt, ap) < len) {
-        fprintf(stderr, "Failed to printf to text buf.\n");
-        return(-1);
-    }
-    va_end(ap);
-
-    /* convert the char array to a tilemap */
-    ascii_to_int(textTilemap, text, len);
-    /* apply it */
-    if(tilemap_set_tilemap_map(ll, tilemap,
-                               x, y,
-                               len,
-                               len, 1,
-                               textTilemap, len) < 0) {
-        fprintf(stderr, "Failed to printf to tilemap.\n");
-        return(-1);
-    }
-    if(tilemap_update_tilemap(ll, tilemap,
-                              x, y,
-                              len, 1) < 0) {
-        fprintf(stderr, "Failed to update hud tilemap.\n");
-        return(-1);
-    }
-
-    return(len);
-}
-
-int ascii_wrap_to_int(unsigned int *dst,
-                      const char *src,
-                      unsigned int srclen,
-                      unsigned int dstwidth,
-                      unsigned int *dstheight) {
-    unsigned int temp;
-    unsigned int i, x, y;
-    unsigned int wordstart;
-    unsigned int wordend;
-    unsigned int wordlen;
-    int stopCopying;
-
-    if(dstheight == NULL) {
-        temp = UINT_MAX;
-        dstheight = &temp;
-    }
-
-    x = 0; y = 0;
-    for(i = 0; i < srclen; i++) {
-        /* find start of a word */
-        stopCopying = 0;
-        for(wordstart = i; wordstart < srclen; wordstart++) {
-            if(stopCopying == 0 && src[wordstart] == ' ') {
-                if(dst != NULL) {
-                    dst[(y * dstwidth) + x] = ' ';
-                }
-                x++;
-                /* at the end of a line, go to the next, but stop copying
-                 * spaces */
-                if(x == dstwidth) {
-                    x = 0;
-                    y++;
-                    if(y == *dstheight) {
-                        return(wordstart);
-                    }
-                    stopCopying = 1;
-                }
-            } else if(src[wordstart] == '\n') {
-                x = 0;
-                y++;
-                if(y == *dstheight) {
-                    return(wordstart);
-                }
-                stopCopying = 0;
-            } else {
-                break;
-            }
-        }
-
-        if(wordstart == srclen) {
-            break;
-        }
-
-        /* find end of word */
-        for(wordend = wordstart; wordend < srclen; wordend++) {
-            if(src[wordend] == ' ' || src[wordend] == '\n') {
-                break;
-            }
-        }
-
-        wordlen = wordend - wordstart;
-        /* if the word wouldn't fit, start a new line */
-        if(wordlen > dstwidth - x) {
-            x = 0;
-            y++;
-            if(y == *dstheight) {
-                return(wordstart);
-            }
-        }
-        for(i = wordstart; i < wordend; i++) {
-            if(x == dstwidth) {
-                x = 0;
-                y++;
-                if(y == *dstheight) {
-                    return(i);
-                }
-            }
-            if(dst != NULL) {
-                dst[(dstwidth * y) + x] = (unsigned int)(src[i]);
-            }
-            x++;
-        }
-    }
-
-    *dstheight = y;
-    return(srclen);
-}
-
-
-/* i don't knwo what i'm doing */
-float angle_from_xy(float x, float y) {
-    if(x == 0.0) {
-        if(y < 0.0) {
-            return(M_PI);
-        } else if(y >= 0.0) {
-            return(0.0);
-        }
-    } else if(y == 0.0) {
-        if(x < 0.0) {
-            return(M_PI * 0.5);
-        } else if(x > 0.0) {
-            return(M_PI * 1.5);
-        }
-    } else if(x > 0.0 && y > 0.0) {
-        if(x < y) {
-            return((M_PI * 2.0) - atanf(x / y));
-        } else {
-            return((M_PI * 1.5) + atanf(y / x));
-        }
-    } else if(x < 0.0 && y > 0.0) {
-        x = -x;
-        if(x < y) {
-            return(atanf(x / y));
-        } else {
-            return((M_PI * 0.5) - atanf(y / x));
-        }
-    } else if(x > 0.0 && y < 0.0) {
-        y = -y;
-        if(x < y) {
-            return(M_PI + atanf(x / y));
-        } else {
-            return((M_PI * 1.5) - atanf(y / x));
-        }
-    }
-
-    x = -x;
-    y = -y;
-    if(x < y) {
-        return(M_PI - atanf(x / y));
-    }
-    return((M_PI * 0.5) + atanf(y / x));
-}
-
-float radian_to_degree(float radian) {
-    return(radian / (M_PI * 2) * 360.0);
-}
-
-float velocity_from_xy(float x, float y) {
-    return(sqrtf(powf(x, 2) + powf(y, 2)));
-}
-
-float distance(float x1, float y1, float x2, float y2) {
-    if(x1 > x2) {
-        if(y1 > y2) {
-            return(velocity_from_xy(x1 - x2, y1 - y2));
-        } else {
-            return(velocity_from_xy(x1 - x2, y2 - y1));
-        }
-    }
-    if(y1 > y2) {
-        return(velocity_from_xy(x2 - x1, y1 - y2));
-    }
-    return(velocity_from_xy(x2 - x1, y2 - y1));
-}
-
-/* still have no idea */
-void xy_from_angle(float *x, float *y, float angle) {
-    *x = -sin(angle);
-    *y = cos(angle);
-}
-
-Uint32 color_from_angle(float angle,
-                        unsigned int min,
-                        unsigned int max) {
-    const float COLORDIV = ((M_PI * 2.0) / 6.0);
-
-    if(angle >= 0.0 && angle < COLORDIV) {
-        return(TILEMAP_COLOR(max,
-                             min,
-                             (unsigned int)SCALEINV(angle,
-                                                    0.0, COLORDIV,
-                                                    (float)min, (float)max),
-                             255));
-    } else if(angle >= COLORDIV &&
-       angle < COLORDIV * 2.0) {
-        return(TILEMAP_COLOR(max,
-                             (unsigned int)SCALE(angle,
-                                                 COLORDIV, COLORDIV * 2.0,
-                                                 (float)min, (float)max),
-                             min,
-                             255));
-    } else if(angle >= COLORDIV * 2.0 &&
-       angle < COLORDIV * 3.0) {
-        return(TILEMAP_COLOR((unsigned int)SCALEINV(angle,
-                                                    COLORDIV * 2.0, COLORDIV * 3.0,
-                                                    (float)min, (float)max),
-                             max,
-                             min,
-                             255));
-    } else if(angle >= COLORDIV * 3.0 &&
-       angle < COLORDIV * 4.0) {
-        return(TILEMAP_COLOR(min,
-                             max,
-                             (unsigned int)SCALE(angle,
-                                                 COLORDIV * 3.0, COLORDIV * 4.0,
-                                                 (float)min, (float)max),
-                             255));
-    } else if(angle >= COLORDIV * 4.0 &&
-       angle < COLORDIV * 5.0) {
-        return(TILEMAP_COLOR(min,
-                             (unsigned int)SCALEINV(angle,
-                                                    COLORDIV * 4.0, COLORDIV * 5.0,
-                                                    (float)min, (float)max),
-                             max,
-                             255));
-    }
-    return(TILEMAP_COLOR((unsigned int)SCALE(angle,
-                                             COLORDIV * 5.0, COLORDIV * 6.0,
-                                             (float)min, (float)max),
-                         min,
-                         max,
-                         255));
-}
-
-float volume_from_db(float db) {
-    if(db < 0.0) {
-        return(powf(10.0, db / 10.0));
-    }
-    return(1.0 / powf(10.0, -db / 10.0));
-}
-
-int create_mix_buffers(AudioState *as) {
-    /* the import type is ignored when creating empty buffers. */
-    as->mixBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
-    if(as->mixBuffer < 0) {
-        fprintf(stderr, "Failed to create mix buffer.\n");
-        return(-1);
-    }
-    as->leftBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
-    if(as->mixBuffer < 0) {
-        fprintf(stderr, "Failed to create left buffer.\n");
-        return(-1);
-    }
-    as->rightBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
-    if(as->mixBuffer < 0) {
-        fprintf(stderr, "Failed to create right buffer.\n");
-        return(-1);
-    }
-    as->mixPlayer = synth_add_player(as->s, as->mixBuffer);
-    if(as->mixPlayer < 0) {
-        fprintf(stderr, "Failed to create mix player.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
-int audio_frame_cb(void *priv) {
-    AudioState *as = (AudioState *)priv;
-    unsigned int i;
-    int playerRet;
-    float volume;
-    unsigned int needed = synth_get_samples_needed(as->s);
-
-    /* check for underrun and enlarge the fragment size in the hopes of
-     * settling on the minimum necessary number of fragments and avoid crackles
-     */
-    if(synth_has_underrun(as->s)) {
-        /* disable the synth before doing fragment operations */
-        if(synth_set_enabled(as->s, 0) < 0) {
-            fprintf(stderr, "Failed to stop synth.\n");
-            return(-1);
-        }
-        /* try to increase the fragments count by 1 */
-        if(synth_set_fragments(as->s, as->fragments + 1) < 0) {
-            fprintf(stderr, "Failed to set fragments, disabling.\n");
-            return(-1);
-        }
-        as->fragments++;
-        /* free the reference from the mix buffer */
-        if(synth_free_player(as->s, as->mixPlayer) < 0) {
-            fprintf(stderr, "Failed to free mix player.\n");
-            return(-1);
-        }
-        /* free the buffers */
-        if(synth_free_buffer(as->s, as->mixBuffer) < 0) {
-            fprintf(stderr, "Failed to mix buffer.\n");
-            return(-1);
-        }
-        if(synth_free_buffer(as->s, as->leftBuffer) < 0) {
-            fprintf(stderr, "Failed to left channel buffer.\n");
-            return(-1);
-        }
-        if(synth_free_buffer(as->s, as->rightBuffer) < 0) {
-            fprintf(stderr, "Failed to right channel buffer.\n");
-            return(-1);
-        }
-        /* remake them with the new fragment size */
-        if(create_mix_buffers(as) < 0) {
-            return(-1);
-        }
-
-        /* re-enable the synth.  I don't entirely remember how this works but
-         * this function may be called again recursively so make sure nothing
-         * else happens between this and returning. */
-        if(synth_set_enabled(as->s, 1) < 0) {
-            /* if it is recursive, allow the error to fall through, but don't
-             * print something that might end up spammy */
-            return(-1);
-        }
-        /* don't try to generate audio that'll just be crackles anyway */
-        return(0);
-    }
-
-    /* clear channel mix buffers */
-    if(synth_silence_buffer(as->s, as->leftBuffer, 0, needed) < 0) {
-        fprintf(stderr, "Failed to silence left buffer.\n");
-        return(-1);
-    }
-    if(synth_silence_buffer(as->s, as->rightBuffer, 0, needed) < 0) {
-        fprintf(stderr, "Failed to silence right buffer.\n");
-        return(-1);
-    }
-
-    for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
-        if(as->player[i].player >= 0) {
-            /* clear mix buffer */
-            if(synth_silence_buffer(as->s, as->mixBuffer, 0, needed) < 0) {
-                fprintf(stderr, "Failed to silence left buffer.\n");
-                return(-1);
-            }
-
-            /* point active player to mix buffer */
-            if(synth_set_player_output_buffer(as->s, as->player[i].player, as->mixBuffer) < 0) {
-                fprintf(stderr, "failed to set active player to mix buffer.\n");
-                return(-1);
-            }
-            /* reset the buffer output pos to 0 */
-            if(synth_set_player_output_buffer_pos(as->s, as->player[i].player, 0) < 0) {
-                fprintf(stderr, "Failed to set output buffer pos.\n");
-                return(-1);
-            }
-            playerRet = synth_run_player(as->s, as->player[i].player, needed);
-            /* avoid external references to mix buffer */
-            if(synth_set_player_output_buffer(as->s, as->player[i].player, 0) < 0) {
-                fprintf(stderr, "failed to set active player output to 0.\n");
-                return(-1);
-            }
-            if(playerRet < 0) {
-                fprintf(stderr, "Failed to play active player.\n");
-                return(-1);
-            } else if(playerRet == 0) {
-                as->player[i].player = -1;
-            } else {
-                /* apply volume and panning */
-                /* left channel */
-                if(synth_set_player_input_buffer(as->s, as->mixPlayer, as->mixBuffer) < 0) {
-                    fprintf(stderr, "Failed to set mix player input to mix buffer.\n");
-                    return(-1);
-                }
-                if(synth_set_player_output_buffer(as->s, as->mixPlayer, as->leftBuffer) < 0) {
-                    fprintf(stderr, "Failed to set mix player output to left buffer.\n");
-                    return(-1);
-                }
-                if(as->player[i].panning > 0) {
-                    volume = as->player[i].volume * (1.0 - as->player[i].panning);
-                } else {
-                    volume = as->player[i].volume;
-                }
-                if(synth_set_player_volume(as->s, as->mixPlayer, volume) < 0) {
-                    fprintf(stderr, "Failed to set mix player left volume.\n");
-                    return(-1);
-                }
-                if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
-                    fprintf(stderr, "Failed to run mix player for left channel.\n");
-                    return(-1);
-                }
-                /* right channel, reset mix buffer player to 0 */
-                if(synth_set_player_input_buffer_pos(as->s, as->mixPlayer, 0) < 0) {
-                    fprintf(stderr, "Failed to reset center player output pos.\n");
-                    return(-1);
-                }
-                if(synth_set_player_output_buffer(as->s, as->mixPlayer, as->rightBuffer) < 0) {
-                    fprintf(stderr, "Failed to set mix player output to right buffer.\n");
-                    return(-1);
-                }
-                if(as->player[i].panning < 0) {
-                    volume = as->player[i].volume * (1.0 + as->player[i].panning);
-                } else {
-                    volume = as->player[i].volume;
-                }
-                if(synth_set_player_volume(as->s, as->mixPlayer, volume) < 0) {
-                    fprintf(stderr, "Failed to set mix player right volume.\n");
-                    return(-1);
-                }
-                if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
-                    fprintf(stderr, "Failed to run mix player for right channel.\n");
-                    return(-1);
-                }
-            }
-        }
-    }
-
-    /* play out both channels */
-    if(synth_set_player_input_buffer(as->s, as->mixPlayer, as->leftBuffer) < 0) {
-        fprintf(stderr, "Failed to set mix player input to left buffer.\n");
-        return(-1);
-    }
-    if(synth_set_player_output_buffer(as->s, as->mixPlayer, 0) < 0) {
-        fprintf(stderr, "Failed to set mix player output to left channel.\n");
-        return(-1);
-    }
-    if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
-        fprintf(stderr, "Failed to output to left channel.\n");
-        return(-1);
-    }
-    if(synth_set_player_input_buffer(as->s, as->mixPlayer, as->rightBuffer) < 0) {
-        fprintf(stderr, "Failed to set mix player input right buffer.\n");
-        return(-1);
-    }
-    if(synth_set_player_output_buffer(as->s, as->mixPlayer, 1) < 0) {
-        fprintf(stderr, "Failed to set mix player output to right channel.\n");
-        return(-1);
-    }
-    if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
-        fprintf(stderr, "Failed to output to right channel.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
-AudioState *init_audio_state() {
-    AudioState *as = malloc(sizeof(AudioState));
-    unsigned int i;
-
-    if(as == NULL) {
-        fprintf(stderr, "Failed to allocate audio state.\n");
-        return(NULL);
-    }
-
-    as->s = synth_new(audio_frame_cb,
-                      as,
-                      vprintf_cb,
-                      stderr,
-                      DEFAULT_RATE,
-                      2);
-    if(as->s == NULL) {
-        fprintf(stderr, "Failed to create synth.\n");
-        free(as);
-        return(NULL);
-    }
-    if(synth_get_channels(as->s) < 2) {
-        fprintf(stderr, "Mono output is unsupported.\n");
-        synth_free(as->s);
-        free(as);
-        return(NULL);
-    }
-
-    /* set the initial fragments to 1, which will be expanded as needed */
-    as->fragments = 1;
-    /* clear the active synth players */
-    for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
-        as->player[i].player = -1;
-    }
-
-    if(create_mix_buffers(as) < 0) {
-        synth_free(as->s);
-        free(as);
-        return(NULL);
-    }
-    /* fragments need to be set so the output buffer will have been initialized */
-    if(synth_set_fragments(as->s, 1) < 0) {
-        fprintf(stderr, "Failed to set fragments.\n");
-        synth_free(as->s);
-        free(as);
-        return(NULL);
-    }
-
-    return(as);
-}
-
-void free_audio_state(AudioState *as) {
-    synth_free_player(as->s, as->mixPlayer);
-    synth_free_buffer(as->s, as->leftBuffer);
-    synth_free_buffer(as->s, as->rightBuffer);
-    synth_free_buffer(as->s, as->mixBuffer);
-    synth_free(as->s);
-    free(as);
-}
-
-Synth *get_synth(AudioState *as) {
-    return(as->s);
-}
-
-int load_sound(Synth *s,
-               const char *filename,
-               int *buf,
-               float dB) {
-    int player;
-    unsigned int rate;
-
-    *buf = synth_buffer_from_wav(s, filename, &rate);
-    if(*buf < 0) {
-        fprintf(stderr, "Failed to load wave.\n");
-        return(-1);
-    }
-    player = synth_add_player(s, *buf);
-    if(player < 0) {
-        fprintf(stderr, "Failed to create wave player.\n");
-        synth_free_buffer(s, *buf);
-        *buf = -1;
-        return(-1);
-    }
-    if(synth_set_player_speed(s, player, (float)rate / (float)synth_get_rate(s)) < 0) {
-        fprintf(stderr, "Failed to set wave speed.\n");
-        synth_free_player(s, player);
-        synth_free_buffer(s, *buf);
-        *buf = -1;
-        return(-1);
-    }
-    if(synth_set_player_volume(s, player, volume_from_db(dB)) < 0) {
-        fprintf(stderr, "Failed to set wave volume.\n");
-        synth_free_player(s, player);
-        synth_free_buffer(s, *buf);
-        *buf = -1;
-        return(-1);
-    }
-
-    return(player);
-}
-
-int play_sound(AudioState *as, unsigned int player, float volume, float panning) {
-    unsigned int i;
-
-    for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
-        if(as->player[i].player < 0) {
-            break;
-        }
-    }
-    if(i == MAX_ACTIVE_PLAYERS) {
-        fprintf(stderr, "Max active players exceeded.\n");
-        return(-1);
-    }
-
-    /* reset the buffer position to start */
-    if(synth_set_player_input_buffer_pos(as->s, player, 0.0) < 0) {
-        fprintf(stderr, "Failed to reset player input buffer pos.\n");
-        return(-1);
-    }
-
-    as->player[i].player = player;
-    as->player[i].volume = volume;
-    as->player[i].panning = panning;
-    as->player[i].token = rand();
-
-    return(as->player[i].token);
-}
-
-void stop_sound(AudioState *as, int token) {
-    unsigned int i;
-
-    for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
-        if(as->player[i].player != -1 &&
-           as->player[i].token == token) {
-            break;
-        }
-    }
-    if(i == MAX_ACTIVE_PLAYERS) {
-        /* probably already stopped */
-        return;
-    }
-
-    as->player[i].player = -1;
-}
-
-int update_volume(AudioState *as, int token, float volume) {
-    unsigned int i;
-
-    for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
-        if(as->player[i].player != -1 &&
-           as->player[i].token == token) {
-            break;
-        }
-    }
-    if(i == MAX_ACTIVE_PLAYERS) {
-        /* probably already stopped */
-        return(-1);
-    }
-
-    as->player[i].volume = volume;
-
-    return(0);
-}
-
-int update_panning(AudioState *as, int token, float panning) {
-    unsigned int i;
-
-    for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
-        if(as->player[i].player != -1 &&
-           as->player[i].token == token) {
-            break;
-        }
-    }
-    if(i == MAX_ACTIVE_PLAYERS) {
-        /* probably already stopped */
-        return(-1);
-    }
-
-    as->player[i].panning = panning;
-
-    return(0);
-}
-
 void play_cat_sound(GameState *gs, int player) {
     stop_sound(gs->as, gs->catSound);
     gs->catSound = play_sound(gs->as, player, 1.0, CATPAN(gs->catx));
-}
-
-int load_graphic(LayerList *ll,
-                 const char *filename,
-                 unsigned int tWidth,
-                 unsigned int tHeight,
-                 int *tileset,
-                 int *tilemap,
-                 int *layer,
-                 const unsigned int *values,
-                 const unsigned int *colormod,
-                 unsigned int tmWidth,
-                 unsigned int tmHeight,
-                 float layerScale) {
-    /* load the graphic, if needed */
-    if(*tileset < 0) {
-        *tileset = tilemap_tileset_from_bmp(ll,
-                                           filename,
-                                           tWidth,
-                                           tHeight);
-        if(*tileset < 0) {
-            fprintf(stderr, "Failed to load graphic.\n");
-            return(-1);
-        }
-    }
-    /* create the tilemap, if needed */
-    if(*tilemap < 0) {
-        *tilemap = tilemap_add_tilemap(ll, tmWidth, tmHeight);
-        if(*tilemap < 0) {
-            fprintf(stderr, "Failed to make tilemap.\n");
-            return(-1);
-        }
-    }
-    /* assign the tileset to the tilemap */
-    if(tilemap_set_tilemap_tileset(ll, *tilemap, *tileset) < 0) {
-        fprintf(stderr, "Failed to apply tileset to tilemap.\n");
-        return(-1);
-    }
-    /* set up its map for the first time if needed */
-    if(values != NULL) {
-        if(tilemap_set_tilemap_map(ll, *tilemap, 
-                                   0, 0, /* start x and y for destination rectangle */
-                                   tmWidth, /* row width for source rectangle */
-                                   tmWidth, tmHeight, /* size of rectangle */
-                                   values, /* the values of the map rect */
-                                   tmWidth * tmHeight /* number of values to expect */
-                                   ) < 0) {
-            fprintf(stderr, "Failed to set tilemap map.\n");
-            return(-1);
-        }
-    }
-    /* apply color modifications if needed, arguments are basically identical
-     * to setting the tilemap map */
-    if(colormod != NULL) {
-        if(tilemap_set_tilemap_attr_colormod(ll, *tilemap,
-                                             0, 0,
-                                             tmWidth,
-                                             tmWidth, tmHeight,
-                                             colormod,
-                                             tmWidth * tmHeight) < 0) {
-            fprintf(stderr, "Failed to set tilemap colormod.\n");
-            return(-1);
-        }
-    }
-    /* update/"render out" the tilemap for the first time, if needed */
-    if(values != NULL) {
-        if(tilemap_update_tilemap(ll, *tilemap,
-                                  0, 0, /* start rectangle to update */
-                                  tmWidth, tmHeight /* update rectangle size */
-                                  ) < 0) {
-            fprintf(stderr, "Failed to update tilemap.\n");
-            return(-1);
-        }
-    }
-    /* create a layer if needed */
-    if(*layer < 0) {
-        *layer = tilemap_add_layer(ll, *tilemap);
-        if(*layer < 0) {
-            fprintf(stderr, "Failed to create layer.\n");
-            return(-1);
-        }
-
-        /* don't modify a layer fed in as if it wasn't to be created */
-        if(tilemap_set_layer_scale(ll, *layer, layerScale, layerScale) < 0) {
-            fprintf(stderr, "Failed to set scale.\n");
-            return(-1);
-        }
-    }
-
-    return(0);
-}
-
-int create_sprite(LayerList *ll, unsigned int spritemap) {
-    int sprite;
-
-    sprite = tilemap_add_layer(ll, spritemap);
-    if(sprite < 0) {
-        fprintf(stderr, "Failed to add layer for sprite.\n");
-        return(-1);
-    }
-
-    /* make the tilemap window the size of a single sprite */
-    if(tilemap_set_layer_window(ll, sprite,
-                                TEST_SPRITE_WIDTH,
-                                TEST_SPRITE_HEIGHT) < 0) {
-        fprintf(stderr, "Failed to set sprite window size.\n");
-        return(-1);
-    }
-    /* make the rotation center in the center of the sprite so it rotates
-     * about where it aims for the cursor */
-    if(tilemap_set_layer_rotation_center(ll, sprite,
-                                         TEST_SPRITE_WIDTH / 2 * SPRITE_SCALE,
-                                         TEST_SPRITE_HEIGHT / 2 * SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set sprite rotation center.\n");
-        return(-1);
-    }
-    /* Makes the sprite more visible without me having to draw a larger sprite */
-    if(tilemap_set_layer_scale(ll, sprite,
-                               SPRITE_SCALE, SPRITE_SCALE) < 0) {
-        fprintf(stderr, "Failed to set sprite scale.\n");
-        return(-1);
-    }
-
-    return(sprite);
-}
-
-int select_sprite(LayerList *ll,
-                  int layer,
-                  int sprite) {
-    if(tilemap_set_layer_scroll_pos(ll, layer,
-                                    sprite * TEST_SPRITE_WIDTH,
-                                    0) < 0) {
-        fprintf(stderr, "Failed to set layer scroll for sprite.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
-int position_sprite(LayerList *ll,
-                    int layer,
-                    int x,
-                    int y) {
-    /* position sprite based on center */
-    if(tilemap_set_layer_pos(ll, layer,
-                             x - (TEST_SPRITE_WIDTH * SPRITE_SCALE / 2),
-                             y - (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2)) < 0) {
-        fprintf(stderr, "Failed to set sprite pos.\n");
-        return(-1);
-    }
-
-    return(0);
 }
 
 int create_enemy(GameState *gs,
@@ -1414,147 +514,14 @@ int create_enemy(GameState *gs,
             return(-1);
     }
 
-    gs->enemy[i].sprite = create_sprite(gs->ll, gs->tilemap);
+    gs->enemy[i].sprite = create_sprite(gs->ll, gs->tilemap,
+                                        TEST_SPRITE_DIM, SPRITE_SCALE);
     if(gs->enemy[i].sprite < 0) {
         return(-1);
     }
 
-    return(select_sprite(gs->ll, gs->enemy[i].sprite, gs->enemy[i].anim));
-}
-
-float find_object_velocity(float curdist, float angle,
-                           int x, int y,
-                           int width, int height,
-                           float velocity) {
-    velocity = velocity * ACTOR_RATE / MILLISECOND;
-    if(x < 0) {
-        if(y < 0) {
-            if(angle > M_PI * 1.5 && angle <= M_PI * 1.75) {
-                float distance = sqrt(pow(-x, 2) + pow(-y, 2));
-                return(SCALE(angle,
-                             M_PI * 1.5, M_PI * 1.75,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else if(angle > M_PI * 1.75 && angle <= M_PI * 2.0) {
-                float distance = sqrt(pow(-x, 2) + pow(-y, 2));
-                return(SCALEINV(angle,
-                                M_PI * 1.75, M_PI * 2.0,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else {
-                return(velocity);
-            }
-        } else if(y > height) {
-            if(angle > M_PI && angle <= M_PI * 1.25) {
-                float distance = sqrt(pow(-x, 2) + pow(y - height, 2));
-                return(SCALE(angle,
-                             M_PI, M_PI * 1.25,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else if(angle > M_PI * 1.25 && angle <= M_PI * 1.5) {
-                float distance = sqrt(pow(-x, 2) + pow(y - height, 2));
-                return(SCALEINV(angle,
-                                M_PI * 1.25, M_PI * 1.5,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else {
-                return(velocity);
-            }
-        } else {
-            if(angle > M_PI && angle <= M_PI * 1.5) {
-                return(SCALE(angle,
-                             M_PI, M_PI * 1.5,
-                             0, -x * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
-                return(SCALEINV(angle,
-                                M_PI * 1.5, M_PI * 2.0,
-                                0, -x * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else {
-                return(velocity);
-            }
-        }
-    } else if(x > width) { 
-        if(y < 0) {
-            if(angle > 0 && angle <= M_PI * 0.25) {
-                float distance = sqrt(pow(x - width, 2) + pow(-y, 2));
-                return(SCALE(angle,
-                             0, M_PI * 0.25,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else if(angle > M_PI * 0.25 && angle <= M_PI * 0.5) {
-                float distance = sqrt(pow(x - width, 2) + pow(-y, 2));
-                return(SCALEINV(angle,
-                                M_PI * 0.25, M_PI * 0.5,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else {
-                return(velocity);
-            }
-        } else if(y > height) {
-            if(angle > M_PI * 0.5 && angle <= M_PI * 0.75) {
-                float distance = sqrt(pow(x - width, 2) + pow(y - height, 2));
-                return(SCALE(angle,
-                             M_PI * 0.5, M_PI * 0.75,
-                             0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else if(angle > M_PI * 0.75 && angle <= M_PI) {
-                float distance = sqrt(pow(x - width, 2) + pow(y - height, 2));
-                return(SCALEINV(angle,
-                                M_PI * 0.75, M_PI,
-                                0, distance * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else {
-                return(velocity);
-            }
-        } else {
-            if(angle > 0 && angle <= M_PI * 0.5) {
-                return(SCALE(angle,
-                             0, M_PI * 0.5,
-                             0, (x - width) * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else if(angle > M_PI * 0.5 && angle <= M_PI) {
-                return(SCALEINV(angle,
-                                M_PI * 0.5, M_PI,
-                                0, (x - width) * CAT_OFFSCREEN_DIST_FACTOR)
-                       + velocity);
-            } else {
-                return(velocity);
-            }
-        }
-    } else if(y < 0) {
-        if(angle > 0 && angle <= M_PI * 0.5) {
-            return(SCALEINV(angle,
-                         0, M_PI * 0.5,
-                         0, -y * CAT_OFFSCREEN_DIST_FACTOR)
-                   + velocity);
-        } else if(angle > M_PI * 1.5 && angle <= M_PI * 2.0) {
-            return(SCALEINV(angle,
-                            M_PI * 1.5, M_PI,
-                            0, -y * CAT_OFFSCREEN_DIST_FACTOR)
-                   + velocity);
-        } else {
-            return(velocity);
-        }
-    } else if(y > height) {
-        if(angle > M_PI * 0.5 && angle <= M_PI) {
-            return(SCALE(angle,
-                         M_PI * 0.5, M_PI,
-                         0, (y - height) * CAT_OFFSCREEN_DIST_FACTOR)
-                   + velocity);
-        } else if(angle > M_PI && angle <= M_PI * 1.5) {
-            return(SCALEINV(angle,
-                            M_PI, M_PI * 1.5,
-                            0, (y - height) * CAT_OFFSCREEN_DIST_FACTOR)
-                   + velocity);
-        } else {
-            return(velocity);
-        }
-    } else if(curdist > velocity) {
-        return(velocity);
-    }
-    return(curdist);
+    return(select_sprite(gs->ll, gs->enemy[i].sprite,
+                         gs->enemy[i].anim, TEST_SPRITE_DIM));
 }
 
 void update_movement(float *thisx, float *thisy,
@@ -1605,7 +572,7 @@ void update_movement(float *thisx, float *thisy,
         velocity = find_object_velocity(velocity, *thisAngle,
                                         *thisx, *thisy,
                                         maxx, maxy,
-                                        maxVelocity);
+                                        maxVelocity, ACTOR_RATE);
         xy_from_angle(&motionx, &motiony, *thisAngle);
         *thisx += motionx * velocity;
         *thisy += motiony * velocity;
@@ -1614,35 +581,6 @@ void update_movement(float *thisx, float *thisy,
             *catIdleTime += ACTOR_RATE;
         }
     }
-}
-
-int clear_tilemap(LayerList *ll,
-                  unsigned int tilemap,
-                  unsigned int w,
-                  unsigned int h) {
-    unsigned int temp[w * h];
-    unsigned int i;
-
-    for(i = 0; i < w * h; i++) {
-        temp[i] = ' ';
-    }
-
-    if(tilemap_set_tilemap_map(ll, tilemap,
-                               0, 0,
-                               w,
-                               w, h,
-                               temp, w * h) < 0) {
-        fprintf(stderr, "Failed to set clear tilemap.\n");
-        return(-1);
-    }
-    if(tilemap_update_tilemap(ll, tilemap,
-                              0, 0,
-                              w, h) < 0) {
-        fprintf(stderr, "Failed to clear tilemap.\n");
-        return(-1);
-    }
-
-    return(0);
 }
 
 int process_enemies(GameState *gs) {
@@ -1679,7 +617,8 @@ int process_enemies(GameState *gs) {
             }
 
             if(position_sprite(gs->ll, gs->goreSprite,
-                               gs->enemy[i].x, gs->enemy[i].y) < 0) {
+                               gs->enemy[i].x, gs->enemy[i].y,
+                               TEST_SPRITE_DIM) < 0) {
                 return(-1);
             }
             if(tilemap_set_layer_rotation(gs->ll, gs->goreSprite,
@@ -1693,7 +632,8 @@ int process_enemies(GameState *gs) {
             gore = (rand() % 3) + 1;
             if(gore & 1) {
                 if(select_sprite(gs->ll, gs->goreSprite,
-                                 gs->enemy[i].deadSprite) < 0) {
+                                 gs->enemy[i].deadSprite,
+                                 TEST_SPRITE_DIM) < 0) {
                     return(-1);
                 }
                 if(tilemap_draw_layer(gs->ll, gs->goreSprite) < 0) {
@@ -1703,7 +643,7 @@ int process_enemies(GameState *gs) {
             }
             if(gore & 2) {
                 if(select_sprite(gs->ll, gs->goreSprite,
-                                 TEST_BONES) < 0) {
+                                 TEST_BONES, TEST_SPRITE_DIM) < 0) {
                     return(-1);
                 }
                 if(tilemap_draw_layer(gs->ll, gs->goreSprite) < 0) {
@@ -1734,10 +674,10 @@ int process_enemies(GameState *gs) {
                             NULL,
                             &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
             /* invalidate any enemies which have gone of screen */
-            if(gs->enemy[i].x < -(TEST_SPRITE_WIDTH * SPRITE_SCALE / 2.0) ||
-               gs->enemy[i].x > WINDOW_WIDTH + (TEST_SPRITE_WIDTH * SPRITE_SCALE / 2.0) ||
-               gs->enemy[i].y < -(TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2.0) ||
-               gs->enemy[i].y > WINDOW_HEIGHT + (TEST_SPRITE_HEIGHT * SPRITE_SCALE / 2.0)) {
+            if(gs->enemy[i].x < -(TEST_SPRITE_DIM * SPRITE_SCALE / 2.0) ||
+               gs->enemy[i].x > WINDOW_WIDTH + (TEST_SPRITE_DIM * SPRITE_SCALE / 2.0) ||
+               gs->enemy[i].y < -(TEST_SPRITE_DIM * SPRITE_SCALE / 2.0) ||
+               gs->enemy[i].y > WINDOW_HEIGHT + (TEST_SPRITE_DIM * SPRITE_SCALE / 2.0)) {
                 gs->enemy[i].sprite = -1;
                 continue;
             }
@@ -1753,14 +693,16 @@ int process_enemies(GameState *gs) {
                 gs->enemy[i].anim--;
             }
 
-            if(select_sprite(gs->ll, gs->enemy[i].sprite, gs->enemy[i].anim) < 0) {
+            if(select_sprite(gs->ll, gs->enemy[i].sprite,
+                             gs->enemy[i].anim, TEST_SPRITE_DIM) < 0) {
                 return(-1);
             }
             gs->enemy[i].animCounter -= CAT_ANIM_DIV;
         }
 
         if(position_sprite(gs->ll, gs->enemy[i].sprite,
-                           gs->enemy[i].x, gs->enemy[i].y) < 0) {
+                           gs->enemy[i].x, gs->enemy[i].y,
+                           TEST_SPRITE_DIM) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->enemy[i].sprite,
@@ -1794,8 +736,8 @@ void reset_state(GameState *gs) {
 
     stop_sound(gs->as, gs->catSound);
 
-    gs->catx = (WINDOW_WIDTH - TEST_SPRITE_WIDTH) / 2;
-    gs->caty = (WINDOW_HEIGHT - TEST_SPRITE_HEIGHT) / 2;
+    gs->catx = (WINDOW_WIDTH - TEST_SPRITE_DIM) / 2;
+    gs->caty = (WINDOW_HEIGHT - TEST_SPRITE_DIM) / 2;
     gs->catState = CAT_ANIM0;
     gs->catAnim = TEST_ANIM0;
     gs->catAngle = 0.0;
@@ -1832,7 +774,8 @@ int update_cat(GameState *gs) {
             }
         }
         if(position_sprite(gs->ll, gs->catlayer,
-                           gs->catx, gs->caty) < 0) {
+                           gs->catx, gs->caty,
+                           TEST_SPRITE_DIM) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->catlayer,
@@ -1853,7 +796,8 @@ int update_cat(GameState *gs) {
                 gs->catAnim--;
             }
 
-            if(select_sprite(gs->ll, gs->catlayer, gs->catAnim) < 0) {
+            if(select_sprite(gs->ll, gs->catlayer,
+                             gs->catAnim, TEST_SPRITE_DIM) < 0) {
                 return(-1);
             }
 
@@ -1866,9 +810,10 @@ int update_cat(GameState *gs) {
         }
 
         if(position_sprite(gs->ll, gs->zzzlayer,
-                           gs->catx + (TEST_SPRITE_WIDTH * SPRITE_SCALE * ZZZ_POS_X),
-                           gs->caty + (TEST_SPRITE_HEIGHT * SPRITE_SCALE * ZZZ_POS_Y) + 
-                           ((sin(gs->zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE)) < 0) {
+                           gs->catx + (TEST_SPRITE_DIM * SPRITE_SCALE * ZZZ_POS_X),
+                           gs->caty + (TEST_SPRITE_DIM * SPRITE_SCALE * ZZZ_POS_Y) + 
+                           ((sin(gs->zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE),
+                           TEST_SPRITE_DIM) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_colormod(gs->ll, gs->zzzlayer,
@@ -1895,67 +840,22 @@ int toggle_cat_mode(GameState *gs) {
         play_cat_sound(gs, gs->cat_activation);
     } else {
         gs->catState = CAT_RESTING;
-        if(select_sprite(gs->ll, gs->catlayer, TEST_RESTING) < 0) {
+        if(select_sprite(gs->ll, gs->catlayer,
+                         TEST_RESTING, TEST_SPRITE_DIM) < 0) {
             return(-1);
         }
 
-        gs->zzzlayer = create_sprite(gs->ll, gs->tilemap);
+        gs->zzzlayer = create_sprite(gs->ll, gs->tilemap,
+                                     TEST_SPRITE_DIM, SPRITE_SCALE);
         if(gs->zzzlayer < 0) {
             return(-1);
         }
-        if(select_sprite(gs->ll, gs->zzzlayer, TEST_ZZZ) < 0) {
+        if(select_sprite(gs->ll, gs->zzzlayer,
+                         TEST_ZZZ, TEST_SPRITE_DIM) < 0) {
             return(-1);
         }
         
         play_cat_sound(gs, gs->purr);
-    }
-
-    return(0);
-}
-
-int box_fill(SDL_Renderer *renderer, SDL_Rect *rect,
-             Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
-    if(SDL_SetRenderDrawColor(renderer,
-                              r, g, b, a) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-    if(SDL_RenderFillRect(renderer, rect) < 0) {
-        fprintf(stderr, "Failed to fill rect.\n");
-        return(-1);
-    }
-    /* needs to be transparent so tilemap updates work */
-    if(SDL_SetRenderDrawColor(renderer,
-                              0, 0, 0,
-                              SDL_ALPHA_TRANSPARENT) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-
-    return(0);
-}
-
-int prepare_frame(LayerList *ll,
-                  unsigned int bgLayer) {
-    SDL_Renderer *renderer = layerlist_get_renderer(ll);
-
-    /* clear the display, otherwise it'll show flickery garbage */
-    if(SDL_SetRenderDrawColor(renderer,
-                              0, 0, 0,
-                              SDL_ALPHA_OPAQUE) < 0) {
-        fprintf(stderr, "Failed to set render draw color.\n");
-        return(-1);
-    } 
-    if(SDL_RenderClear(renderer) < 0) {
-        fprintf(stderr, "Failed to clear screen.\n");
-        return(-1);
-    }
-    if(box_fill(renderer, NULL, BG_R, BG_G, BG_B, SDL_ALPHA_OPAQUE) < 0) {
-        return(-1);
-    }
-    if(tilemap_draw_layer(ll, bgLayer) < 0) {
-        fprintf(stderr, "Failed to draw background layer.\n");
-        return(-1);
     }
 
     return(0);
@@ -1971,48 +871,6 @@ int draw_cat(GameState *gs) {
             fprintf(stderr, "Failed to draw ZZZ layer.\n");
             return(-1);
         }
-    }
-
-    return(0);
-}
-
-int draw_hud(GameState *gs) {
-    if(tilemap_set_layer_pos(gs->ll, gs->hud,
-                             HUD_SCALE, HUD_SCALE) < 0) {
-        fprintf(stderr, "Failed to set hud layer pos.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_blendmode(gs->ll, gs->hud,
-                                   TILEMAP_BLENDMODE_SUB) < 0) {
-        fprintf(stderr, "Failed to set hud blend mode.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_colormod(gs->ll, gs->hud,
-                                  C_HUD_SHADOW) < 0) {
-        fprintf(stderr, "Failed to set hud colormod.\n");
-        return(-1);
-    }
-    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
-        fprintf(stderr, "Failed to draw hud layer.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_pos(gs->ll, gs->hud, 0, 0) < 0) {
-        fprintf(stderr, "Failed to set hud layer pos.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_blendmode(gs->ll, gs->hud,
-                                   TILEMAP_BLENDMODE_BLEND) < 0) {
-        fprintf(stderr, "Failed to set hud blend mode.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_colormod(gs->ll, gs->hud,
-                                  C_OPAQUE) < 0) {
-        fprintf(stderr, "Failed to set hud colormod.\n");
-        return(-1);
-    }
-    if(tilemap_draw_layer(gs->ll, gs->hud) < 0) {
-        fprintf(stderr, "Failed to draw hud layer.\n");
-        return(-1);
     }
 
     return(0);
@@ -2202,12 +1060,14 @@ GameMode* game_control(void *priv) {
             if(gs->spawnerTimer < 0) {
                 gs->spawnerx = SPAWNERRAND(WINDOW_WIDTH);
                 gs->spawnery = SPAWNERRAND(WINDOW_HEIGHT);
-                if(select_sprite(gs->ll, gs->spawnerSprite, TEST_BIGHOLE) < 0) {
+                if(select_sprite(gs->ll, gs->spawnerSprite,
+                                 TEST_BIGHOLE, TEST_SPRITE_DIM) < 0) {
                     return(NULL);
                 }
 
                 if(position_sprite(gs->ll, gs->spawnerSprite,
-                                   gs->spawnerx, gs->spawnery) < 0) {
+                                   gs->spawnerx, gs->spawnery,
+                                   TEST_SPRITE_DIM) < 0) {
                     return(NULL);
                 }
 
@@ -2254,240 +1114,6 @@ int game_draw(void *priv) {
     return(0);
 }
 
-void fill_tilemap_with_pattern(unsigned int *values,
-                               unsigned int vWidth,
-                               unsigned int vHeight,
-                               const unsigned int *pattern,
-                               unsigned int pWidth,
-                               unsigned int pHeight) {
-    unsigned int x, y;
-
-    for(y = 0; y < vHeight; y++) {
-        for(x = 0; x < vWidth; x++) {
-            values[y * vWidth + x] = 
-                pattern[(y % pHeight) * pWidth + (x % pWidth)];
-        }
-    }
-}
-
-#define MAKE_COLOR_BOX_COLOR \
-    color_from_angle(SCALE((double)rand(), \
-                           0.0, RAND_MAX, \
-                           0.0, M_PI * 2.0), \
-                           0, RANDRANGE((int)(CBOX_MIN_COLOR * 255.0), \
-                                        (int)(CBOX_MAX_COLOR * 255.0)))
-int create_color_box(LayerList *ll,
-                     ColorBox *cbox,
-                     int pTileset,
-                     unsigned int pWidth,
-                     unsigned int pHeight,
-                     const unsigned int *pattern) {
-    cbox->shadowOffset = RANDRANGE(CBOX_SHADOW_MIN, CBOX_SHADOW_MAX) * SPRITE_SCALE;
-    cbox->speed = (float)RANDRANGE(CBOX_MIN_SPEED, CBOX_MAX_SPEED) * SPRITE_SCALE * ACTOR_RATE / MILLISECOND;
-    cbox->w = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / SPRITE_SCALE;
-    cbox->h = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / SPRITE_SCALE;
-    /* if the area is too big or small, prefer rectangles to squares */
-    if(cbox->w * cbox->h > CBOX_MAX_AREA) {
-        if(cbox->w > cbox->h) {
-            cbox->h = CBOX_MAX_AREA / cbox->w;
-        } else {
-            cbox->w = CBOX_MAX_AREA / cbox->h;
-        }
-    } else if(cbox->w * cbox->h < CBOX_MIN_AREA) {
-        if(cbox->w > cbox->h) {
-            cbox->w = CBOX_MIN_AREA / cbox->h;
-        } else {
-            cbox->h = CBOX_MIN_AREA / cbox->w;
-        }
-    }
-    /* prefer to go along the strip's length */
-    if(cbox->w < cbox->h) {
-        cbox->x = RANDRANGE(0, WINDOW_WIDTH - cbox->w * SPRITE_SCALE);
-        if(rand() % 2 == 0) {
-            cbox->dir = DIR_DOWN;
-            cbox->y = -(cbox->h) * SPRITE_SCALE - cbox->shadowOffset;
-        } else {
-            cbox->dir = DIR_UP;
-            cbox->y = WINDOW_HEIGHT;
-        }
-    } else {
-        cbox->y = RANDRANGE(0, WINDOW_HEIGHT - cbox->h * SPRITE_SCALE);
-        if(rand() % 2 == 0) {
-            cbox->dir = DIR_LEFT;
-            cbox->x = WINDOW_WIDTH;
-        } else {
-            cbox->dir = DIR_RIGHT;
-            cbox->x = -(cbox->w) * SPRITE_SCALE - cbox->shadowOffset;
-        }
-    }
-
-    cbox->bgColor = MAKE_COLOR_BOX_COLOR;
-    Uint32 fgColor = MAKE_COLOR_BOX_COLOR;
-    unsigned int cboxTileWidth = cbox->w / TEST_SPRITE_WIDTH;
-    if(cbox->w % TEST_SPRITE_WIDTH > 0) {
-        cboxTileWidth++;
-    }
-    unsigned int cboxTileHeight = cbox->h / TEST_SPRITE_HEIGHT;
-    if(cbox->h % TEST_SPRITE_HEIGHT > 0) {
-        cboxTileHeight++;
-    }
-    unsigned int cboxTilemap[cboxTileWidth * cboxTileHeight];
-    fill_tilemap_with_pattern(cboxTilemap,
-                              cboxTileWidth, cboxTileHeight,
-                              pattern,
-                              pWidth, pHeight);
-    /* tilemap is already -1 */
-    cbox->layer = -1;
-    if(load_graphic(ll, NULL,
-                    TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
-                    &pTileset, &(cbox->tilemap), &(cbox->layer),
-                    cboxTilemap,
-                    NULL,
-                    cboxTileWidth, cboxTileHeight,
-                    SPRITE_SCALE) < 0) {
-        return(-1);
-    }
-    if(tilemap_set_layer_blendmode(ll, cbox->layer,
-                                   TILEMAP_BLENDMODE_ADD) < 0) {
-        fprintf(stderr, "Failed to set colorbox blend mode.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_colormod(ll, cbox->layer,
-                                  fgColor) < 0) {
-        fprintf(stderr, "Failed to set colorbox colormod.\n");
-        return(-1);
-    }
-    if(tilemap_set_layer_window(ll, cbox->layer,
-                                cbox->w, cbox->h) < 0) {
-        fprintf(stderr, "Failed to set colorbox window.\n");
-        return(-1);
-    }
-    unsigned int xscroll = 0;
-    unsigned int yscroll = 0;
-    if(cbox->w % TEST_SPRITE_WIDTH > 0) {
-        xscroll = RANDRANGE(0, (cboxTileWidth * TEST_SPRITE_WIDTH) - cbox->w);
-    }
-    if(cbox->h % TEST_SPRITE_HEIGHT > 0) {
-        yscroll = RANDRANGE(0, (cboxTileHeight * TEST_SPRITE_HEIGHT) - cbox->h);
-    }
-    if(tilemap_set_layer_scroll_pos(ll, cbox->layer,
-                                    xscroll, yscroll) < 0) {
-        fprintf(stderr, "Failed to set colorbox scroll.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
-int free_color_box(LayerList *ll, ColorBox *cbox) {
-    if(tilemap_free_layer(ll, cbox->layer) < 0) {
-        fprintf(stderr, "Failed to free colorbox layer.\n");
-        return(-1);
-    }
-    if(tilemap_free_tilemap(ll, cbox->tilemap) < 0) {
-        fprintf(stderr, "Failed to free colorbox tilemap.\n");
-        return(-1);
-    }
-    cbox->tilemap = -1;
-
-    return(0);
-}
-
-int update_color_boxes(LayerList *ll, ColorBox *cbox) {
-    unsigned int i;
-
-    for(i = 0; i < MAX_COLOR_BOX; i++) {
-        if(cbox[i].tilemap == -1) {
-            continue;
-        }
-
-        switch(cbox[i].dir) {
-            case DIR_LEFT:
-                cbox[i].x -= cbox[i].speed;
-                if(cbox[i].x <= -(cbox[i].w) * SPRITE_SCALE - cbox[i].shadowOffset) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
-                        return(-1);
-                    }
-                    continue;
-                }
-                break;
-            case DIR_RIGHT:
-                cbox[i].x += cbox[i].speed;
-                if(cbox[i].x >= WINDOW_WIDTH) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
-                        return(-1);
-                    }
-                    continue;
-                }
-                break;
-            case DIR_UP:
-                cbox[i].y -= cbox[i].speed;
-                if(cbox[i].y <= -(cbox[i].h) * SPRITE_SCALE - cbox[i].shadowOffset) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
-                        return(-1);
-                    }
-                    continue;
-                }
-                break;
-            default: /* DIR_DOWN */
-                cbox[i].y += cbox[i].speed;
-                if(cbox[i].y >= WINDOW_HEIGHT) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
-                        return(-1);
-                    }
-                    continue;
-                }
-                break;
-        }
-    }
-
-    return(0);
-}
-
-int draw_color_boxes(LayerList *ll, ColorBox *cbox) {
-    unsigned int i;
-    SDL_Renderer *renderer = layerlist_get_renderer(ll);
-
-    for(i = 0; i < MAX_COLOR_BOX; i++) {
-        if(cbox[i].tilemap == -1) {
-            continue;
-        }
-
-#ifdef OPAQUE_COLOR_BOXES
-        SDL_Rect rect;
-
-        rect.w = cbox[i].w * SPRITE_SCALE;
-        rect.h = cbox[i].h * SPRITE_SCALE;
-        rect.x = cbox[i].x + cbox[i].shadowOffset;
-        rect.y = cbox[i].y + cbox[i].shadowOffset;
-        if(box_fill(renderer, &rect, 0, 0, 0, CBOX_SHADOW_TRANSLUCENCY) < 0) {
-            return(-1);
-        }
-
-        rect.x = cbox[i].x;
-        rect.y = cbox[i].y;
-        if(box_fill(renderer, &rect, TILEMAP_COLOR_R(cbox[i].bgColor),
-                                     TILEMAP_COLOR_G(cbox[i].bgColor),
-                                     TILEMAP_COLOR_B(cbox[i].bgColor),
-                                     SDL_ALPHA_OPAQUE) < 0) {
-            return(-1);
-        }
-#endif
-
-        if(tilemap_set_layer_pos(ll, cbox[i].layer,
-                                 cbox[i].x, cbox[i].y) < 0) {
-            fprintf(stderr, "Failed to set color box pos.\n");
-            return(-1);
-        }
-        if(tilemap_draw_layer(ll, cbox[i].layer) < 0) {
-            fprintf(stderr, "Failed to draw color box layer.\n");
-            return(-1);
-        }
-    }
-
-    return(0);
-}
-
 int main(int argc, char **argv) {
     unsigned int i;
     SDL_Window *win;
@@ -2521,7 +1147,9 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if(initialize_video(&win, &renderer, &format, RENDERER_FLAGS) < 0) {
+    if(initialize_video(&win, &renderer, &format,
+                        WINDOW_WIDTH, WINDOW_HEIGHT,
+                        WINDOW_TITLE, WINDOW_FLAGS, RENDERER_FLAGS) < 0) {
         fprintf(stderr, "Failed to initialize video.\n");
         goto error_sdl;
     }
@@ -2543,7 +1171,7 @@ int main(int argc, char **argv) {
     }
 
     /* initialize the audio */
-    gs.as = init_audio_state();
+    gs.as = init_audio_state(DEFAULT_RATE);
     if(gs.as == NULL) {
         goto error_ll;
     }
@@ -2559,7 +1187,7 @@ int main(int argc, char **argv) {
     gs.tileset = -1;
     gs.tilemap = -1;
     if(load_graphic(gs.ll, TEST_SPRITESHEET,
-                    TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
+                    TEST_SPRITE_DIM, TEST_SPRITE_DIM,
                     &(gs.tileset), &(gs.tilemap), &NOLAYER,
                     TEST_SPRITESHEET_VALUES,
                     TEST_SPRITESHEET_COLORMOD,
@@ -2568,12 +1196,14 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
 
-    gs.catlayer = create_sprite(gs.ll, gs.tilemap);
+    gs.catlayer = create_sprite(gs.ll, gs.tilemap,
+                                TEST_SPRITE_DIM, SPRITE_SCALE);
     if(gs.catlayer < 0) {
         goto error_synth;
     }
 
-    gs.spawnerSprite = create_sprite(gs.ll, gs.tilemap);
+    gs.spawnerSprite = create_sprite(gs.ll, gs.tilemap,
+                                     TEST_SPRITE_DIM, SPRITE_SCALE);
     if(gs.spawnerSprite < 0) {
         goto error_synth;
     }
@@ -2616,7 +1246,7 @@ int main(int argc, char **argv) {
                               BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT);
     gs.lBackground = -1;
     if(load_graphic(gs.ll, NULL,
-                    TEST_SPRITE_WIDTH, TEST_SPRITE_HEIGHT,
+                    TEST_SPRITE_DIM, TEST_SPRITE_DIM,
                     &(gs.tileset), &tmBackground, &(gs.lBackground),
                     bgTilemap,
                     NULL,
@@ -2667,7 +1297,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to set render target to screen.\n");
         goto error_synth;
     }
-    gs.goreSprite = create_sprite(gs.ll, gs.tilemap);
+    gs.goreSprite = create_sprite(gs.ll, gs.tilemap,
+                                  TEST_SPRITE_DIM, SPRITE_SCALE);
     if(gs.goreSprite < 0) {
         goto error_synth;
     }
@@ -2825,14 +1456,19 @@ int main(int argc, char **argv) {
                     if(create_color_box(gs.ll, &(cbox[i]),
                                         gs.tileset,
                                         BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT,
-                                        BG_PATTERN) < 0) {
+                                        BG_PATTERN,
+                                        WINDOW_WIDTH, WINDOW_HEIGHT,
+                                        TEST_SPRITE_DIM, TEST_SPRITE_DIM,
+                                        SPRITE_SCALE, ACTOR_RATE) < 0) {
                         goto error_synth;
                     }
                 }
-                nextColorBox += RANDRANGE(CBOX_MIN_TIME, CBOX_MAX_TIME);
+                nextColorBox += CBOX_TIME_RAND;
             }
 
-            if(update_color_boxes(gs.ll, cbox) < 0) {
+            if(update_color_boxes(gs.ll, cbox, MAX_COLOR_BOX,
+                                  WINDOW_WIDTH, WINDOW_HEIGHT,
+                                  SPRITE_SCALE) < 0) {
                 goto error_synth;
             }
 
@@ -2868,11 +1504,13 @@ int main(int argc, char **argv) {
 
         if(mode != NULL) {
             /* always draw the background, boxes and gore layer */
-            if(prepare_frame(gs.ll, gs.lBackground) < 0) {
+            if(prepare_frame(gs.ll,
+                             BG_R, BG_G, BG_B,
+                             gs.lBackground) < 0) {
                 goto error_synth;
             }
 
-            if(draw_color_boxes(gs.ll, cbox) < 0) {
+            if(draw_color_boxes(gs.ll, cbox, MAX_COLOR_BOX, SPRITE_SCALE) < 0) {
                 goto error_synth;
             }
 
@@ -2891,7 +1529,7 @@ int main(int argc, char **argv) {
             }
 
             /* draw the hud above everything */
-            if(draw_hud(&gs) < 0) {
+            if(draw_text_layer(gs.ll, gs.hud, HUD_SCALE, C_HUD_SHADOW, C_OPAQUE) < 0) {
                 goto error_synth;
             }
         }

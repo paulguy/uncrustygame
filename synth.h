@@ -20,6 +20,8 @@
 #ifndef _SYNTH_H
 #define _SYNTH_H
 
+#include <SDL.h>
+
 typedef int (*synth_frame_cb_t)(void *priv);
 typedef void (*synth_log_cb_t)(void *priv, const char *fmt, ...);
 
@@ -60,7 +62,7 @@ typedef enum {
     SYNTH_MODE_PHASE_SOURCE
 } SynthPlayerMode;
 
-typedef struct Synth_t Synth;
+typedef struct Synth_s Synth;
 
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format);
 int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate);
