@@ -145,7 +145,6 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define TEST_MARBLE2 (16)
 #define TEST_MARBLE3 (17)
 
-#define CAT_DISTANCE     (TEST_SPRITE_DIM * SPRITE_SCALE / 2)
 
 #define FONT_WIDTH  (8)
 #define FONT_HEIGHT (8)
@@ -153,8 +152,11 @@ const unsigned int TEST_SPRITESHEET_COLORMOD[] = {
 #define HUD_WIDTH   (WINDOW_WIDTH / (FONT_WIDTH * HUD_SCALE))
 #define HUD_HEIGHT  (WINDOW_HEIGHT / (FONT_HEIGHT * HUD_SCALE))
 #define SPRITE_SCALE    (2)
-#define WINDOW_TILE_WIDTH (WINDOW_WIDTH / (TEST_SPRITE_DIM * SPRITE_SCALE))
-#define WINDOW_TILE_HEIGHT (WINDOW_HEIGHT / (TEST_SPRITE_DIM * SPRITE_SCALE))
+#define SCALED_SPRITE_DIM (TEST_SPRITE_DIM * SPRITE_SCALE)
+#define WINDOW_TILE_WIDTH (WINDOW_WIDTH / SCALED_SPRITE_DIM)
+#define WINDOW_TILE_HEIGHT (WINDOW_HEIGHT / SCALED_SPRITE_DIM)
+
+#define CAT_DISTANCE     (SCALED_SPRITE_DIM / 2)
 
 #define ARRAY_COUNT(ARR) (sizeof(ARR) / sizeof((ARR[0])))
 
@@ -618,7 +620,7 @@ int process_enemies(GameState *gs) {
 
             if(position_sprite(gs->ll, gs->goreSprite,
                                gs->enemy[i].x, gs->enemy[i].y,
-                               TEST_SPRITE_DIM) < 0) {
+                               SCALED_SPRITE_DIM) < 0) {
                 return(-1);
             }
             if(tilemap_set_layer_rotation(gs->ll, gs->goreSprite,
@@ -674,10 +676,10 @@ int process_enemies(GameState *gs) {
                             NULL,
                             &(gs->enemy[i].angle), gs->enemy[i].maxAngle);
             /* invalidate any enemies which have gone of screen */
-            if(gs->enemy[i].x < -(TEST_SPRITE_DIM * SPRITE_SCALE / 2.0) ||
-               gs->enemy[i].x > WINDOW_WIDTH + (TEST_SPRITE_DIM * SPRITE_SCALE / 2.0) ||
-               gs->enemy[i].y < -(TEST_SPRITE_DIM * SPRITE_SCALE / 2.0) ||
-               gs->enemy[i].y > WINDOW_HEIGHT + (TEST_SPRITE_DIM * SPRITE_SCALE / 2.0)) {
+            if(gs->enemy[i].x < -(SCALED_SPRITE_DIM / 2.0) ||
+               gs->enemy[i].x > WINDOW_WIDTH + (SCALED_SPRITE_DIM / 2.0) ||
+               gs->enemy[i].y < -(SCALED_SPRITE_DIM / 2.0) ||
+               gs->enemy[i].y > WINDOW_HEIGHT + (SCALED_SPRITE_DIM / 2.0)) {
                 gs->enemy[i].sprite = -1;
                 continue;
             }
@@ -702,7 +704,7 @@ int process_enemies(GameState *gs) {
 
         if(position_sprite(gs->ll, gs->enemy[i].sprite,
                            gs->enemy[i].x, gs->enemy[i].y,
-                           TEST_SPRITE_DIM) < 0) {
+                           SCALED_SPRITE_DIM) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->enemy[i].sprite,
@@ -736,8 +738,8 @@ void reset_state(GameState *gs) {
 
     stop_sound(gs->as, gs->catSound);
 
-    gs->catx = (WINDOW_WIDTH - TEST_SPRITE_DIM) / 2;
-    gs->caty = (WINDOW_HEIGHT - TEST_SPRITE_DIM) / 2;
+    gs->catx = (WINDOW_WIDTH - SCALED_SPRITE_DIM) / 2;
+    gs->caty = (WINDOW_HEIGHT - SCALED_SPRITE_DIM) / 2;
     gs->catState = CAT_ANIM0;
     gs->catAnim = TEST_ANIM0;
     gs->catAngle = 0.0;
@@ -775,7 +777,7 @@ int update_cat(GameState *gs) {
         }
         if(position_sprite(gs->ll, gs->catlayer,
                            gs->catx, gs->caty,
-                           TEST_SPRITE_DIM) < 0) {
+                           SCALED_SPRITE_DIM) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_rotation(gs->ll, gs->catlayer,
@@ -810,10 +812,10 @@ int update_cat(GameState *gs) {
         }
 
         if(position_sprite(gs->ll, gs->zzzlayer,
-                           gs->catx + (TEST_SPRITE_DIM * SPRITE_SCALE * ZZZ_POS_X),
-                           gs->caty + (TEST_SPRITE_DIM * SPRITE_SCALE * ZZZ_POS_Y) + 
+                           gs->catx + SCALED_SPRITE_DIM * ZZZ_POS_X,
+                           gs->caty + SCALED_SPRITE_DIM * ZZZ_POS_Y + 
                            ((sin(gs->zzzcycle) - 1.0) * ZZZ_AMP * SPRITE_SCALE),
-                           TEST_SPRITE_DIM) < 0) {
+                           SCALED_SPRITE_DIM) < 0) {
             return(-1);
         }
         if(tilemap_set_layer_colormod(gs->ll, gs->zzzlayer,
@@ -1067,7 +1069,7 @@ GameMode* game_control(void *priv) {
 
                 if(position_sprite(gs->ll, gs->spawnerSprite,
                                    gs->spawnerx, gs->spawnery,
-                                   TEST_SPRITE_DIM) < 0) {
+                                   SCALED_SPRITE_DIM) < 0) {
                     return(NULL);
                 }
 
