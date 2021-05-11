@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "testgfx.h"
+#include "extramath.h"
 
 #define CBOX_SHADOW_MIN  (1)
 #define CBOX_SHADOW_MAX  (5)
@@ -14,6 +15,37 @@
 #define CBOX_MIN_SPEED   (16)
 #define CBOX_MAX_SPEED   (80)
 #define OPAQUE_COLOR_BOXES
+#define CBOX_MIN_TIME    (1000)
+#define CBOX_MAX_TIME    (5000)
+
+#define CBOX_RAND_TIME RANDRANGE(CBOX_MIN_TIME, CBOX_MAX_TIME)
+
+typedef enum {
+    DIR_LEFT,
+    DIR_RIGHT,
+    DIR_UP,
+    DIR_DOWN
+} Direction;
+
+typedef struct {
+    int tilemap;
+    int layer;
+    Uint32 bgColor;
+    float x, y;
+    int w, h;
+    int shadowOffset;
+    Direction dir;
+    float speed;
+} ColorBoxItem;
+
+typedef struct ColorBox_s {
+    ColorBoxItem *cbox;
+    unsigned int count;
+    int wWidth, wHeight;
+    int scale;
+    unsigned int frameTime;
+    LayerList *ll;
+} ColorBox;
 
 int load_graphic(LayerList *ll,
                  const char *filename,
@@ -301,23 +333,79 @@ void fill_tilemap_with_pattern(unsigned int *values,
     }
 }
 
+ColorBox *init_color_boxes(LayerList *ll, unsigned int count,
+                           unsigned int wWidth, unsigned int wHeight,
+                           unsigned int scale, unsigned int frameTime) {
+    ColorBox *cboxes;
+    unsigned int i;
+
+    cboxes = malloc(sizeof(ColorBox));
+    if(cboxes == NULL) {
+        return(NULL);
+    }
+    cboxes->cbox = malloc(sizeof(ColorBoxItem) * count);
+    if(cboxes->cbox == NULL) {
+        free(cboxes);
+        return(NULL);
+    }
+
+    cboxes->count = count;
+    cboxes->wWidth = wWidth;
+    cboxes->wHeight = wHeight;
+    cboxes->scale = scale;
+    cboxes->frameTime = frameTime;
+    cboxes->ll = ll;
+
+    for(i = 0; i < count; i++) {
+        cboxes->cbox[i].tilemap = -1;
+    }
+
+    return(cboxes);
+}
+
+void free_color_boxes(ColorBox *cboxes) {
+    unsigned int i;
+
+    for(i = 0; i < cboxes->count; i++) {
+        if(cboxes->cbox[i].tilemap == -1) {
+            continue;
+        }
+        tilemap_free_layer(cboxes->ll, cboxes->cbox[i].layer);
+        tilemap_free_tilemap(cboxes->ll, cboxes->cbox[i].tilemap);
+    }
+
+    free(cboxes->cbox);
+    free(cboxes);
+}
+
 #define MAKE_COLOR_BOX_COLOR \
     color_from_angle(SCALE((double)rand(), \
                            0.0, RAND_MAX, \
                            0.0, M_PI * 2.0), \
                            0, RANDRANGE((int)(CBOX_MIN_COLOR * 255.0), \
                                         (int)(CBOX_MAX_COLOR * 255.0)))
-int create_color_box(LayerList *ll, ColorBox *cbox,
-                     int pTileset,
+int create_color_box(ColorBox *cboxes, int pTileset,
                      unsigned int pWidth, unsigned int pHeight,
                      const unsigned int *pattern,
-                     unsigned int wWidth, unsigned int wHeight,
-                     unsigned int tWidth, unsigned int tHeight,
-                     unsigned int scale, unsigned int rate) {
-    cbox->shadowOffset = RANDRANGE(CBOX_SHADOW_MIN, CBOX_SHADOW_MAX) * scale;
-    cbox->speed = (float)RANDRANGE(CBOX_MIN_SPEED, CBOX_MAX_SPEED) * scale * rate / MILLISECOND;
-    cbox->w = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / scale;
-    cbox->h = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / scale;
+                     unsigned int tWidth, unsigned int tHeight) {
+    unsigned int i;
+    ColorBoxItem *cbox;
+
+    for(i = 0; i < cboxes->count; i++) {
+        if(cboxes->cbox[i].tilemap == -1) {
+            break;
+        }
+    }
+    /* if there's no open slots, just do nothing and let it go around */
+    if(i == cboxes->count) {
+        return(CBOX_RAND_TIME);
+    }
+    cbox = &(cboxes->cbox[i]);
+
+    cbox->shadowOffset = RANDRANGE(CBOX_SHADOW_MIN, CBOX_SHADOW_MAX) * cboxes->scale;
+    cbox->speed = (float)RANDRANGE(CBOX_MIN_SPEED, CBOX_MAX_SPEED) * cboxes->scale * cboxes->frameTime / MILLISECOND;
+    cbox->w = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / cboxes->scale;
+    cbox->h = RANDRANGE(CBOX_MIN_DIM, CBOX_MAX_DIM) / cboxes->scale;
     /* if the area is too big or small, prefer rectangles to squares */
     if(cbox->w * cbox->h > CBOX_MAX_AREA) {
         if(cbox->w > cbox->h) {
@@ -334,22 +422,22 @@ int create_color_box(LayerList *ll, ColorBox *cbox,
     }
     /* prefer to go along the strip's length */
     if(cbox->w < cbox->h) {
-        cbox->x = RANDRANGE(0, wWidth - cbox->w * scale);
+        cbox->x = RANDRANGE(0, cboxes->wWidth - cbox->w * cboxes->scale);
         if(rand() % 2 == 0) {
             cbox->dir = DIR_DOWN;
-            cbox->y = -(cbox->h) * (int)scale - cbox->shadowOffset;
+            cbox->y = -(cbox[i].h) * cboxes->scale - cbox->shadowOffset;
         } else {
             cbox->dir = DIR_UP;
-            cbox->y = wHeight;
+            cbox->y = cboxes->wHeight;
         }
     } else {
-        cbox->y = RANDRANGE(0, wHeight - cbox->h * scale);
+        cbox->y = RANDRANGE(0, cboxes->wHeight - cbox->h * cboxes->scale);
         if(rand() % 2 == 0) {
             cbox->dir = DIR_LEFT;
-            cbox->x = wWidth;
+            cbox->x = cboxes->wWidth;
         } else {
             cbox->dir = DIR_RIGHT;
-            cbox->x = -(cbox->w) * (int)scale - cbox->shadowOffset;
+            cbox->x = -(cbox->w) * cboxes->scale - cbox->shadowOffset;
         }
     }
 
@@ -370,26 +458,26 @@ int create_color_box(LayerList *ll, ColorBox *cbox,
                               pWidth, pHeight);
     /* tilemap is already -1 */
     cbox->layer = -1;
-    if(load_graphic(ll, NULL,
+    if(load_graphic(cboxes->ll, NULL,
                     tWidth, tHeight,
                     &pTileset, &(cbox->tilemap), &(cbox->layer),
                     cboxTilemap,
                     NULL,
                     cboxTileWidth, cboxTileHeight,
-                    scale) < 0) {
+                    cboxes->scale) < 0) {
         return(-1);
     }
-    if(tilemap_set_layer_blendmode(ll, cbox->layer,
+    if(tilemap_set_layer_blendmode(cboxes->ll, cbox->layer,
                                    TILEMAP_BLENDMODE_ADD) < 0) {
         fprintf(stderr, "Failed to set colorbox blend mode.\n");
         return(-1);
     }
-    if(tilemap_set_layer_colormod(ll, cbox->layer,
+    if(tilemap_set_layer_colormod(cboxes->ll, cbox->layer,
                                   fgColor) < 0) {
         fprintf(stderr, "Failed to set colorbox colormod.\n");
         return(-1);
     }
-    if(tilemap_set_layer_window(ll, cbox->layer,
+    if(tilemap_set_layer_window(cboxes->ll, cbox->layer,
                                 cbox->w, cbox->h) < 0) {
         fprintf(stderr, "Failed to set colorbox window.\n");
         return(-1);
@@ -402,123 +490,121 @@ int create_color_box(LayerList *ll, ColorBox *cbox,
     if(cbox->h % tHeight > 0) {
         yscroll = RANDRANGE(0, (cboxTileHeight * tHeight) - cbox->h);
     }
-    if(tilemap_set_layer_scroll_pos(ll, cbox->layer,
+    if(tilemap_set_layer_scroll_pos(cboxes->ll, cbox->layer,
                                     xscroll, yscroll) < 0) {
         fprintf(stderr, "Failed to set colorbox scroll.\n");
         return(-1);
     }
 
-    return(0);
+    return(CBOX_RAND_TIME);
 }
 #undef MAKE_COLOR_BOX_COLOR
 
-int free_color_box(LayerList *ll, ColorBox *cbox) {
-    if(tilemap_free_layer(ll, cbox->layer) < 0) {
+static int free_color_box(ColorBox *cboxes, unsigned int i) {
+    if(tilemap_free_layer(cboxes->ll, cboxes->cbox[i].layer) < 0) {
         fprintf(stderr, "Failed to free colorbox layer.\n");
         return(-1);
     }
-    if(tilemap_free_tilemap(ll, cbox->tilemap) < 0) {
+    if(tilemap_free_tilemap(cboxes->ll, cboxes->cbox[i].tilemap) < 0) {
         fprintf(stderr, "Failed to free colorbox tilemap.\n");
         return(-1);
     }
-    cbox->tilemap = -1;
+    cboxes->cbox[i].tilemap = -1;
 
     return(0);
 }
 
-int update_color_boxes(LayerList *ll,
-                       ColorBox *cbox, unsigned int count,
-                       unsigned int wWidth, unsigned int wHeight,
-                       unsigned int scale) {
+int update_color_boxes(ColorBox *cboxes) {
     unsigned int i;
+    ColorBoxItem *cbox;
 
-    for(i = 0; i < count; i++) {
-        if(cbox[i].tilemap == -1) {
+    for(i = 0; i < cboxes->count; i++) {
+        if(cboxes->cbox[i].tilemap == -1) {
             continue;
         }
+        cbox = &(cboxes->cbox[i]);
 
-        switch(cbox[i].dir) {
+        switch(cbox->dir) {
             case DIR_LEFT:
-                cbox[i].x -= cbox[i].speed;
-                if(cbox[i].x <= -(cbox[i].w) * (int)scale - cbox[i].shadowOffset) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
+                cbox->x -= cbox->speed;
+                if(cbox->x <= -(cbox->w) * cboxes->scale - cbox->shadowOffset) {
+                    if(free_color_box(cboxes, i) < 0) {
                         return(-1);
                     }
                     continue;
                 }
                 break;
             case DIR_RIGHT:
-                cbox[i].x += cbox[i].speed;
-                if(cbox[i].x >= (int)wWidth) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
+                cbox->x += cbox->speed;
+                if(cbox->x >= cboxes->wWidth) {
+                    if(free_color_box(cboxes, i) < 0) {
                         return(-1);
                     }
                     continue;
                 }
                 break;
             case DIR_UP:
-                cbox[i].y -= cbox[i].speed;
-                if(cbox[i].y <= -(cbox[i].h) * (int)scale - cbox[i].shadowOffset) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
+                cbox->y -= cbox->speed;
+                if(cbox->y <= -(cbox->h) * cboxes->scale - cbox->shadowOffset) {
+                    if(free_color_box(cboxes, i) < 0) {
                         return(-1);
                     }
                     continue;
                 }
                 break;
             default: /* DIR_DOWN */
-                cbox[i].y += cbox[i].speed;
-                if(cbox[i].y >= (int)wHeight) {
-                    if(free_color_box(ll, &(cbox[i])) < 0) {
+                cbox->y += cbox->speed;
+                if(cbox->y >= cboxes->wHeight) {
+                    if(free_color_box(cboxes, i) < 0) {
                         return(-1);
                     }
                     continue;
                 }
                 break;
         }
-
     }
 
     return(0);
 }
 
-int draw_color_boxes(LayerList *ll,
-                     ColorBox *cbox, unsigned int count,
-                     unsigned int scale) {
+int draw_color_boxes(ColorBox *cboxes) {
     unsigned int i;
-    SDL_Renderer *renderer = layerlist_get_renderer(ll);
+    ColorBoxItem *cbox;
+    SDL_Renderer *renderer = layerlist_get_renderer(cboxes->ll);
 
-    for(i = 0; i < count; i++) {
-        if(cbox[i].tilemap == -1) {
+    for(i = 0; i < cboxes->count; i++) {
+        if(cboxes->cbox[i].tilemap == -1) {
             continue;
         }
+        cbox = &(cboxes->cbox[i]);
 
 #ifdef OPAQUE_COLOR_BOXES
         SDL_Rect rect;
 
-        rect.w = cbox[i].w * scale;
-        rect.h = cbox[i].h * scale;
-        rect.x = cbox[i].x + cbox[i].shadowOffset;
-        rect.y = cbox[i].y + cbox[i].shadowOffset;
+        rect.w = cbox->w * cboxes->scale;
+        rect.h = cbox->h * cboxes->scale;
+        rect.x = cbox->x + cbox->shadowOffset;
+        rect.y = cbox->y + cbox->shadowOffset;
         if(box_fill(renderer, &rect, 0, 0, 0, CBOX_SHADOW_TRANSLUCENCY) < 0) {
             return(-1);
         }
 
-        rect.x = cbox[i].x;
-        rect.y = cbox[i].y;
-        if(box_fill(renderer, &rect, TILEMAP_COLOR_R(cbox[i].bgColor),
-                                     TILEMAP_COLOR_G(cbox[i].bgColor),
-                                     TILEMAP_COLOR_B(cbox[i].bgColor),
+        rect.x = cbox->x;
+        rect.y = cbox->y;
+        if(box_fill(renderer, &rect, TILEMAP_COLOR_R(cbox->bgColor),
+                                     TILEMAP_COLOR_G(cbox->bgColor),
+                                     TILEMAP_COLOR_B(cbox->bgColor),
                                      SDL_ALPHA_OPAQUE) < 0) {
             return(-1);
         }
 #endif
 
-        if(tilemap_set_layer_pos(ll, cbox[i].layer,
-                                 cbox[i].x, cbox[i].y) < 0) {
+        if(tilemap_set_layer_pos(cboxes->ll, cbox->layer,
+                                 cbox->x, cbox->y) < 0) {
             fprintf(stderr, "Failed to set color box pos.\n");
             return(-1);
         }
-        if(tilemap_draw_layer(ll, cbox[i].layer) < 0) {
+        if(tilemap_draw_layer(cboxes->ll, cbox->layer) < 0) {
             fprintf(stderr, "Failed to draw color box layer.\n");
             return(-1);
         }

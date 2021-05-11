@@ -1115,7 +1115,6 @@ int game_draw(void *priv) {
 }
 
 int main(int argc, char **argv) {
-    unsigned int i;
     SDL_Window *win;
     SDL_Renderer *renderer;
     Uint32 format;
@@ -1134,8 +1133,8 @@ int main(int argc, char **argv) {
     int meow1_buf, meow2_buf, cat_activation_buf, purr_buf;
     int meat_buf, meat2_buf;
     GameMode *mode;
-    ColorBox cbox[MAX_COLOR_BOX];
     int nextColorBox;
+    ColorBox *cbox = NULL;
 
     /* just a non-negative value to pass as pointer to load_graphic tomake it
      * simply not create a new layer itself, nor modify any layer properties. */
@@ -1362,16 +1361,18 @@ int main(int argc, char **argv) {
 #endif
 
     reset_state(&gs);
+    cbox = init_color_boxes(gs.ll, MAX_COLOR_BOX,
+                            WINDOW_WIDTH, WINDOW_HEIGHT,
+                            SPRITE_SCALE, ACTOR_RATE);
+    if(cbox == NULL) {
+        goto error_synth;
+    }
     /* make sure the mouse position is set to _something_ sensical.  Just make
      * it think the mouse is positioned where the cat is so it starts idle
      * until a mouse motion event comes in. */
     gs.mousex = gs.catx;
     gs.mousey = gs.caty;
     fullscreen = 0;
-
-    for(i = 0; i < MAX_COLOR_BOX; i++) {
-        cbox[i].tilemap = -1;
-    }
     nextColorBox = 0;
 
     /* ##### MAIN LOOP ##### */
@@ -1446,29 +1447,18 @@ int main(int argc, char **argv) {
 
             nextColorBox -= ACTOR_RATE;
             if(nextColorBox <= 0) {
-                for(i = 0; i < MAX_COLOR_BOX; i++) {
-                    if(cbox[i].tilemap == -1) {
-                        break;
-                    }
+                int cboxret = create_color_box(cbox, gs.tileset,
+                                               BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT,
+                                               BG_PATTERN,
+                                               TEST_SPRITE_DIM, TEST_SPRITE_DIM);
+                if(cboxret < 0) {
+                    goto error_synth;
                 }
-                /* if there's no open slots, just do nothing and let it go around */
-                if(i < MAX_COLOR_BOX) {
-                    if(create_color_box(gs.ll, &(cbox[i]),
-                                        gs.tileset,
-                                        BG_PATTERN_WIDTH, BG_PATTERN_HEIGHT,
-                                        BG_PATTERN,
-                                        WINDOW_WIDTH, WINDOW_HEIGHT,
-                                        TEST_SPRITE_DIM, TEST_SPRITE_DIM,
-                                        SPRITE_SCALE, ACTOR_RATE) < 0) {
-                        goto error_synth;
-                    }
-                }
-                nextColorBox += CBOX_TIME_RAND;
+
+                nextColorBox += cboxret;
             }
 
-            if(update_color_boxes(gs.ll, cbox, MAX_COLOR_BOX,
-                                  WINDOW_WIDTH, WINDOW_HEIGHT,
-                                  SPRITE_SCALE) < 0) {
+            if(update_color_boxes(cbox) < 0) {
                 goto error_synth;
             }
 
@@ -1510,7 +1500,7 @@ int main(int argc, char **argv) {
                 goto error_synth;
             }
 
-            if(draw_color_boxes(gs.ll, cbox, MAX_COLOR_BOX, SPRITE_SCALE) < 0) {
+            if(draw_color_boxes(cbox) < 0) {
                 goto error_synth;
             }
 
@@ -1552,13 +1542,8 @@ int main(int argc, char **argv) {
     synth_free_buffer(s, meow2_buf);
     free_audio_state(gs.as);
 
-    for(i = 0; i < MAX_COLOR_BOX; i++) {
-        if(cbox[i].tilemap == -1) {
-            continue;
-        }
-        tilemap_free_layer(gs.ll, cbox[i].layer);
-        tilemap_free_tilemap(gs.ll, cbox[i].tilemap);
-    }
+    free_color_boxes(cbox);
+
     tilemap_free_layer(gs.ll, gs.titleLayer);
     tilemap_free_tilemap(gs.ll, tmTitle);
     tilemap_free_tileset(gs.ll, tsTitle);
@@ -1584,6 +1569,9 @@ error_synth:
     free_audio_state(gs.as);
     if(gs.goreTex != NULL) {
         SDL_DestroyTexture(gs.goreTex);
+    }
+    if(cbox != NULL) {
+        free(cbox);
     }
 error_ll:
     layerlist_free(gs.ll);

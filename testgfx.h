@@ -1,30 +1,7 @@
 #include "tilemap.h"
 #include <SDL.h>
 
-#include "extramath.h"
-
-#define CBOX_MIN_TIME    (1000)
-#define CBOX_MAX_TIME    (5000)
-
-#define CBOX_TIME_RAND RANDRANGE(CBOX_MIN_TIME, CBOX_MAX_TIME)
-
-typedef enum {
-    DIR_LEFT,
-    DIR_RIGHT,
-    DIR_UP,
-    DIR_DOWN
-} Direction;
-
-typedef struct {
-    int tilemap;
-    int layer;
-    Uint32 bgColor;
-    float x, y;
-    int w, h;
-    int shadowOffset;
-    Direction dir;
-    float speed;
-} ColorBox;
+typedef struct ColorBox_s ColorBox;
 
 int load_graphic(LayerList *ll,
                  const char *filename,
@@ -63,19 +40,13 @@ void fill_tilemap_with_pattern(unsigned int *values,
                                unsigned int vWidth, unsigned int vHeight,
                                const unsigned int *pattern,
                                unsigned int pWidth, unsigned int pHeight);
-int create_color_box(LayerList *ll,
-                     ColorBox *cbox,
-                     int pTileset,
+ColorBox *init_color_boxes(LayerList *ll, unsigned int count,
+                           unsigned int wWidth, unsigned int wHeight,
+                           unsigned int scale, unsigned int frameTime);
+void free_color_boxes(ColorBox *cboxes);
+int create_color_box(ColorBox *cbox, int pTileset,
                      unsigned int pWidth, unsigned int pHeight,
                      const unsigned int *pattern,
-                     unsigned int wWidth, unsigned int wHeight,
-                     unsigned int tWidth, unsigned int tHeight,
-                     unsigned int scale, unsigned int rate);
-int free_color_box(LayerList *ll, ColorBox *cbox);
-int update_color_boxes(LayerList *ll,
-                       ColorBox *cbox, unsigned int count,
-                       unsigned int wWidth, unsigned int wHeight,
-                       unsigned int scale);
-int draw_color_boxes(LayerList *ll,
-                     ColorBox *cbox, unsigned int count,
-                     unsigned int scale);
+                     unsigned int tWidth, unsigned int tHeight);
+int update_color_boxes(ColorBox *cbox);
+int draw_color_boxes(ColorBox *cbox);
