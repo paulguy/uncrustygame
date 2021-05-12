@@ -1,0 +1,67 @@
+sequencer format for crustygame synthesizer
+
+initial global state
+title
+speed
+buffers start
+channels start
+patterns start
+patterns order start
+
+buffers
+ number of buffers
+buffer
+ length of name or 0 for silent buffer
+ name of a wav file
+ start sample
+ end sample or length for silent buffer
+
+channels (player objects) initial state
+ number of channels
+channel
+ input buffer
+ input buffer pos
+ output buffer
+ output buffer pos
+ output mode
+ volume mode
+ volume
+ volume source
+ mode
+ loop start
+ loop end
+ phase source
+ speed mode
+ speed
+ speed source
+ running
+ run length
+
+patterns
+ number of patterns
+pattern
+ pattern length in bytes
+ pattern length in rows
+ each column is a channel
+ each row has a bitfield indicating global, channel and/or player state changes
+ for each channel, followed by the state changes
+ global
+  speed
+ channel
+  all from initial state
+ commands
+  stop note behavior
+  input buffer end behavior
+  output buffer end behavior
+  volume source end behavior
+  phase source end behavior
+  speed source end behavior
+  run length end behavior
+
+behavior
+ another row which is applied on various events, stored as a pointer, so they
+ can "cascasde"
+
+pattern order
+ number of pattern orders
+ order of patterns
