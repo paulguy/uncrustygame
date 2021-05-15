@@ -1,7 +1,7 @@
 from ctypes import *
 from sdl2 import *
 
-_LOG_CB_RETURN_T = CFUNCTYPE(None, c_char_p)
+LOG_CB_RETURN_T = CFUNCTYPE(None, c_char_p)
 
 _cg = None
 # try to find libcrustygame.so in a few places
@@ -19,7 +19,7 @@ def _set_types(func,
     func.restype = restype
     func.argtypes = argtypes
 
-_set_types(_cg.log_cb_helper, c_int, [_LOG_CB_RETURN_T, c_char_p])
+_set_types(_cg.log_cb_helper, c_int, [LOG_CB_RETURN_T, c_char_p])
 _set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_uint])
 _set_types(_cg.tilemap_blank_tileset, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
 _set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, c_void_p, c_void_p])
@@ -87,19 +87,90 @@ def tilemap_color_b(val):
 def tilemap_color_a(val):
     return((val & TILEMAP_AMASK) >> TILEMAP_ASHIFT)
 
-# just something simple for now
-@_LOG_CB_RETURN_T
-def _log_cb_return(string: str):
-    print(string.decode("utf-8"))
+class CrustyException(Exception):
+    pass
 
-class LayerList():
+# not sure if it matters but it might or whether it'll even prevent any issues
+# but try to hold references to things in dependent objects just so the internal
+# "free" functions are maybe called in a sane order during garbage collection?
+class Layerlist():
     def __init__(self,
                  renderer: SDL_Renderer,
-                 texfmt: c_uint):
-        self._ll = _cg.layerlist_new(renderer.value,
+                 texfmt,
+                 printfunc: LOG_CB_RETURN_T):
+        self._ll = _cg.layerlist_new(renderer,
                                      texfmt,
                                      _cg.log_cb_helper,
-                                     _log_cb_return)
+                                     printfunc)
 
     def __del__(self):
         _cg.layerlist_free(self._ll)
+
+    def new_tileset(self, surface :SDL_Surface, tw, th):
+        return(Tileset(self, surface, tw, th))
+
+    def new_blank_tileset(self, w, h, color, tw, th):
+        return(Tileset(self, w, h, color, tw, th))
+
+    def new_tileset_from_bmp(self, filename, tw, th):
+        return(Tileset(self, filename, tw, th))
+
+    # not sure why i allow for tilemaps without an assigned tileset but whichever
+    def new_tilemap(self, tileset, w, h):
+        tilemap = Tilemap(self, w, h)
+        tilemap.set_tileset(tileset)
+        return(tilemap)
+
+    def new_layer(self, tilemap):
+        return(Layer(self, tilemap))
+
+class Tileset():
+    def __init__(self, ll :Layerlist, *args):
+        self._ll = ll
+        if isinstance(args[0], SDL_Surface):
+            self._ts = _cg.tilemap_new_tileset(ll._ll, args[0], args[1], args[2])
+        elif isinstance(args[0], int):
+            self._ts = _cg.tilemap_blank_tileset(ll._ll, args[0], args[1], args[2], args[3], args[4])
+        elif isinstance(args[0], str):
+            self._ts = _cg.tilemap_tileset_from_bmp(ll._ll, args[0].encode("utf-8"), args[1], args[2])
+        else:
+            raise(TypeError())
+        if self._ts < 0:
+            raise(CrustyException())
+
+    def __del__(self):
+        if _cg.tilemap_free_tileset(self._ll._ll, self._ts) < 0:
+            raise(CrustyException())
+
+
+class Tilemap():
+    def __init__(self, ll :Layerlist, w, h):
+        self._ll = ll
+        self._tm = _cg.tilemap_add_tilemap(ll._ll, w, h)
+        if self._tm < 0:
+            raise(CrustyException())
+
+    def __del__(self):
+        if _cg.tilemap_free_tilemap(self._ll._ll, self._tm) < 0:
+            raise(CrustyException())
+
+    def set_tileset(self, tileset :Tileset):
+        self._ts = tileset
+        if _cg.tilemap_set_tilemap_tileset(self._ll._ll, self._tm, tileset._ts) < 0:
+            raise(CrustyException())
+
+
+class Layer():
+    def __init__(self, ll :Layerlist, tilemap :Tilemap):
+        self._ll = ll
+        self._tm = tilemap
+        self._l = _cg.tilemap_add_layer(ll._ll, tilemap._tm)
+        if self._l < 0:
+            raise(CrustyException())
+
+    def __del__(self):
+        if _cg.tilemap_free_layer(self._ll._ll, self._l):
+            raise(CrustyException())
+
+
+

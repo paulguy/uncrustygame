@@ -330,7 +330,7 @@ int tilemap_add_tileset(LayerList *ll,
     /* create the texture */
     tex = SDL_CreateTextureFromSurface(ll->renderer, surface);
     if(tex == NULL) {
-        LOG_PRINTF(ll, "Failed to create texture from surface.\n");
+        LOG_PRINTF(ll, "Failed to create texture from surface: %s.\n", SDL_GetError());
         if(surface == surface2) {
             SDL_FreeSurface(surface);
         }
