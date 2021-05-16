@@ -562,6 +562,12 @@ int tilemap_set_tilemap_tileset(LayerList *ll,
         return(-1);
     }
 
+    /* free the old, invalid texture, because the tile size may have changed */
+    if(ll->tilemap[index].tex != NULL) {
+        SDL_DestroyTexture(ll->tilemap[index].tex);
+        ll->tilemap[index].tex = NULL;
+    }
+
     ll->tilemap[index].tileset = tileset;
     ll->tileset[tileset].refs++;
 
