@@ -1066,7 +1066,7 @@ int synth_free_buffer(Synth *s, unsigned int index) {
 int synth_silence_buffer(Synth *s,
                          unsigned int index,
                          unsigned int start,
-                         unsigned int end) {
+                         unsigned int length) {
     float *o;
     unsigned int os;
     Uint8 silence = s->silence;
@@ -1083,20 +1083,18 @@ int synth_silence_buffer(Synth *s,
         }
         o = s->buffer[index].data;
         os = s->buffer[index].size;
-        /* 0s should clear a float array? */
-        silence = 0;
+        silence = s->silence;
     }
 
     if(start >= os ||
-       start + end > os) {
+       start + length > os) {
         LOG_PRINTF(s, "Bound(s) out of buffer range.\n");
         return(0);
     }
 
     o = &(o[start]);
-    os = end - start;
 
-    memset(o, silence, os * sizeof(float));
+    memset(o, silence, length * sizeof(float));
 
     return(0);
 }
@@ -1588,7 +1586,7 @@ int synth_run_player(Synth *s,
     SynthBuffer *sp;
     SynthBuffer *v;
     SynthBuffer *ph;
-    float loopLen;
+    unsigned int loopLen;
     float lastInPos;
 
     if(index > s->playersmem) {
@@ -2101,13 +2099,15 @@ int synth_run_player(Synth *s,
         }
     } else if(p->mode == SYNTH_MODE_PHASE_SOURCE) {
         ph = &(s->buffer[p->phaseBuffer]);
+        loopLen = p->loopEnd - p->loopStart;
         if(p->volMode == SYNTH_VOLUME_CONSTANT &&
            p->outOp == SYNTH_OUTPUT_REPLACE) {
             todo = MIN(todo, os - p->outPos);
             for(samples = 0; samples < todo; samples++) {
                 o[p->outPos] =
-                    i->data[(int)fabsf(ph->data[p->phasePos] * i->size) % i->size] *
-                    p->volume;
+                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
+                            + p->loopStart]
+                    * p->volume;
                 p->outPos++;
                 p->phasePos = (p->phasePos + 1) % ph->size;
             }
@@ -2116,8 +2116,9 @@ int synth_run_player(Synth *s,
             todo = MIN(todo, os - p->outPos);
             for(samples = 0; samples < todo; samples++) {
                 o[p->outPos] +=
-                    i->data[(int)fabsf(ph->data[p->phasePos] * i->size) % i->size] *
-                    p->volume;
+                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
+                            + p->loopStart]
+                    * p->volume;
                 p->outPos++;
                 p->phasePos = (p->phasePos + 1) % ph->size;
             }
@@ -2127,8 +2128,9 @@ int synth_run_player(Synth *s,
             todo = MIN(todo, os - p->outPos);
             for(samples = 0; samples < todo; samples++) {
                 o[p->outPos] =
-                    i->data[(int)fabsf(ph->data[p->phasePos] * i->size) % i->size] *
-                    v->data[p->volPos] * p->volume;
+                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
+                            + p->loopStart]
+                    * p->volume;
                 p->outPos++;
                 p->volPos = (p->volPos + 1) % v->size;
                 p->phasePos = (p->phasePos + 1) % ph->size;
@@ -2139,8 +2141,9 @@ int synth_run_player(Synth *s,
             todo = MIN(todo, os - p->outPos);
             for(samples = 0; samples < todo; samples++) {
                 o[p->outPos] +=
-                    i->data[(int)fabsf(ph->data[p->phasePos] * i->size) % i->size] *
-                    v->data[p->volPos] * p->volume;
+                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
+                            + p->loopStart]
+                    * p->volume;
                 p->outPos++;
                 p->volPos = (p->volPos + 1) % v->size;
                 p->phasePos = (p->phasePos + 1) % ph->size;
