@@ -1265,6 +1265,8 @@ int synth_set_player_input_buffer(Synth *s,
     s->player[index].inBuffer = inBuffer;
     s->buffer[inBuffer].ref++;
     s->player[index].inPos = 0.0;
+    s->player[index].loopStart = 0;
+    s->player[index].loopEnd = s->buffer[inBuffer].size - 1;
 
     return(0);
 }
