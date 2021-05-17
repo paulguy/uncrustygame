@@ -17,6 +17,43 @@
  * along with uncrustygame.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/*
+ * This is the tilemap library component of uncrustygame/libcrustygame.so, it is
+ * the entire graphics system unique to uncrustygame, separated out and fixed up
+ * from the previous crustygame project.  It's built upon the SDL_render API so
+ * it's not quite the most efficient thing that could be used, I'm sure it could
+ * be ported to using pure OpenGL or Vulkan or something but it's just a bit of
+ * silly fun and not meant to be super practical or to really make very complex
+ * graphics that would call for greater efficiency.  One can still interact with
+ * things directly through the SDL_render API or OpenGL (or whatever API it ends
+ * up being backed by I imagine..) as it's pretty non-intrusive and just holds
+ * texture resources but doesn't otherwise interact with the underlying API in
+ * any major way.
+ *
+ * The theory to how it is to be used is that one creates/loads in tilesets
+ * from SDL_Surfaces (helpers are provided for creating blank tilesets if one
+ * wants to create a new tileset from existing tilemaps/layers, as well as using
+ * SDL's built in function for loading BMPs.).  The reason for this is it's a
+ * slower process to update a texture pixel by pixel, so the idea would be that
+ * you create fully prepared textures ahead of time as surfaces and pass them on
+ * to the graphics API.
+ *
+ * Once there are tilesets, tilemaps can be created and have a tileset assigned
+ * to them.  Tiles are laid out on a grid in the tilemap, optionally using
+ * various attributes that allow to easily reuse tiles that just need to be
+ * recolored or flipped or rotated in the cardinal directions.  Once all the
+ * parameters are entered or any time they're changed, the tilemap needs to be
+ * updated.  For the sake of preventing updating the entire tilemap especially
+ * if it's a very large tilemap, a rectangular region can be selected to be
+ * updated rather then the entire thing updated on every attribute or map
+ * change.  Multiple tilemaps can be assigned to the same tileset.
+ *
+ * Tilemaps can't be displayed on their own though, they are just backed by a
+ * texture, ultimately, in memory.  A layer needs to be created for the tilemap
+ * as a view in to the tilemap to place on screen.  There are many parameters
+ * which a layer can have which defines this view and how it's rendered to the
+ * window or target tileset.
+ */
 #ifndef _TILEMAP_H
 #define _TILEMAP_H
 
@@ -212,7 +249,8 @@ int tilemap_set_tilemap_map(LayerList *ll,
                             const unsigned int *value,
                             unsigned int size);
 /*
- * Add/update attribute flags to a tilemap.
+ * Add/update attribute flags to a tilemap.  Non-squared tiles can only be
+ * rotated 180 degrees.
  * See: TILEMAP_.FLIP_MASK, TILEMAP_ROTATE_.*
  * NOTE: For a slight optimization, a tilemap without an attribute map will
  *       never try to apply attributes which might make some difference to

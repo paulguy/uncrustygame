@@ -13,9 +13,7 @@ except OSError as e:
     except OSError as e:
         _cg = CDLL("../libcrustygame.so")
 
-def _set_types(func,
-               restype,
-               argtypes :list):
+def _set_types(func, restype, argtypes :list):
     func.restype = restype
     func.argtypes = argtypes
 
@@ -90,6 +88,7 @@ def tilemap_color_a(val):
 class CrustyException(Exception):
     pass
 
+
 # not sure if it matters but it might or whether it'll even prevent any issues
 # but try to hold references to things in dependent objects just so the internal
 # "free" functions are maybe called in a sane order during garbage collection?
@@ -123,6 +122,7 @@ class Layerlist():
 
     def new_layer(self, tilemap):
         return(Layer(self, tilemap))
+
 
 class Tileset():
     def __init__(self, ll :Layerlist, *args):
@@ -171,6 +171,3 @@ class Layer():
     def __del__(self):
         if _cg.tilemap_free_layer(self._ll._ll, self._l):
             raise(CrustyException())
-
-
-
