@@ -14,9 +14,13 @@ buffers
  number of buffers
 buffer
  buffer name
- name of a wav file
- start sample
- end sample
+ type: file or internal
+ file
+  name of a wav file
+  start sample
+  end sample
+ internal
+  length of sample in seconds
 
 channels (player objects) initial state
  number of channels
@@ -24,6 +28,8 @@ channel
  channel name
  input buffer
  input buffer pos
+ output buffer
+ output buffer pos (if not a final buffer)
  output mode
  volume mode
  volume
@@ -35,7 +41,7 @@ channel
  speed mode
  speed
  speed source
- audio balance
+ audio panning
  running
  run length
 
@@ -48,6 +54,11 @@ pattern
  each row has a bitfield indicating global, channel and/or player state changes
  for each channel, followed by the state changes
  global
+  some flag to indicate that a row which hasn't written to output buffers
+  should consume a real time division or if it should go on to the next row
+  immediately.  Could be useful for initializing some internal buffers without
+  delaying the start of a sequence, or preparing the next division of an
+envelope at the start of a pattern. (1)
   speed (1)
  channel
   all from initial state (16)
