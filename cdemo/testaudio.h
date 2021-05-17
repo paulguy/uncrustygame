@@ -4,7 +4,7 @@ typedef struct ActivePlayer_s ActivePlayer;
 typedef struct AudioState_s AudioState;
 
 int create_mix_buffers(AudioState *as);
-int audio_frame_cb(void *priv);
+int audio_frame_cb(void *priv, Synth *s);
 AudioState *init_audio_state(unsigned int rate);
 void free_audio_state(AudioState *as);
 Synth *get_synth(AudioState *as);

@@ -51,43 +51,43 @@ int create_mix_buffers(AudioState *as) {
     return(0);
 }
 
-int audio_frame_cb(void *priv) {
+int audio_frame_cb(void *priv, Synth *s) {
     AudioState *as = (AudioState *)priv;
     unsigned int i;
     int playerRet;
     float volume;
-    unsigned int needed = synth_get_samples_needed(as->s);
+    unsigned int needed = synth_get_samples_needed(s);
 
     /* check for underrun and enlarge the fragment size in the hopes of
      * settling on the minimum necessary number of fragments and avoid crackles
      */
-    if(synth_has_underrun(as->s)) {
+    if(synth_has_underrun(s)) {
         /* disable the synth before doing fragment operations */
-        if(synth_set_enabled(as->s, 0) < 0) {
+        if(synth_set_enabled(s, 0) < 0) {
             fprintf(stderr, "Failed to stop synth.\n");
             return(-1);
         }
         /* try to increase the fragments count by 1 */
-        if(synth_set_fragments(as->s, as->fragments + 1) < 0) {
+        if(synth_set_fragments(s, as->fragments + 1) < 0) {
             fprintf(stderr, "Failed to set fragments, disabling.\n");
             return(-1);
         }
         as->fragments++;
         /* free the reference from the mix buffer */
-        if(synth_free_player(as->s, as->mixPlayer) < 0) {
+        if(synth_free_player(s, as->mixPlayer) < 0) {
             fprintf(stderr, "Failed to free mix player.\n");
             return(-1);
         }
         /* free the buffers */
-        if(synth_free_buffer(as->s, as->mixBuffer) < 0) {
+        if(synth_free_buffer(s, as->mixBuffer) < 0) {
             fprintf(stderr, "Failed to mix buffer.\n");
             return(-1);
         }
-        if(synth_free_buffer(as->s, as->leftBuffer) < 0) {
+        if(synth_free_buffer(s, as->leftBuffer) < 0) {
             fprintf(stderr, "Failed to left channel buffer.\n");
             return(-1);
         }
-        if(synth_free_buffer(as->s, as->rightBuffer) < 0) {
+        if(synth_free_buffer(s, as->rightBuffer) < 0) {
             fprintf(stderr, "Failed to right channel buffer.\n");
             return(-1);
         }
@@ -99,7 +99,7 @@ int audio_frame_cb(void *priv) {
         /* re-enable the synth.  I don't entirely remember how this works but
          * this function may be called again recursively so make sure nothing
          * else happens between this and returning. */
-        if(synth_set_enabled(as->s, 1) < 0) {
+        if(synth_set_enabled(s, 1) < 0) {
             /* if it is recursive, allow the error to fall through, but don't
              * print something that might end up spammy */
             return(-1);
@@ -109,11 +109,11 @@ int audio_frame_cb(void *priv) {
     }
 
     /* clear channel mix buffers */
-    if(synth_silence_buffer(as->s, as->leftBuffer, 0, needed) < 0) {
+    if(synth_silence_buffer(s, as->leftBuffer, 0, needed) < 0) {
         fprintf(stderr, "Failed to silence left buffer.\n");
         return(-1);
     }
-    if(synth_silence_buffer(as->s, as->rightBuffer, 0, needed) < 0) {
+    if(synth_silence_buffer(s, as->rightBuffer, 0, needed) < 0) {
         fprintf(stderr, "Failed to silence right buffer.\n");
         return(-1);
     }
@@ -121,24 +121,24 @@ int audio_frame_cb(void *priv) {
     for(i = 0; i < MAX_ACTIVE_PLAYERS; i++) {
         if(as->player[i].player >= 0) {
             /* clear mix buffer */
-            if(synth_silence_buffer(as->s, as->mixBuffer, 0, needed) < 0) {
+            if(synth_silence_buffer(s, as->mixBuffer, 0, needed) < 0) {
                 fprintf(stderr, "Failed to silence left buffer.\n");
                 return(-1);
             }
 
             /* point active player to mix buffer */
-            if(synth_set_player_output_buffer(as->s, as->player[i].player, as->mixBuffer) < 0) {
+            if(synth_set_player_output_buffer(s, as->player[i].player, as->mixBuffer) < 0) {
                 fprintf(stderr, "failed to set active player to mix buffer.\n");
                 return(-1);
             }
             /* reset the buffer output pos to 0 */
-            if(synth_set_player_output_buffer_pos(as->s, as->player[i].player, 0) < 0) {
+            if(synth_set_player_output_buffer_pos(s, as->player[i].player, 0) < 0) {
                 fprintf(stderr, "Failed to set output buffer pos.\n");
                 return(-1);
             }
-            playerRet = synth_run_player(as->s, as->player[i].player, needed);
+            playerRet = synth_run_player(s, as->player[i].player, needed);
             /* avoid external references to mix buffer */
-            if(synth_set_player_output_buffer(as->s, as->player[i].player, 0) < 0) {
+            if(synth_set_player_output_buffer(s, as->player[i].player, 0) < 0) {
                 fprintf(stderr, "failed to set active player output to 0.\n");
                 return(-1);
             }
@@ -150,11 +150,11 @@ int audio_frame_cb(void *priv) {
             } else {
                 /* apply volume and panning */
                 /* left channel */
-                if(synth_set_player_input_buffer(as->s, as->mixPlayer, as->mixBuffer) < 0) {
+                if(synth_set_player_input_buffer(s, as->mixPlayer, as->mixBuffer) < 0) {
                     fprintf(stderr, "Failed to set mix player input to mix buffer.\n");
                     return(-1);
                 }
-                if(synth_set_player_output_buffer(as->s, as->mixPlayer, as->leftBuffer) < 0) {
+                if(synth_set_player_output_buffer(s, as->mixPlayer, as->leftBuffer) < 0) {
                     fprintf(stderr, "Failed to set mix player output to left buffer.\n");
                     return(-1);
                 }
@@ -163,20 +163,20 @@ int audio_frame_cb(void *priv) {
                 } else {
                     volume = as->player[i].volume;
                 }
-                if(synth_set_player_volume(as->s, as->mixPlayer, volume) < 0) {
+                if(synth_set_player_volume(s, as->mixPlayer, volume) < 0) {
                     fprintf(stderr, "Failed to set mix player left volume.\n");
                     return(-1);
                 }
-                if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
+                if(synth_run_player(s, as->mixPlayer, needed) < 0) {
                     fprintf(stderr, "Failed to run mix player for left channel.\n");
                     return(-1);
                 }
                 /* right channel, reset mix buffer player to 0 */
-                if(synth_set_player_input_buffer_pos(as->s, as->mixPlayer, 0) < 0) {
+                if(synth_set_player_input_buffer_pos(s, as->mixPlayer, 0) < 0) {
                     fprintf(stderr, "Failed to reset center player output pos.\n");
                     return(-1);
                 }
-                if(synth_set_player_output_buffer(as->s, as->mixPlayer, as->rightBuffer) < 0) {
+                if(synth_set_player_output_buffer(s, as->mixPlayer, as->rightBuffer) < 0) {
                     fprintf(stderr, "Failed to set mix player output to right buffer.\n");
                     return(-1);
                 }
@@ -185,11 +185,11 @@ int audio_frame_cb(void *priv) {
                 } else {
                     volume = as->player[i].volume;
                 }
-                if(synth_set_player_volume(as->s, as->mixPlayer, volume) < 0) {
+                if(synth_set_player_volume(s, as->mixPlayer, volume) < 0) {
                     fprintf(stderr, "Failed to set mix player right volume.\n");
                     return(-1);
                 }
-                if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
+                if(synth_run_player(s, as->mixPlayer, needed) < 0) {
                     fprintf(stderr, "Failed to run mix player for right channel.\n");
                     return(-1);
                 }
@@ -198,27 +198,27 @@ int audio_frame_cb(void *priv) {
     }
 
     /* play out both channels */
-    if(synth_set_player_input_buffer(as->s, as->mixPlayer, as->leftBuffer) < 0) {
+    if(synth_set_player_input_buffer(s, as->mixPlayer, as->leftBuffer) < 0) {
         fprintf(stderr, "Failed to set mix player input to left buffer.\n");
         return(-1);
     }
-    if(synth_set_player_output_buffer(as->s, as->mixPlayer, 0) < 0) {
+    if(synth_set_player_output_buffer(s, as->mixPlayer, 0) < 0) {
         fprintf(stderr, "Failed to set mix player output to left channel.\n");
         return(-1);
     }
-    if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
+    if(synth_run_player(s, as->mixPlayer, needed) < 0) {
         fprintf(stderr, "Failed to output to left channel.\n");
         return(-1);
     }
-    if(synth_set_player_input_buffer(as->s, as->mixPlayer, as->rightBuffer) < 0) {
+    if(synth_set_player_input_buffer(s, as->mixPlayer, as->rightBuffer) < 0) {
         fprintf(stderr, "Failed to set mix player input right buffer.\n");
         return(-1);
     }
-    if(synth_set_player_output_buffer(as->s, as->mixPlayer, 1) < 0) {
+    if(synth_set_player_output_buffer(s, as->mixPlayer, 1) < 0) {
         fprintf(stderr, "Failed to set mix player output to right channel.\n");
         return(-1);
     }
-    if(synth_run_player(as->s, as->mixPlayer, needed) < 0) {
+    if(synth_run_player(s, as->mixPlayer, needed) < 0) {
         fprintf(stderr, "Failed to output to right channel.\n");
         return(-1);
     }

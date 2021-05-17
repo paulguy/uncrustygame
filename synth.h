@@ -22,9 +22,6 @@
 
 #include <SDL.h>
 
-typedef int (*synth_frame_cb_t)(void *priv);
-typedef void (*synth_log_cb_t)(void *priv, const char *fmt, ...);
-
 /* most common formats */
 typedef enum {
     SYNTH_TYPE_INVALID,
@@ -63,6 +60,9 @@ typedef enum {
 } SynthPlayerMode;
 
 typedef struct Synth_s Synth;
+
+typedef int (*synth_frame_cb_t)(void *priv, Synth *s);
+typedef void (*synth_log_cb_t)(void *priv, const char *fmt, ...);
 
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format);
 int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate);
