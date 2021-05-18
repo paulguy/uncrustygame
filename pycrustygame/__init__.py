@@ -88,6 +88,15 @@ def tilemap_color_a(val):
 class CrustyException(Exception):
     pass
 
+def _create_uint_array(iterable):
+    arrayType = c_uint * len(iterable)
+    array = arrayType()
+
+    for item in enumerate(iterable):
+        array[item[0]] = item[1]
+
+    return(array)
+
 
 # not sure if it matters but it might or whether it'll even prevent any issues
 # but try to hold references to things in dependent objects just so the internal
@@ -177,15 +186,15 @@ class Tilemap():
             raise(CrustyException())
 
     def map(self, x, y, pitch, w, h, values):
-        if _cg.tilemap_set_tilemap_map(self._ll._ll, self, x, y, pitch, w, h, values, len(values)) < 0:
+        if _cg.tilemap_set_tilemap_map(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
             raise(CrustyException())
 
     def attr_flags(self, x, y, pitch, w, h, values):
-        if _cg.tilemap_set_tilemap_attr_flags(self._ll._ll, self, x, y, pitch, values, len(values)) < 0:
+        if _cg.tilemap_set_tilemap_attr_flags(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
             raise(CrustyException())
 
     def attr_colormod(self, x, y, pitch, w, h, values):
-        if _cg.tilemap_set_tilemap_attr_colormod(self._ll._ll, self, x, y, pitch, values, len(values)) < 0:
+        if _cg.tilemap_set_tilemap_attr_colormod(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
             raise(CrustyException())
 
     def update(self, x, y, w, h):
@@ -214,6 +223,10 @@ class Layer():
 
     def window(self, w, h):
         if _cg.tilemap_set_layer_window(self._ll._ll, self, w, h) < 0:
+            raise(CrustyException())
+    
+    def scroll_pos(self, scroll_x, scroll_y):
+        if _cg.tilemap_set_layer_scroll_pos(self._ll._ll, self, scroll_x, scroll_y) < 0:
             raise(CrustyException())
 
     def scale(self, scale_x, scale_y):
