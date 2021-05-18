@@ -41,7 +41,6 @@ channel
  speed mode
  speed
  speed source
- audio panning
  running
  run length
 

@@ -17,6 +17,25 @@
  * along with uncrustygame.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/*
+ * This is the audio portion of the uncrustygame/libcrustygame library.  It
+ * deals in managing audio buffers and player structures which handle outputting
+ * those buffers to other buffers in memory or to the audio device, using SDL.
+ * It should be fairly capable in being able to get basic audio effects and
+ * playing out samples and music.
+ *
+ * The idea in how it's to be used is any audio that is to be played is loaded
+ * in to its internal buffers, then a player is assigned for those buffers
+ * which handles playback.  Many parameters can be modified to affect the way
+ * the buffers are played back and other buffers can also be used to control
+ * sample-by-sample how playback should be affected for many of the parameters.
+ * the player may also output to other internal buffers so multiple stages of
+ * effects can be performed and even buffers used to control parameters can be
+ * generated in real time for a chain of players to make complex effects.
+ * On initialization some number of buffers equal to the number of audio
+ * channels will be available.  They can only be used for output, and their
+ * size will vary based on how full the buffers are, and other factors.
+ */
 #ifndef _SYNTH_H
 #define _SYNTH_H
 
