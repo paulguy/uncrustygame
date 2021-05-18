@@ -22,7 +22,9 @@ _set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_u
 _set_types(_cg.tilemap_blank_tileset, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
 _set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, c_void_p, c_void_p])
 _set_types(_cg.layerlist_free, None, [c_void_p])
-_set_types(_cg.layerlist_get_renderer, c_void_p, [c_void_p])
+_set_types(_cg.layerlist_get_renderer, POINTER(SDL_Renderer), [c_void_p])
+_set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
+_set_types(_cg.tilemap_set_target_tileset, c_int, [c_void_p, c_int])
 _set_types(_cg.tilemap_add_tileset, c_int, [c_void_p, c_void_p, c_uint, c_uint])
 _set_types(_cg.tilemap_free_tileset, c_int, [c_void_p, c_uint])
 _set_types(_cg.tilemap_add_tilemap, c_int, [c_void_p, c_uint, c_uint])
@@ -42,8 +44,6 @@ _set_types(_cg.tilemap_set_layer_rotation_center, c_int, [c_void_p, c_uint, c_in
 _set_types(_cg.tilemap_set_layer_rotation, c_int, [c_void_p, c_uint, c_double])
 _set_types(_cg.tilemap_set_layer_colormod, c_int, [c_void_p, c_uint, c_uint])
 _set_types(_cg.tilemap_set_layer_blendmode, c_int, [c_void_p, c_uint, c_int])
-_set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
-_set_types(_cg.tilemap_set_target_tileset, c_int, [c_void_p, c_int])
 _set_types(_cg.tilemap_draw_layer, c_int, [c_void_p, c_uint])
 
 TILEMAP_HFLIP_MASK  = 0x01
@@ -105,23 +105,34 @@ class Layerlist():
     def __del__(self):
         _cg.layerlist_free(self._ll)
 
-    def new_tileset(self, surface :SDL_Surface, tw, th):
+    @property
+    def renderer(self):
+        return(_cg.layerlist_get_renderer(self._ll))
+
+    def tileset(self, surface :SDL_Surface, tw, th):
         return(Tileset(self, surface, tw, th))
 
-    def new_blank_tileset(self, w, h, color, tw, th):
+    def blank_tileset(self, w, h, color, tw, th):
         return(Tileset(self, w, h, color, tw, th))
 
-    def new_tileset_from_bmp(self, filename, tw, th):
+    def tileset_from_bmp(self, filename, tw, th):
         return(Tileset(self, filename, tw, th))
 
     # not sure why i allow for tilemaps without an assigned tileset but whichever
-    def new_tilemap(self, tileset, w, h):
+    def tilemap(self, tileset, w, h):
         tilemap = Tilemap(self, w, h)
-        tilemap.set_tileset(tileset)
+        tilemap.tileset(tileset)
         return(tilemap)
 
-    def new_layer(self, tilemap):
+    def layer(self, tilemap):
         return(Layer(self, tilemap))
+
+    def default_render_target(self, texture):
+        _cg.tilemap_set_default_render_target(self._ll, texture)
+
+    def target_tileset(self, tileset):
+        if _cg.tilemap_set_target_tileset(self._ll, tileset) < 0:
+            raise(CrustyException())
 
 
 class Tileset():
@@ -139,8 +150,11 @@ class Tileset():
             raise(CrustyException())
 
     def __del__(self):
-        if _cg.tilemap_free_tileset(self._ll._ll, self._ts) < 0:
+        if _cg.tilemap_free_tileset(self._ll._ll, self) < 0:
             raise(CrustyException())
+
+    def __int__(self):
+        return(self._ts)
 
 
 class Tilemap():
@@ -151,12 +165,31 @@ class Tilemap():
             raise(CrustyException())
 
     def __del__(self):
-        if _cg.tilemap_free_tilemap(self._ll._ll, self._tm) < 0:
+        if _cg.tilemap_free_tilemap(self._ll._ll, self) < 0:
             raise(CrustyException())
 
-    def set_tileset(self, tileset :Tileset):
+    def __int__(self):
+        return(self._tm)
+
+    def tileset(self, tileset :Tileset):
         self._ts = tileset
-        if _cg.tilemap_set_tilemap_tileset(self._ll._ll, self._tm, tileset._ts) < 0:
+        if _cg.tilemap_set_tilemap_tileset(self._ll._ll, self, tileset._ts) < 0:
+            raise(CrustyException())
+
+    def map(self, x, y, pitch, w, h, values):
+        if _cg.tilemap_set_tilemap_map(self._ll._ll, self, x, y, pitch, w, h, values, len(values)) < 0:
+            raise(CrustyException())
+
+    def attr_flags(self, x, y, pitch, w, h, values):
+        if _cg.tilemap_set_tilemap_attr_flags(self._ll._ll, self, x, y, pitch, values, len(values)) < 0:
+            raise(CrustyException())
+
+    def attr_colormod(self, x, y, pitch, w, h, values):
+        if _cg.tilemap_set_tilemap_attr_colormod(self._ll._ll, self, x, y, pitch, values, len(values)) < 0:
+            raise(CrustyException())
+
+    def update(self, x, y, w, h):
+        if _cg.tilemap_update_tilemap(self._ll._ll, self, x, y, w, h) < 0:
             raise(CrustyException())
 
 
@@ -164,10 +197,45 @@ class Layer():
     def __init__(self, ll :Layerlist, tilemap :Tilemap):
         self._ll = ll
         self._tm = tilemap
-        self._l = _cg.tilemap_add_layer(ll._ll, tilemap._tm)
+        self._l = _cg.tilemap_add_layer(ll._ll, tilemap)
         if self._l < 0:
             raise(CrustyException())
 
     def __del__(self):
-        if _cg.tilemap_free_layer(self._ll._ll, self._l):
+        if _cg.tilemap_free_layer(self._ll._ll, self):
+            raise(CrustyException())
+
+    def __int__(self):
+        return(self._l)
+
+    def pos(self, x, y):
+        if _cg.tilemap_set_layer_pos(self._ll._ll, self, x, y) < 0:
+            raise(CrustyException())
+
+    def window(self, w, h):
+        if _cg.tilemap_set_layer_window(self._ll._ll, self, w, h) < 0:
+            raise(CrustyException())
+
+    def scale(self, scale_x, scale_y):
+        if _cg.tilemap_set_layer_scale(self._ll._ll, self, scale_x, scale_y) < 0:
+            raise(CrustyException())
+
+    def rotation_center(self, x, y):
+        if _cg.tilemap_set_layer_rotation_center(self._ll._ll, self, x, y) < 0:
+            raise(CrustyException())
+
+    def rotation(self, angle):
+        if _cg.tilemap_set_layer_rotation(self._ll._ll, self, angle) < 0:
+            raise(CrustyException())
+
+    def colormod(self, colormod):
+        if _cg.tilemap_set_layer_colormod(self._ll._ll, self, colormod) < 0:
+            raise(CrustyException())
+
+    def blendmode(self, blendMode):
+        if _cg.tilemap_set_layer_blendmode(self._ll._ll, self, blendMode) < 0:
+            raise(CrustyException())
+
+    def draw(self):
+        if _cg.tilemap_draw_layer(self._ll._ll, self) < 0:
             raise(CrustyException())

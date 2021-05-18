@@ -272,6 +272,31 @@ SDL_Renderer *layerlist_get_renderer(LayerList *ll) {
     return(ll->renderer);
 }
 
+void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex) {
+    ll->defaultTex = tex;
+}
+
+int tilemap_set_target_tileset(LayerList *ll, int tileset) {
+    SDL_Texture *texture;
+
+    if(tileset < 0) {
+        texture = ll->defaultTex;
+    } else if((unsigned int)tileset >= ll->tilesetsmem ||
+              ll->tileset[tileset].tex == NULL) {
+        LOG_PRINTF(ll, "Invalid tileset index.\n");
+        return(-1);
+    } else {
+        texture = ll->tileset[tileset].tex;
+    }
+
+    if(SDL_SetRenderTarget(ll->renderer, texture) < 0) {
+        LOG_PRINTF(ll, "Failed to set render target.\n");
+        return(-1);
+    }
+
+    return(0);
+}
+
 int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,
                         unsigned int tw,
@@ -1209,32 +1234,6 @@ int tilemap_set_layer_blendmode(LayerList *ll, unsigned int index, int blendMode
     return(0);
 }
  
-
-void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex) {
-    ll->defaultTex = tex;
-}
-
-int tilemap_set_target_tileset(LayerList *ll, int tileset) {
-    SDL_Texture *texture;
-
-    if(tileset < 0) {
-        texture = ll->defaultTex;
-    } else if((unsigned int)tileset >= ll->tilesetsmem ||
-              ll->tileset[tileset].tex == NULL) {
-        LOG_PRINTF(ll, "Invalid tileset index.\n");
-        return(-1);
-    } else {
-        texture = ll->tileset[tileset].tex;
-    }
-
-    if(SDL_SetRenderTarget(ll->renderer, texture) < 0) {
-        LOG_PRINTF(ll, "Failed to set render target.\n");
-        return(-1);
-    }
-
-    return(0);
-}
-
 int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     Tileset *tileset;
     Tilemap *tilemap;
@@ -1248,7 +1247,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     /* Make sure it's a valid layer with graphics */
     if(index >= ll->layersmem ||
        ll->tilemap[ll->layer[index].tilemap].tex == NULL) {
-        LOG_PRINTF(ll, "Invalid layer index or layer without graphics.\n");
+        LOG_PRINTF(ll, "Invalid layer index or layer without graphics: %d\n", index);
         return(-1);
     }
 

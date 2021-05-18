@@ -9,18 +9,38 @@ import pycrustygame as cg
 def log_cb_return(string :c_char_p):
     print(string.decode("utf-8"))
 
+def clear_frame(ll, r, g, b):
+    if SDL_SetRenderDrawColor(ll.renderer, r, g, b, SDL_ALPHA_OPAQUE) < 0:
+        raise(Exception())
+    if SDL_RenderClear(ll.renderer) < 0:
+        raise(Exception())
+    if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT) < 0:
+        raise(Exception())
+
 def main():
+    # TODO: Write actual window/renderer initialization stuff
     window = SDL_CreateWindow(b"asdf", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN)
     renderer = SDL_CreateRenderer(window, 1, 0);
 
     ll = cg.Layerlist(renderer, SDL_PIXELFORMAT_ARGB32, log_cb_return)
-    ts = ll.new_blank_tileset(512, 512, 0, 32, 32)
-    ts2 = ll.new_tileset_from_bmp("cdemo/font.bmp", 8, 8)
-    tm = ll.new_tilemap(ts, 8, 8)
-    tm2 = ll.new_tilemap(ts2, 16, 16)
-    l = ll.new_layer(tm)
-    l2 = ll.new_layer(tm)
-    l3 = ll.new_layer(tm2)
+    ts = ll.tileset_from_bmp("cdemo/font.bmp", 8, 8)
+    tm = ll.tilemap(ts, 8, 8)
+    tm.map(2, 2, 4, 4, 3, "thisis atest")
+    tm.update(0, 0, 8, 8)
+    l = ll.layer(tm)
+
+    running = 1
+    while running:
+        event = SDL_Event()
+
+        while SDL_PollEvent(event):
+            if event.type == SDL_QUIT:
+                running = 0
+                break
+
+        clear_frame(ll, 32, 128, 192)
+        l.draw()
+        SDL_RenderPresent(renderer)
 
 if __name__ == "__main__":
     main()

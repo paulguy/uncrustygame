@@ -170,6 +170,24 @@ void layerlist_free(LayerList *ll);
  * return   the SDL_Renderer
  */
 SDL_Renderer *layerlist_get_renderer(LayerList *ll);
+/*
+ * Set the default texture to render to.  Isn't applied immediately, though.
+ * See: tilemap_set_target_tileset
+ *
+ * ll       the LayerList
+ * tex      the SDL_Texture to render to or NULL for the screen
+ */
+void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);
+/*
+ * Set the tileset to render to or the default render target if less than 0.
+ *
+ * ll       the LayerList
+ * tileset  the tileset which should be rendered to.  Important to kniow is that
+ *          any tilemaps which refer to this tileset need to be updated before
+ *          changes are applied.
+ * return   0 on success, -1 on failure
+ */
+int tilemap_set_target_tileset(LayerList *ll, int tileset);
 
 /*
  * Add a tileset given an SDL_Surface.
@@ -443,24 +461,6 @@ int tilemap_set_layer_colormod(LayerList *ll,
 int tilemap_set_layer_blendmode(LayerList *ll,
                                 unsigned int index,
                                 int blendMode);
-/*
- * Set the default texture to render to.  Isn't applied immediately, though.
- * See: tilemap_set_target_tileset
- *
- * ll       the LayerList
- * tex      the SDL_Texture to render to or NULL for the screen
- */
-void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);
-/*
- * Set the tileset to render to or the default render target if less than 0.
- *
- * ll       the LayerList
- * tileset  the tileset which should be rendered to.  Important to kniow is that
- *          any tilemaps which refer to this tileset need to be updated before
- *          changes are applied.
- * return   0 on success, -1 on failure
- */
-int tilemap_set_target_tileset(LayerList *ll, int tileset);
 /*
  * Finally, draw a layer to the screen or render target.
  *
