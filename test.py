@@ -37,7 +37,7 @@ def main():
     green = cg.tilemap_color(0, 255, 0, 255)
     blue = cg.tilemap_color(0, 0, 255, 255)
 
-    ll = cg.Layerlist(renderer, pixfmt, log_cb_return)
+    ll = cg.Layerlist(renderer, pixfmt, log_cb_return, None)
     ts = ll.tileset_from_bmp("cdemo/font.bmp", 8, 8)
     tm = ll.tilemap(ts, 8, 8)
     tm.map(2, 2, 4, 4, 3, string_to_ints("tseta sisiht"))

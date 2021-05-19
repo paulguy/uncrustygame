@@ -1,5 +1,5 @@
 from ctypes import c_char_p, c_int, c_uint, c_void_p, c_float, c_double, CFUNCTYPE, POINTER, CDLL
-from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Surface, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
+from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Window, SDL_Surface, SDL_Texture, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
 
 LOG_CB_RETURN_T = CFUNCTYPE(None, c_void_p, c_char_p)
 
@@ -40,7 +40,7 @@ TILEMAP_RMASK = 0x0000FF00
 TILEMAP_AMASK = 0x000000FF
 
 # tilemap.h miscellaneous functions/macros
-def tilemap_color(r, g, b, a):
+def tilemap_color(r :int, g :int, b :int, a :int) -> int:
     """
     Used for creating an integer for the tileset/layer colormod values.
     """
@@ -48,22 +48,22 @@ def tilemap_color(r, g, b, a):
            (g << TILEMAP_GSHIFT) |
            (b << TILEMAP_BSHIFT) |
            (a << TILEMAP_ASHIFT))
-def tilemap_color_r(val):
+def tilemap_color_r(val :int) -> int:
     """
     Extract red from a colormod value.
     """
     return((val & TILEMAP_RMASK) >> TILEMAP_RSHIFT)
-def tilemap_color_g(val):
+def tilemap_color_g(val :int) -> int:
     """
     Extract green from a colormod value.
     """
     return((val & TILEMAP_GMASK) >> TILEMAP_GSHIFT)
-def tilemap_color_b(val):
+def tilemap_color_b(val :int) -> int:
     """
     Extract blue from a colormod value.
     """
     return((val & TILEMAP_BMASK) >> TILEMAP_BSHIFT)
-def tilemap_color_a(val):
+def tilemap_color_a(val :int) -> int:
     """
     Extract alpha from a colormod value.
     """
@@ -169,6 +169,7 @@ _set_types(_cg.synth_run_player, c_int, [c_void_p, c_uint, c_uint])
 class CrustyException(Exception):
     pass
 
+
 def _driver_key(info):
     info = info[1]
     # everything else is in between
@@ -200,7 +201,11 @@ def _driver_key(info):
 
     return(priority)
 
-def initialize_video(title, width, height, winflags, rendererflags):
+
+def initialize_video(title :str,
+                     width :int, height :int,
+                     winflags :int, rendererflags :int) \
+                     -> (SDL_Window, SDL_Renderer, int):
     """
     Initialize video in a way that as far as I can tell is the best, preferred 
     method to get the best functionality out of pycrustygame.
@@ -268,6 +273,7 @@ def _create_uint_array(iterable):
 
     return(array)
 
+
 # not sure if it matters but it might or whether it'll even prevent any issues
 # but try to hold references to things in dependent objects just so the internal
 # "free" functions are maybe called in a sane order during garbage collection?
@@ -277,44 +283,51 @@ class Layerlist():
     """
     def __init__(self,
                  renderer: SDL_Renderer,
-                 texfmt,
-                 printfunc: LOG_CB_RETURN_T):
+                 texfmt :int,
+                 printfunc: LOG_CB_RETURN_T,
+                 printpriv: c_void_p):
         self._ll = _cg.layerlist_new(renderer,
                                      texfmt,
                                      printfunc,
-                                     None)
+                                     printpriv)
+        if self._ll == None:
+            raise(CrustyException())
 
     def __del__(self):
         _cg.layerlist_free(self._ll)
 
     @property
-    def renderer(self):
+    def renderer(self) -> SDL_Renderer:
         return(_cg.layerlist_get_renderer(self._ll))
 
-    def tileset(self, surface :SDL_Surface, tw, th):
+    def tileset(self, surface :SDL_Surface, tw :int, th :int):
         return(Tileset(self, surface, tw, th))
 
-    def blank_tileset(self, w, h, color, tw, th):
+    def blank_tileset(self,
+                      w :int, h :int,
+                      color :int,
+                      tw :int, th :int):
         return(Tileset(self, w, h, color, tw, th))
 
-    def tileset_from_bmp(self, filename, tw, th):
+    def tileset_from_bmp(self, filename :str, tw :int, th :int):
         return(Tileset(self, filename, tw, th))
 
     # not sure why i allow for tilemaps without an assigned tileset but whichever
-    def tilemap(self, tileset, w, h):
+    def tilemap(self, tileset :int, w :int, h :int):
         tilemap = Tilemap(self, w, h)
         tilemap.tileset(tileset)
         return(tilemap)
 
-    def layer(self, tilemap):
+    def layer(self, tilemap :int):
         return(Layer(self, tilemap))
 
-    def default_render_target(self, texture):
+    def default_render_target(self, texture :SDL_Texture):
         _cg.tilemap_set_default_render_target(self._ll, texture)
 
-    def target_tileset(self, tileset):
+    def target_tileset(self, tileset :int):
         if _cg.tilemap_set_target_tileset(self._ll, tileset) < 0:
             raise(CrustyException())
+
 
 class Tileset():
     """
@@ -340,6 +353,7 @@ class Tileset():
     def __int__(self):
         return(self._ts)
 
+
 class Tilemap():
     """
     See tileset.h for details on using this library.
@@ -362,21 +376,31 @@ class Tilemap():
         if _cg.tilemap_set_tilemap_tileset(self._ll._ll, self, tileset._ts) < 0:
             raise(CrustyException())
 
-    def map(self, x, y, pitch, w, h, values):
+    def map(self,
+            x :int, y :int,
+            pitch :int, w :int, h :int,
+            values :int):
         if _cg.tilemap_set_tilemap_map(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
             raise(CrustyException())
 
-    def attr_flags(self, x, y, pitch, w, h, values):
+    def attr_flags(self,
+                   x :int, y :int,
+                   pitch :int, w :int, h :int,
+                   values :c_void_p):
         if _cg.tilemap_set_tilemap_attr_flags(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
             raise(CrustyException())
 
-    def attr_colormod(self, x, y, pitch, w, h, values):
+    def attr_colormod(self,
+                      x :int, y :int,
+                      pitch :int, w :int, h: int,
+                      values :c_void_p):
         if _cg.tilemap_set_tilemap_attr_colormod(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
             raise(CrustyException())
 
-    def update(self, x, y, w, h):
+    def update(self, x :int, y :int, w :int, h :int):
         if _cg.tilemap_update_tilemap(self._ll._ll, self, x, y, w, h) < 0:
             raise(CrustyException())
+
 
 class Layer():
     """
@@ -396,38 +420,217 @@ class Layer():
     def __int__(self):
         return(self._l)
 
-    def pos(self, x, y):
+    def pos(self, x :int, y :int):
         if _cg.tilemap_set_layer_pos(self._ll._ll, self, x, y) < 0:
             raise(CrustyException())
 
-    def window(self, w, h):
+    def window(self, w :int, h :int):
         if _cg.tilemap_set_layer_window(self._ll._ll, self, w, h) < 0:
             raise(CrustyException())
     
-    def scroll_pos(self, scroll_x, scroll_y):
+    def scroll_pos(self, scroll_x :int, scroll_y :int):
         if _cg.tilemap_set_layer_scroll_pos(self._ll._ll, self, scroll_x, scroll_y) < 0:
             raise(CrustyException())
 
-    def scale(self, scale_x, scale_y):
+    def scale(self, scale_x :float, scale_y :float):
         if _cg.tilemap_set_layer_scale(self._ll._ll, self, scale_x, scale_y) < 0:
             raise(CrustyException())
 
-    def rotation_center(self, x, y):
+    def rotation_center(self, x :int, y :int):
         if _cg.tilemap_set_layer_rotation_center(self._ll._ll, self, x, y) < 0:
             raise(CrustyException())
 
-    def rotation(self, angle):
+    def rotation(self, angle :float):
         if _cg.tilemap_set_layer_rotation(self._ll._ll, self, angle) < 0:
             raise(CrustyException())
 
-    def colormod(self, colormod):
+    def colormod(self, colormod :int):
         if _cg.tilemap_set_layer_colormod(self._ll._ll, self, colormod) < 0:
             raise(CrustyException())
 
-    def blendmode(self, blendMode):
+    def blendmode(self, blendMode :int):
         if _cg.tilemap_set_layer_blendmode(self._ll._ll, self, blendMode) < 0:
             raise(CrustyException())
 
     def draw(self):
         if _cg.tilemap_draw_layer(self._ll._ll, self) < 0:
             raise(CrustyException())
+
+
+class Synth():
+    """
+    See synth.h for details on using this library.
+    """
+    def __new__(self,
+                framefunc :SYNTH_FRAME_CB_T,
+                framepriv :c_void_p,
+                printfunc :LOG_CB_RETURN_T,
+                printpriv :c_void_p,
+                rate :int,
+                channels :int):
+        self._s = _cg.synth_new(framefunc, framepriv,
+                                printfunc, printpriv,
+                                rate, channels)
+        if self._s == None:
+            raise(CrustyException())
+
+    def __del__(self):
+        _cg.synth_free(self._s)
+
+    def print_full_stats(self):
+        _cg.synth_print_full_stats(self._s)
+
+    def buffer(self, dataType :int, data :c_void_p, size :int):
+        return(Buffer(self, dataType, data, size))
+
+    def buffer_from_wav(self, filename :str):
+        rate = 0
+        return(Buffer(self, filename, pointer(rate)), rate)
+
+    def player(self, buffer :int):
+        return(Player(self, buffer))
+
+    @property
+    def rate(self):
+        return(_cg.synth_get_rate(self._s))
+
+    @property
+    def channels(self):
+        return(_cg.synth_get_channels(self._s))
+
+    @property
+    def fragment_size(self):
+        return(_cg.synth_get_fragment_size(self._s))
+
+    @property
+    def underrun(self):
+        return(_cg.synth_has_underrun(self._s))
+
+    def fragments(self, fragments :int):
+        if _cg.synth_set_fragments(self._s, fragments) < 0:
+            raise(CrustyException())
+
+    @property
+    def needed(self):
+        return(_cg.synth_get_samples_needed(self._s))
+
+    def enabled(self, enabled :int):
+        if _cg.synth_set_enabled(self._s, enabled) < 0:
+            raise(CrustyException())
+
+    def frame(self):
+        if _cg.synth_frame(self._s) < 0:
+            raise(CrustyException())
+
+
+class Buffer():
+    """
+    See synth.h for details on using this library.
+    """
+    def __new__(self, synth :Synth, *args):
+        self._s = synth
+        self._b = -1
+        if isinstance(args[0], int):
+            self._b = _cg.synth_add_buffer(synth._s, args[0], args[1], args[2])
+        elif isinstance(args[0], str):
+            self._b = _cg.synth_buffer_from_wav(synth._s, args[0], args[1])
+        else:
+            raise(TypeError())
+
+        if self._b < 0:
+            raise(CrustyException())
+
+    def __del__(self):
+        _cg.synth_free_buffer(self._s._s, self)
+
+    def __int__(self):
+        return(self._b)
+
+    def silence(self, start :int, length :int):
+        if _cg.synth_silence_buffer(self._s._s, self, start, length) < 0:
+            raise(CrustyException())
+
+
+class Player():
+    """
+    See synth.h for details on using this library.
+    """
+    def __new__(self, synth, buffer):
+        self._b = buffer
+        self._s = synth
+        self._p = _cg.synth_add_player(synth, buffer)
+
+        if self._p < 0:
+            raise(CrustyException())
+
+    def __del__(self):
+        _cg.synth_free_player(self._s, self)
+
+    def __int__(self):
+        return(self._p)
+
+    def input_buffer(self, buffer :int):
+        if _cg.synth_set_player_input_buffer(self._s, self, buffer) < 0:
+            raise(CrustyException())
+
+    def input_pos(self, pos :float):
+        if _cg.synth_set_player_input_buffer_pos(self._s, self, pos) < 0:
+            raise(CrustyException())
+
+    def output_buffer(self, buffer :int):
+        if _cg.synth_set_player_output_buffer(self._s, self, buffer) < 0:
+            raise(CrustyException())
+
+    def output_pos(self, pos :int):
+        if _cg.synth_set_player_output_buffer_pos(self._s, self, pos) < 0:
+            raise(CrustyExeption())
+
+    def output_mode(self, mode :int):
+        if _cg.synth_set_player_output_mode(self._s, self, mode) < 0:
+            raise(CrustyException())
+
+    def volume_mode(self, mode :int):
+        if _cg.synth_set_player_volume_mode(self._s, self, mode) < 0:
+            raise(CrustyException())
+
+    def volume(self, volume :float):
+        if _cg.synth_set_player_volumr(self._s, self, volume) < 0:
+            raise(CrustyException())
+
+    def volume_source(self, source :int):
+        if _cg.synth_set_player_volume_source(self._s, self, source) < 0:
+            raise(CrustyException())
+
+    def mode(self, mode :int):
+        if _cg.synth_set_player_mode(self._s, self, mode) < 0:
+            raise(CrustyException())
+
+    def loop_start(self, loopStart :int):
+        if _cg.synth_set_player_loop_start(self._s, self, loopStart) < 0:
+            raise(CrustyException())
+
+    def loop_end(self, loopEnd :int):
+        if _cg.synth_set_player_loop_end(self._s, self, loopEnd) < 0:
+            raise(CrustyException())
+
+    def phase_source(self, source :int):
+        if _cg.synth_set_player_phase_source(self._s, self, source) < 0:
+            raise(CrustyException())
+
+    def speed_mode(self, mode :int):
+        if _cg.synth_set_player_speed_mode(self._s, self, mode) < 0:
+            raise(CrustyException())
+
+    def speed(self, speed :float):
+        if _cg.synth_set_player_speed(self._s, self, speed) < 0:
+            raise(CrustyException())
+
+    def speed_source(self, source :int):
+        if _cg.synth_set_player_speed_source(self._s, self, source) < 0:
+            raise(CrustyException())
+
+    def run(self, samples :int):
+        ret = _cg.synth_run_player(self._s, self, samples)
+        if ret < 0:
+            raise(CrustyException())
+        return ret
