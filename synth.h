@@ -45,39 +45,39 @@
 
 /* most common formats */
 typedef enum {
-    SYNTH_TYPE_INVALID,
-    SYNTH_TYPE_U8,
-    SYNTH_TYPE_S16,
-    SYNTH_TYPE_F32,
-    SYNTH_TYPE_F64
+    SYNTH_TYPE_INVALID = 0,
+    SYNTH_TYPE_U8 = 1,
+    SYNTH_TYPE_S16 = 2,
+    SYNTH_TYPE_F32 = 3,
+    SYNTH_TYPE_F64 = 4
 } SynthImportType;
 
 typedef enum {
-    SYNTH_STOPPED,
-    SYNTH_ENABLED,
-    SYNTH_RUNNING
+    SYNTH_STOPPED = 0,
+    SYNTH_ENABLED = 1,
+    SYNTH_RUNNING = 2
 } SynthState;
 
 typedef enum {
-    SYNTH_OUTPUT_REPLACE,
-    SYNTH_OUTPUT_ADD
+    SYNTH_OUTPUT_REPLACE = 0,
+    SYNTH_OUTPUT_ADD = 1
 } SynthOutputOperation;
 
 typedef enum {
-    SYNTH_VOLUME_CONSTANT,
-    SYNTH_VOLUME_SOURCE
+    SYNTH_VOLUME_CONSTANT = 0,
+    SYNTH_VOLUME_SOURCE = 1
 } SynthVolumeMode;
 
 typedef enum {
-    SYNTH_SPEED_CONSTANT,
-    SYNTH_SPEED_SOURCE
+    SYNTH_SPEED_CONSTANT = 0,
+    SYNTH_SPEED_SOURCE = 1
 } SynthSpeedMode;
 
 typedef enum {
-    SYNTH_MODE_ONCE,
-    SYNTH_MODE_LOOP,
-    SYNTH_MODE_PINGPONG,
-    SYNTH_MODE_PHASE_SOURCE
+    SYNTH_MODE_ONCE = 0,
+    SYNTH_MODE_LOOP = 1,
+    SYNTH_MODE_PINGPONG = 2,
+    SYNTH_MODE_PHASE_SOURCE = 3
 } SynthPlayerMode;
 
 typedef struct Synth_s Synth;

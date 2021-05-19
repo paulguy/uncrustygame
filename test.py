@@ -40,7 +40,7 @@ def main():
     ll = cg.Layerlist(renderer, pixfmt, log_cb_return)
     ts = ll.tileset_from_bmp("cdemo/font.bmp", 8, 8)
     tm = ll.tilemap(ts, 8, 8)
-    tm.map(2, 2, 4, 4, 3, string_to_ints("thisis atest"))
+    tm.map(2, 2, 4, 4, 3, string_to_ints("tseta sisiht"))
     tm.attr_flags(2, 2, 0, 4, 3, (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180))
     tm.attr_colormod(2, 2, 4, 4, 3, (red, green, blue, red, green, blue, red, green, blue, red, green, blue))
     tm.update(0, 0, 8, 8)

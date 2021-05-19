@@ -1,4 +1,4 @@
-from ctypes import c_char_p, c_int, c_uint, c_void_p, c_double, CFUNCTYPE, POINTER, CDLL
+from ctypes import c_char_p, c_int, c_uint, c_void_p, c_float, c_double, CFUNCTYPE, POINTER, CDLL
 from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Surface, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
 
 LOG_CB_RETURN_T = CFUNCTYPE(None, c_void_p, c_char_p)
@@ -13,38 +13,7 @@ except OSError as e:
     except OSError as e:
         _cg = CDLL("../libcrustygame.so")
 
-def _set_types(func, restype, argtypes :list):
-    func.restype = restype
-    func.argtypes = argtypes
-
-_set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_uint])
-_set_types(_cg.tilemap_blank_tileset, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
-_set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, LOG_CB_RETURN_T, c_void_p])
-_set_types(_cg.layerlist_free, None, [c_void_p])
-_set_types(_cg.layerlist_get_renderer, POINTER(SDL_Renderer), [c_void_p])
-_set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
-_set_types(_cg.tilemap_set_target_tileset, c_int, [c_void_p, c_int])
-_set_types(_cg.tilemap_add_tileset, c_int, [c_void_p, c_void_p, c_uint, c_uint])
-_set_types(_cg.tilemap_free_tileset, c_int, [c_void_p, c_uint])
-_set_types(_cg.tilemap_add_tilemap, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.tilemap_free_tilemap, c_int, [c_void_p, c_uint])
-_set_types(_cg.tilemap_set_tilemap_tileset, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.tilemap_set_tilemap_map, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
-_set_types(_cg.tilemap_set_tilemap_attr_flags, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
-_set_types(_cg.tilemap_set_tilemap_attr_colormod, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
-_set_types(_cg.tilemap_update_tilemap, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
-_set_types(_cg.tilemap_add_layer, c_int, [c_void_p, c_uint])
-_set_types(_cg.tilemap_free_layer, c_int, [c_void_p, c_uint])
-_set_types(_cg.tilemap_set_layer_pos, c_int, [c_void_p, c_uint, c_int, c_int])
-_set_types(_cg.tilemap_set_layer_window, c_int, [c_void_p, c_uint, c_uint, c_uint])
-_set_types(_cg.tilemap_set_layer_scroll_pos, c_int, [c_void_p, c_uint, c_uint, c_uint])
-_set_types(_cg.tilemap_set_layer_scale, c_int, [c_void_p, c_uint, c_double, c_double])
-_set_types(_cg.tilemap_set_layer_rotation_center, c_int, [c_void_p, c_uint, c_int, c_int])
-_set_types(_cg.tilemap_set_layer_rotation, c_int, [c_void_p, c_uint, c_double])
-_set_types(_cg.tilemap_set_layer_colormod, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.tilemap_set_layer_blendmode, c_int, [c_void_p, c_uint, c_int])
-_set_types(_cg.tilemap_draw_layer, c_int, [c_void_p, c_uint])
-
+# tilemap.h definitions
 TILEMAP_HFLIP_MASK  = 0x01
 TILEMAP_VFLIP_MASK  = 0x02
 TILEMAP_ROTATE_MASK = 0x0C
@@ -70,6 +39,7 @@ TILEMAP_GMASK = 0x00FF0000
 TILEMAP_RMASK = 0x0000FF00
 TILEMAP_AMASK = 0x000000FF
 
+# tilemap.h miscellaneous functions/macros
 def tilemap_color(r, g, b, a):
     """
     Used for creating an integer for the tileset/layer colormod values.
@@ -98,6 +68,103 @@ def tilemap_color_a(val):
     Extract alpha from a colormod value.
     """
     return((val & TILEMAP_AMASK) >> TILEMAP_ASHIFT)
+
+def _set_types(func, restype, argtypes :list):
+    func.restype = restype
+    func.argtypes = argtypes
+
+# synth.h definitions
+SYNTH_TYPE_INVALID = 0
+SYNTH_TYPE_U8 = 1
+SYNTH_TYPE_S16 = 2
+SYNTH_TYPE_F32 = 3
+SYNTH_TYPE_F64 = 4
+
+SYNTH_STOPPED = 0
+SYNTH_ENABLED = 1
+SYNTH_RUNNING = 2
+
+SYNTH_OUTPUT_REPLACE = 0
+SYNTH_OUTPUT_ADD = 1
+
+SYNTH_VOLUME_CONSTANT = 0
+SYNTH_VOLUME_SOURCE = 1
+
+SYNTH_SPEED_CONSTANT = 0
+SYNTH_SPEED_SOURCE = 1
+
+SYNTH_MODE_ONCE = 0
+SYNTH_MODE_LOOP = 1
+SYNTH_MODE_PINGPONG = 2
+SYNTH_MODE_PHASE_SOURCE = 3
+
+SYNTH_FRAME_CB_T = CFUNCTYPE(c_int, c_void_p, c_void_p)
+
+# tilemap.h funcs
+_set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_uint])
+_set_types(_cg.tilemap_blank_tileset, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
+_set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, LOG_CB_RETURN_T, c_void_p])
+_set_types(_cg.layerlist_free, None, [c_void_p])
+_set_types(_cg.layerlist_get_renderer, POINTER(SDL_Renderer), [c_void_p])
+_set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
+_set_types(_cg.tilemap_set_target_tileset, c_int, [c_void_p, c_int])
+_set_types(_cg.tilemap_add_tileset, c_int, [c_void_p, c_void_p, c_uint, c_uint])
+_set_types(_cg.tilemap_free_tileset, c_int, [c_void_p, c_uint])
+_set_types(_cg.tilemap_add_tilemap, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.tilemap_free_tilemap, c_int, [c_void_p, c_uint])
+_set_types(_cg.tilemap_set_tilemap_tileset, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.tilemap_set_tilemap_map, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
+_set_types(_cg.tilemap_set_tilemap_attr_flags, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
+_set_types(_cg.tilemap_set_tilemap_attr_colormod, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
+_set_types(_cg.tilemap_update_tilemap, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
+_set_types(_cg.tilemap_add_layer, c_int, [c_void_p, c_uint])
+_set_types(_cg.tilemap_free_layer, c_int, [c_void_p, c_uint])
+_set_types(_cg.tilemap_set_layer_pos, c_int, [c_void_p, c_uint, c_int, c_int])
+_set_types(_cg.tilemap_set_layer_window, c_int, [c_void_p, c_uint, c_uint, c_uint])
+_set_types(_cg.tilemap_set_layer_scroll_pos, c_int, [c_void_p, c_uint, c_uint, c_uint])
+_set_types(_cg.tilemap_set_layer_scale, c_int, [c_void_p, c_uint, c_double, c_double])
+_set_types(_cg.tilemap_set_layer_rotation_center, c_int, [c_void_p, c_uint, c_int, c_int])
+_set_types(_cg.tilemap_set_layer_rotation, c_int, [c_void_p, c_uint, c_double])
+_set_types(_cg.tilemap_set_layer_colormod, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.tilemap_set_layer_blendmode, c_int, [c_void_p, c_uint, c_int])
+_set_types(_cg.tilemap_draw_layer, c_int, [c_void_p, c_uint])
+
+# synth.h funcs
+_set_types(_cg.synth_type_from_audioformat, c_int, [c_int])
+_set_types(_cg.synth_buffer_from_wav, c_int, [c_void_p, c_char_p, POINTER(c_uint)])
+_set_types(_cg.synth_print_full_stats, None, [c_void_p])
+_set_types(_cg.synth_get_samples_needed, c_uint, [c_void_p])
+_set_types(_cg.synth_new, c_void_p, [SYNTH_FRAME_CB_T, c_void_p, LOG_CB_RETURN_T, c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_free, None, [c_void_p])
+_set_types(_cg.synth_get_rate, c_uint, [c_void_p])
+_set_types(_cg.synth_get_channels, c_uint, [c_void_p])
+_set_types(_cg.synth_get_fragment_size, c_uint, [c_void_p])
+_set_types(_cg.synth_has_underrun, c_int, [c_void_p])
+_set_types(_cg.synth_set_enabled, c_int, [c_void_p, c_int])
+_set_types(_cg.synth_frame, c_int, [c_void_p])
+_set_types(_cg.synth_set_fragments, c_int, [c_void_p, c_uint])
+_set_types(_cg.synth_add_buffer, c_int, [c_void_p, c_int, c_void_p, c_uint])
+_set_types(_cg.synth_free_buffer, c_int, [c_void_p, c_uint])
+_set_types(_cg.synth_silence_buffer, c_int, [c_void_p, c_uint, c_uint, c_uint])
+_set_types(_cg.synth_add_player, c_int, [c_void_p, c_uint])
+_set_types(_cg.synth_free_player, c_int, [c_void_p, c_uint])
+_set_types(_cg.synth_set_player_input_buffer, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_input_buffer_pos, c_int, [c_void_p, c_uint, c_float])
+_set_types(_cg.synth_set_player_output_buffer, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_output_buffer_pos, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_output_mode, c_int, [c_void_p, c_uint, c_int])
+_set_types(_cg.synth_set_player_volume_mode, c_int, [c_void_p, c_uint, c_int])
+_set_types(_cg.synth_set_player_volume, c_int, [c_void_p, c_uint, c_float])
+_set_types(_cg.synth_set_player_volume_source, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_mode, c_int, [c_void_p, c_uint, c_int])
+_set_types(_cg.synth_set_player_loop_start, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_loop_end, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_phase_source, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_speed_mode, c_int, [c_void_p, c_uint, c_int])
+_set_types(_cg.synth_set_player_speed, c_int, [c_void_p, c_uint, c_float])
+_set_types(_cg.synth_set_player_speed_source, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_run_player, c_int, [c_void_p, c_uint, c_uint])
+
 
 class CrustyException(Exception):
     pass
