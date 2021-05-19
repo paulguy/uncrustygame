@@ -1,5 +1,5 @@
-from ctypes import *
-from sdl2 import *
+from ctypes import c_char_p, c_int, c_uint, c_void_p, c_double, CFUNCTYPE, POINTER, CDLL
+from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Surface, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
 
 LOG_CB_RETURN_T = CFUNCTYPE(None, c_char_p)
 
@@ -72,21 +72,126 @@ TILEMAP_RMASK = 0x0000FF00
 TILEMAP_AMASK = 0x000000FF
 
 def tilemap_color(r, g, b, a):
+    """
+    Used for creating an integer for the tileset/layer colormod values.
+    """
     return((r << TILEMAP_RSHIFT) |
            (g << TILEMAP_GSHIFT) |
            (b << TILEMAP_BSHIFT) |
            (a << TILEMAP_ASHIFT))
 def tilemap_color_r(val):
+    """
+    Extract red from a colormod value.
+    """
     return((val & TILEMAP_RMASK) >> TILEMAP_RSHIFT)
 def tilemap_color_g(val):
+    """
+    Extract green from a colormod value.
+    """
     return((val & TILEMAP_GMASK) >> TILEMAP_GSHIFT)
 def tilemap_color_b(val):
+    """
+    Extract blue from a colormod value.
+    """
     return((val & TILEMAP_BMASK) >> TILEMAP_BSHIFT)
 def tilemap_color_a(val):
+    """
+    Extract alpha from a colormod value.
+    """
     return((val & TILEMAP_AMASK) >> TILEMAP_ASHIFT)
 
 class CrustyException(Exception):
     pass
+
+def _driver_key(info):
+    info = info[1]
+    # everything else is in between
+    priority = 2
+    if bytes(info.name) == b'metal' or \
+       bytes(info.name) == b'direct3d11':
+        # prefer platform-specific APIs
+        priority = 0
+    elif bytes(info.name).startswith(b'opengles'):
+        # prefer opengl es over opengl because it has complete support for the
+        # uncrustygame features
+        priority = 1
+    elif info.flags & SDL_RENDERER_SOFTWARE:
+        # software will be very slow so don't prefer it, but it should display
+        # _mostly_ OK
+        priority = 9998
+
+    found_32bit_alpha = 0
+    for i in range(info.num_texture_formats):
+        if SDL_BITSPERPIXEL(info.texture_formats[i]) == 32 and \
+           SDL_ISPIXELFORMAT_ALPHA(info.texture_formats[i]):
+               found_32bit_alpha = 1
+               break
+
+    if found_32bit_alpha == 0:
+        # if something is missing the necessary formats, it's very unpreferable
+        # because there's little to no chance anything will display properly
+        priority = 9999
+
+    return(priority)
+
+def initialize_video(title, width, height, winflags, rendererflags):
+    """
+    Initialize video in a way that as far as I can tell is the best, preferred 
+    method to get the best functionality out of pycrustygame.
+
+    title, width, height and winflags are simply passed on to SDL_CreateWindow
+    rendererflags is passed on to SDL_CreateRenderer
+    returns window, renderer and prefered pixel format or raises CrustyException if
+    no window or renderer could be created
+    """
+    driver = list()
+    pixfmt = SDL_PIXELFORMAT_UNKNOWN
+    drivers = SDL_GetNumRenderDrivers()
+
+    for i in range(drivers):
+        d = SDL_RendererInfo()
+        if SDL_GetRenderDriverInfo(i, d) < 0:
+            raise CrustyException()
+        driver.append((i, d))
+
+    driver = sorted(driver, key=_driver_key)
+
+    window = SDL_CreateWindow(title.encode("utf-8"), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, winflags)
+    if window == None:
+        raise CrustyException()
+
+    renderer = None
+    for d in driver:
+        renderer = SDL_CreateRenderer(window, d[0], rendererflags)
+        # if initialization failed, continue down the priority list
+        if renderer == None:
+            continue
+
+        pixfmt = SDL_PIXELFORMAT_UNKNOWN
+        # find the most prefered format
+        for i in range(d[1].num_texture_formats):
+            if SDL_BITSPERPIXEL(d[1].texture_formats[i]) == 32 and \
+               SDL_ISPIXELFORMAT_ALPHA(d[1].texture_formats[i]):
+                pixfmt = d[1].texture_formats[i]
+                break
+
+        # otherwise, try to find something with the most color depth, although
+        # it's pretty likely to just fail.
+        if pixfmt == SDL_PIXELFORMAT_UNKNOWN:
+            maxbpp = 0
+            for i in range(d[1].num_texture_formats):
+                if SDL_BITSPERPIXEL(d[1].texture_formats[i]) > maxbpp:
+                    maxbpp = SDL_BITSPERPIXEL(d[1].texture_formats[i])
+                    pixfmt = d[1].texture_formats[i]
+
+        break
+
+    if renderer == None:
+        SDL_DestroyWindow(window)
+        raise CrustyException()
+
+    return(window, renderer, pixfmt)
+
 
 def _create_uint_array(iterable):
     arrayType = c_uint * len(iterable)
@@ -97,11 +202,13 @@ def _create_uint_array(iterable):
 
     return(array)
 
-
 # not sure if it matters but it might or whether it'll even prevent any issues
 # but try to hold references to things in dependent objects just so the internal
 # "free" functions are maybe called in a sane order during garbage collection?
 class Layerlist():
+    """
+    See tileset.h for details on using this library.
+    """
     def __init__(self,
                  renderer: SDL_Renderer,
                  texfmt,
@@ -143,8 +250,10 @@ class Layerlist():
         if _cg.tilemap_set_target_tileset(self._ll, tileset) < 0:
             raise(CrustyException())
 
-
 class Tileset():
+    """
+    See tileset.h for details on using this library.
+    """
     def __init__(self, ll :Layerlist, *args):
         self._ll = ll
         if isinstance(args[0], SDL_Surface):
@@ -165,8 +274,10 @@ class Tileset():
     def __int__(self):
         return(self._ts)
 
-
 class Tilemap():
+    """
+    See tileset.h for details on using this library.
+    """
     def __init__(self, ll :Layerlist, w, h):
         self._ll = ll
         self._tm = _cg.tilemap_add_tilemap(ll._ll, w, h)
@@ -201,8 +312,10 @@ class Tilemap():
         if _cg.tilemap_update_tilemap(self._ll._ll, self, x, y, w, h) < 0:
             raise(CrustyException())
 
-
 class Layer():
+    """
+    See tileset.h for details on using this library.
+    """
     def __init__(self, ll :Layerlist, tilemap :Tilemap):
         self._ll = ll
         self._tm = tilemap

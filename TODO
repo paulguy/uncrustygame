@@ -1,0 +1,1 @@
+Change log callbacks to just provide the whole string because if it's going to accept printf style format strings anyawy just use printf internally and simplify what the library user has to do.
