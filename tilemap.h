@@ -95,14 +95,6 @@
 #define TILEMAP_COLOR_A(VAL) ((VAL & TILEMAP_AMASK) >> TILEMAP_ASHIFT)
 
 typedef struct LayerList_t LayerList;
-/*
- * Defined type of function for a logging callback for the layerlist context
- * which will accept whatever pointer to whatever you pass when initializing
- * the thing.
- * priv     the void pointer you passed in on initialization
- * str      the string
- */
-typedef void (*log_cb_return_t)(void *priv, const char *str);
 
 /*
  * Accept a path to a BMP file and use SDL_LoadBMP to load the BMP file which
