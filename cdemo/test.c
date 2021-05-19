@@ -28,11 +28,11 @@
 #include "tilemap.h"
 #include "synth.h"
 
+#include "log_cb.h"
 #include "text.h"
 #include "extramath.h"
 #include "testaudio.h"
 #include "testgfx.h"
-#include "vprintf_cb.h"
 
 /* initial settings */
 #define MAX_PROCESS_TIME (200)
@@ -1165,7 +1165,7 @@ int main(int argc, char **argv) {
 
     /* initialize the layerlist */
     gs.ll = layerlist_new(renderer, format,
-                          vprintf_cb, stderr);
+                          log_cb, stderr);
     if(gs.ll == NULL) {
         fprintf(stderr, "Failed to create layerlist.\n");
         goto error_video;

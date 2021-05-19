@@ -41,6 +41,8 @@
 
 #include <SDL.h>
 
+#include "log_cb_helper.h"
+
 /* most common formats */
 typedef enum {
     SYNTH_TYPE_INVALID,
@@ -92,15 +94,6 @@ typedef struct Synth_s Synth;
  *          was some problem to indicate back to the synth_frame call.
  */
 typedef int (*synth_frame_cb_t)(void *priv, Synth *s);
-/*
- * The callback you provide to handle any logging output, takes printf style
- * arguments.
- *
- * priv     A pointer provided to synth_new
- * fmt      the format string
- * ...      the arguments
- */
-typedef void (*synth_log_cb_t)(void *priv, const char *fmt, ...);
 
 /*
  * Convert from an SDL_AudioFormat to a SynthImportType.  Not all formats
@@ -156,8 +149,8 @@ unsigned int synth_get_samples_needed(Synth *s);
  */
 Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                  void *synth_frame_priv,
-                 synth_log_cb_t synth_log_cb,
-                 void *synth_log_priv,
+                 log_cb_return_t log_cb,
+                 void *log_priv,
                  unsigned int rate,
                  unsigned int channels);
 /*

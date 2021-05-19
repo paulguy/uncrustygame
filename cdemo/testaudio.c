@@ -3,7 +3,7 @@
 
 #include "testaudio.h"
 
-#include "vprintf_cb.h"
+#include "log_cb.h"
 #include "extramath.h"
 
 #define MAX_ACTIVE_PLAYERS (32)
@@ -237,7 +237,7 @@ AudioState *init_audio_state(unsigned int rate) {
 
     as->s = synth_new(audio_frame_cb,
                       as,
-                      vprintf_cb,
+                      log_cb,
                       stderr,
                       rate,
                       2);

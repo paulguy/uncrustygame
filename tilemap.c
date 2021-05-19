@@ -26,7 +26,7 @@
 #define FUDGE (0.0001)
 
 #define LOG_PRINTF(LL, FMT, ...) \
-    (LL)->log_cb((LL)->log_priv, \
+    log_cb_helper((LL)->log_cb, (LL)->log_priv, \
     FMT, \
     ##__VA_ARGS__)
 
@@ -76,7 +76,7 @@ typedef struct LayerList_t {
     SDL_Renderer *renderer;
     Uint32 format;
     SDL_Texture *defaultTex;
-    layerlist_log_cb_t log_cb;
+    log_cb_return_t log_cb;
     void *log_priv;
     
     Tileset *tileset;
@@ -207,7 +207,7 @@ static int debug_show_texture(LayerList *ll,
 
 LayerList *layerlist_new(SDL_Renderer *renderer,
                          Uint32 format,
-                         layerlist_log_cb_t log_cb,
+                         log_cb_return_t log_cb,
                          void *log_priv) {
     LayerList *ll;
 

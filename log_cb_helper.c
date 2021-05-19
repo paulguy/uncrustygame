@@ -4,8 +4,8 @@
 
 #include "log_cb_helper.h"
 
-int log_cb_helper(log_cb_return_t ret,
-                  const char *fmt, ...) {
+void log_cb_helper(log_cb_return_t ret, void *priv,
+                   const char *fmt, ...) {
     va_list ap;
     unsigned int len, got;
     char *str;
@@ -16,7 +16,8 @@ int log_cb_helper(log_cb_return_t ret,
 
     str = malloc(len + 1);
     if(str == NULL) {
-        return(-1);
+        ret(priv, "Failed to allocate memory for log string.\n");
+        return;
     }
 
     va_start(ap, fmt);
@@ -24,12 +25,13 @@ int log_cb_helper(log_cb_return_t ret,
     va_end(ap);
     if(got < len) {
         free(str);
-        return(-1);
+        ret(priv, "Failed to create log string.\n");
+        return;
     }
 
-    ret(str);
+    ret(priv, str);
 
     free(str);
 
-    return(0);
+    return;
 }

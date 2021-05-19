@@ -1,7 +1,7 @@
 from ctypes import c_char_p, c_int, c_uint, c_void_p, c_double, CFUNCTYPE, POINTER, CDLL
 from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Surface, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
 
-LOG_CB_RETURN_T = CFUNCTYPE(None, c_char_p)
+LOG_CB_RETURN_T = CFUNCTYPE(None, c_void_p, c_char_p)
 
 _cg = None
 # try to find libcrustygame.so in a few places
@@ -17,10 +17,9 @@ def _set_types(func, restype, argtypes :list):
     func.restype = restype
     func.argtypes = argtypes
 
-_set_types(_cg.log_cb_helper, c_int, [LOG_CB_RETURN_T, c_char_p])
 _set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_uint])
 _set_types(_cg.tilemap_blank_tileset, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
-_set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, c_void_p, c_void_p])
+_set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, LOG_CB_RETURN_T, c_void_p])
 _set_types(_cg.layerlist_free, None, [c_void_p])
 _set_types(_cg.layerlist_get_renderer, POINTER(SDL_Renderer), [c_void_p])
 _set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
@@ -215,8 +214,8 @@ class Layerlist():
                  printfunc: LOG_CB_RETURN_T):
         self._ll = _cg.layerlist_new(renderer,
                                      texfmt,
-                                     _cg.log_cb_helper,
-                                     printfunc)
+                                     printfunc,
+                                     None)
 
     def __del__(self):
         _cg.layerlist_free(self._ll)

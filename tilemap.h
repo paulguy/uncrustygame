@@ -59,6 +59,8 @@
 
 #include <SDL.h>
 
+#include "log_cb_helper.h"
+
 #define TILEMAP_HFLIP_MASK (0x01)
 #define TILEMAP_VFLIP_MASK (0x02)
 #define TILEMAP_ROTATE_MASK (0x0C)
@@ -96,14 +98,11 @@ typedef struct LayerList_t LayerList;
 /*
  * Defined type of function for a logging callback for the layerlist context
  * which will accept whatever pointer to whatever you pass when initializing
- * the thing.  Otherwise, it's expected to take printf style format strings
- * so you'll probably want to use something like vsnprintf or something.
- *
+ * the thing.
  * priv     the void pointer you passed in on initialization
- * fmt      the format string
- * ...      the format string parameters
+ * str      the string
  */
-typedef void (*layerlist_log_cb_t)(void *priv, const char *fmt, ...);
+typedef void (*log_cb_return_t)(void *priv, const char *str);
 
 /*
  * Accept a path to a BMP file and use SDL_LoadBMP to load the BMP file which
@@ -151,7 +150,7 @@ int tilemap_blank_tileset(LayerList *ll,
  */
 LayerList *layerlist_new(SDL_Renderer *renderer,
                          Uint32 format,
-                         layerlist_log_cb_t log_cb,
+                         log_cb_return_t log_cb,
                          void *log_priv);
 /*
  * Free a layerlist and any associated memory/resources.  You shouldn't have to

@@ -29,7 +29,7 @@
 #define DEFAULT_FRAGMENT_SIZE (512)
 
 #define LOG_PRINTF(SYNTH, FMT, ...) \
-    (SYNTH)->synth_log_cb((SYNTH)->synth_log_priv, \
+    log_cb_helper((SYNTH)->log_cb, (SYNTH)->log_priv, \
     FMT, \
     ##__VA_ARGS__)
 
@@ -106,8 +106,8 @@ struct Synth_s {
     SynthEffect *effect;
     unsigned int effectsmem;
 */
-    synth_log_cb_t synth_log_cb;
-    void *synth_log_priv;
+    log_cb_return_t log_cb;
+    void *log_priv;
 };
 
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format) {
@@ -240,7 +240,7 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
 void synth_print_full_stats(Synth *s) {
     unsigned int i;
 
-    if(s->synth_log_cb == NULL) {
+    if(s->log_cb == NULL) {
         return;
     }
 
@@ -609,8 +609,8 @@ void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
 
 Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                  void *synth_frame_priv,
-                 synth_log_cb_t synth_log_cb,
-                 void *synth_log_priv,
+                 log_cb_return_t log_cb,
+                 void *log_priv,
                  unsigned int rate,
                  unsigned int channels) {
     SDL_AudioSpec desired, obtained;
@@ -618,12 +618,12 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
 
     s = malloc(sizeof(Synth));
     if(s == NULL) {
-        synth_log_cb(synth_log_priv, "Failed to allocate synth.\n");
+        log_cb(log_priv, "Failed to allocate synth.\n");
         return(NULL);
     }
 
-    s->synth_log_cb = synth_log_cb;
-    s->synth_log_priv = synth_log_priv;
+    s->log_cb = log_cb;
+    s->log_priv = log_priv;
 
     desired.freq = rate;
     /* may as well use this as the desired output format if the internal format

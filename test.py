@@ -6,7 +6,7 @@ import pycrustygame as cg
 
 # making this thing work in some useful way has been CBT so just yeah
 @cg.LOG_CB_RETURN_T
-def log_cb_return(string :c_char_p):
+def log_cb_return(priv: c_void_p, string :c_char_p):
     print(string.decode("utf-8"))
 
 def clear_frame(ll, r, g, b):
