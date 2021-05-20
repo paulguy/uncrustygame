@@ -1,12 +1,15 @@
 UnCrustyGame - Making the useful components from crustygame actually useful
 
 BUILDING:
+in project root directory
 make
 
 BUILDING TEST CASE:
-make -f Makefile.test
+in cdemo/ subdirectory
+make
 
-RUNNING TEST CASE:
+RUNNING C TEST CASE:
+in cdemo/ subdirectory
 ./test.sh
 
 mouse position - where the cat will chase
@@ -17,3 +20,10 @@ f              - toggle fullscreen
 
 Try to get as many points as you can, eventually with a time limit, and who
 knows maybe a high score table or something eventually.
+
+RUNNING PYTHON TEST CASE:
+in project root directory
+./test.py
+
+Currently doesn't do anything but display a test image.  Close the window to
+quit.
