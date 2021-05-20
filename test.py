@@ -6,7 +6,7 @@ import pycrustygame as cg
 
 # making this thing work in some useful way has been CBT so just yeah
 @cg.LOG_CB_RETURN_T
-def log_cb_return(priv: c_void_p, string :c_char_p):
+def log_cb_return(priv: py_object, string :c_char_p):
     print(string.decode("utf-8"))
 
 def clear_frame(ll, r, g, b):
@@ -37,7 +37,7 @@ def main():
     green = cg.tilemap_color(0, 255, 0, 255)
     blue = cg.tilemap_color(0, 0, 255, 255)
 
-    ll = cg.Layerlist(renderer, pixfmt, log_cb_return, None)
+    ll = cg.Layerlist(renderer, pixfmt, log_cb_return, window)
     ts = ll.tileset_from_bmp("cdemo/font.bmp", 8, 8)
     tm = ll.tilemap(ts, 8, 8)
     tm.map(2, 2, 4, 4, 3, string_to_ints("tseta sisiht"))

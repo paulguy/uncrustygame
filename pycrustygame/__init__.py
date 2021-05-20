@@ -1,7 +1,7 @@
-from ctypes import c_char_p, c_int, c_uint, c_void_p, c_float, c_double, CFUNCTYPE, POINTER, CDLL
+from ctypes import c_char_p, c_int, c_uint, c_void_p, c_float, c_double, py_object, CFUNCTYPE, POINTER, CDLL
 from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Window, SDL_Surface, SDL_Texture, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
 
-LOG_CB_RETURN_T = CFUNCTYPE(None, c_void_p, c_char_p)
+LOG_CB_RETURN_T = CFUNCTYPE(None, py_object, c_char_p)
 
 _cg = None
 # try to find libcrustygame.so in a few places
@@ -98,12 +98,12 @@ SYNTH_MODE_LOOP = 1
 SYNTH_MODE_PINGPONG = 2
 SYNTH_MODE_PHASE_SOURCE = 3
 
-SYNTH_FRAME_CB_T = CFUNCTYPE(c_int, c_void_p, c_void_p)
+SYNTH_FRAME_CB_T = CFUNCTYPE(c_int, py_object, py_object)
 
 # tilemap.h funcs
 _set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_uint])
 _set_types(_cg.tilemap_blank_tileset, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
-_set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, LOG_CB_RETURN_T, c_void_p])
+_set_types(_cg.layerlist_new, c_void_p, [c_void_p, c_uint, LOG_CB_RETURN_T, py_object])
 _set_types(_cg.layerlist_free, None, [c_void_p])
 _set_types(_cg.layerlist_get_renderer, POINTER(SDL_Renderer), [c_void_p])
 _set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
@@ -134,7 +134,7 @@ _set_types(_cg.synth_type_from_audioformat, c_int, [c_int])
 _set_types(_cg.synth_buffer_from_wav, c_int, [c_void_p, c_char_p, POINTER(c_uint)])
 _set_types(_cg.synth_print_full_stats, None, [c_void_p])
 _set_types(_cg.synth_get_samples_needed, c_uint, [c_void_p])
-_set_types(_cg.synth_new, c_void_p, [SYNTH_FRAME_CB_T, c_void_p, LOG_CB_RETURN_T, c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_new, c_void_p, [SYNTH_FRAME_CB_T, py_object, LOG_CB_RETURN_T, py_object, c_uint, c_uint])
 _set_types(_cg.synth_free, None, [c_void_p])
 _set_types(_cg.synth_get_rate, c_uint, [c_void_p])
 _set_types(_cg.synth_get_channels, c_uint, [c_void_p])
@@ -289,7 +289,7 @@ class Layerlist():
         self._ll = _cg.layerlist_new(renderer,
                                      texfmt,
                                      printfunc,
-                                     printpriv)
+                                     py_object(printpriv))
         if self._ll == None:
             raise(CrustyException())
 
@@ -461,14 +461,15 @@ class Synth():
     """
     See synth.h for details on using this library.
     """
-    def __new__(self,
+    def __init__(self,
                 framefunc :SYNTH_FRAME_CB_T,
-                framepriv :c_void_p,
+                framepriv :py_object,
                 printfunc :LOG_CB_RETURN_T,
-                printpriv :c_void_p,
+                printpriv :py_object,
                 rate :int,
                 channels :int):
-        self._s = _cg.synth_new(framefunc, framepriv,
+        self._priv = (self, framepriv)
+        self._s = _cg.synth_new(framefunc, self._priv,
                                 printfunc, printpriv,
                                 rate, channels)
         if self._s == None:
@@ -527,7 +528,7 @@ class Buffer():
     """
     See synth.h for details on using this library.
     """
-    def __new__(self, synth :Synth, *args):
+    def __init__(self, synth :Synth, *args):
         self._s = synth
         self._b = -1
         if isinstance(args[0], int):
@@ -555,7 +556,7 @@ class Player():
     """
     See synth.h for details on using this library.
     """
-    def __new__(self, synth, buffer):
+    def __init__(self, synth, buffer):
         self._b = buffer
         self._s = synth
         self._p = _cg.synth_add_player(synth, buffer)
