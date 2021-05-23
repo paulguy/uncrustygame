@@ -1,3 +1,4 @@
+from sys import stdout
 import copy
 
 SEQ_FIELD_TYPE_INT = "int"
@@ -54,17 +55,17 @@ class Sequencer():
         self._state = copy.copy(self._initial)
         self._divTime = self._state[0][0]
 
-    def _read_row(self, structs, desc, initial=False):
+    def _read_row(self, struct, desc, initial=False):
         changeMask = None
-        rowData = structs.split()
+        rowData = struct.split()
         if iniital == False:
             changeMask = int(rowData[0], base=16)
-            rowDesc = rowDesc[1:]
+            desc = desc[1:]
             rowData = rowData[1:]
 
         row = list()
         pos = 0
-        for i in range(len(rowDesc) - 1):
+        for i in range(len(desc) - 1):
             if initial == False:
                 changed = changeMask & 1
                 changeMask >>= 1
@@ -72,16 +73,18 @@ class Sequencer():
                     row.append(None)
                     continue
 
-            if rowDesc[i] == SEQ_FIELD_TYPE_INT:
+            if desc[i] == SEQ_FIELD_TYPE_INT:
                 row.append(int(rowData[pos]))
-            elif rowDesc[i] == SEQ_FIELD_TYPE_HEX:
+            elif desc[i] == SEQ_FIELD_TYPE_HEX:
                 row.append(int(rowData[pos], base=16))
-            elif rowDesc[i] == SEQ_FIELD_TYPE_FLOAT:
+            elif desc[i] == SEQ_FIELD_TYPE_FLOAT:
                 row.append(float(rowData[pos]))
-            elif rowDesc[i] == SEQ_FIELD_TYPE_STR:
+            elif desc[i] == SEQ_FIELD_TYPE_STR:
                 row.append(rowData[pos])
-            elif rowDesc[i] == SEQ_FIELD_TYPE_ROW:
-                newrow = read_row(self, rowData[pos:], desc, initial=initial)
+            elif instanceof(desc[i], int):
+                # SEQ_FIELD_TYPE_ROW
+                rowDesc = self._desc.get_row_description(desc[i])
+                newrow = read_row(self, rowData[pos:], rowDesc, initial=initial)
                 row.append(newrow)
             pos++
 
@@ -94,13 +97,11 @@ class Sequencer():
             raise Exception("not enough columns in file")
 
         fullRow = list()
-        for i in range(self._desc.columns - 1):
+        for i in range(self._desc.columns):
             columnDesc = self._desc.get_column(i)
-            colummn = list()
-            for j in range(len(columnDesc) - 1):
-                rowDesc = self._desc.get_row_description(j)
-                newrow = self.read_row(structs[j], rowDesc, initial=initial)
-                column.append(newrow)
+            rowDesc = self._desc.get_row_description(columnDesc)
+            newrow = self.read_row(structs[i], rowDesc, initial=initial)
+            fullRow.append(newrow)
 
         return fullRow
 
@@ -116,6 +117,7 @@ class Sequencer():
             pattern = list()
             for j in range(patlen):
                 pattern.append(read_line(file))
+            self._pattern.append(pattern)
 
         ordersData = file.readline().split()
         for item in ordersData:
@@ -123,3 +125,53 @@ class Sequencer():
             if order < 0 or order > len(self._pattern) - 1:
                 raise IndexError("order refers to pattern out of range")
             self._order.append(int(item))
+
+    def _write_row(self, file, row, desc):
+        for item in range(len(desc)):
+            if row[item] != None:
+                if desc[item] == SEQ_FIELD_TYPE_INT:
+                    print("{:d} ".format(row[item]), end='', file=file)
+                elif desc[item] == SEQ_FIELD_TYPE_HEX:
+                    print("{:x} ".format(row[item]), end='', file=file)
+                elif desc[item] == SEQ_FIELD_TYPE_FLOAT:
+                    print("{:f} ".format(row[item]), end='', file=file)
+                elif desc[item] == SEQ_FIELD_TYPE_STR:
+                    print(row[item], end='', file=file)
+                elif instanceof(desc[item], int):
+                    # SEQ_FIELD_TYPE_ROW
+                    rowDesc = self._desc.get_row_description(desc[item])
+                    self._write_row(file, row[item:], rowDesc)
+
+    def _write_line(self, file, line):
+        for row in range(len(line)):
+            changeMask = 0
+            if line != self._initial:
+                for item in line[row]:
+                    changeMask <<= 1
+                    if item != None:
+                        changeMask |= 1
+                print("{} ".format(hex(changeMask)), end='', file=file)
+
+            columnDesc = self._desc.get_column(row)
+            desc = self._desc.get_row_description(columnDesc)
+            self._print_row(file, line[row], desc)
+
+            if row != len(line) - 1:
+                print("| ", end='', file=file)
+
+        print(file=file)
+
+    def write_file(self, file=stdout):
+        # print initial state
+        self._write_line(file, self._initial)
+        # print number of patterns
+        print("{}".format(len(self._pattern)), file=file)
+
+        for pattern in self._pattern:
+            # print number of lines in pattern
+            print("{}".format(len(pattern)), file=file)
+            for line in pattern:
+                self._write_line(file, line)
+
+        for order in self._orders:
+            print("{} ".format(order, file=file)
