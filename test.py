@@ -3,6 +3,7 @@
 from ctypes import *
 from sdl2 import *
 import pycrustygame as cg
+import sequencer as seq
 
 # making this thing work in some useful way has been CBT so just yeah
 @cg.LOG_CB_RETURN_T
@@ -53,6 +54,23 @@ def main():
     l.rotation(180)
     l.colormod(cg.tilemap_color(255, 255, 64, 192))
     l.blendmode(cg.TILEMAP_BLENDMODE_ADD) 
+
+    seqdesc = seq.SequenceDescription()
+    rowdesc = seqdesc.add_row_description()
+    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_INT)
+    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_INT)
+    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_FLOAT)
+    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_HEX)
+    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_STR)
+    seqdesc.add_column(rowdesc)
+    rowdesc2 = seqdesc.add_row_description()
+    seqdesc.add_field(rowdesc2, seq.FIELD_TYPE_INT)
+    seqdesc.add_field(rowdesc2, seq.FIELD_TYPE_FLOAT)
+    seqdesc.add_field(rowdesc2, seq.FIELD_TYPE_ROW, rowDesc=rowdesc)
+    seqdesc.add_column(rowdesc2)
+    with open("testseq.txt", "r") as seqfile:
+        sequence = seq.Sequencer(seqdesc, seqfile)
+    sequence.write_file()
 
     running = 1
     while running:
