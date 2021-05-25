@@ -68,13 +68,24 @@ typedef struct {
     unsigned int speedBuffer;
     unsigned int speedPos;
 } SynthPlayer;
-/*
-typedef struct {
-} SynthEnvelope;
 
 typedef struct {
-} SynthEffect;
-*/
+    unsigned int size;
+    float *accum;
+    unsigned int accumPos;
+
+    unsigned int inBuffer;
+    unsigned int inBufferStart;
+    unsigned int slices;
+    SynthSliceMode mode;
+    unsigned int sliceBuffer;
+    unsigned int slice;
+    unsigned int slicePos;
+
+    unsigned int outBuffer;
+    unsigned int outPos;
+} SynthFilter;
+
 struct Synth_s {
     SDL_AudioDeviceID audiodev;
     unsigned int rate;
@@ -102,10 +113,10 @@ struct Synth_s {
 
     SynthPlayer *player;
     unsigned int playersmem;
-/*
-    SynthEffect *effect;
-    unsigned int effectsmem;
-*/
+
+    SynthFilter *filter;
+    unsigned int filtersmem;
+
     log_cb_return_t log_cb;
     void *log_priv;
 };
@@ -719,10 +730,8 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
     s->buffersmem = 0;
     s->player = NULL;
     s->playersmem = 0;
-/*
-    s->effect = NULL;
-    s->effectsmem = 0;
-*/
+    s->filter = NULL;
+    s->filtersmem = 0;
     s->underrun = 0;
     s->state = SYNTH_STOPPED;
     s->synth_frame_cb = synth_frame_cb;
@@ -2079,4 +2088,123 @@ int synth_run_player(Synth *s,
     }
 
     return(samples);
+}
+
+static int init_filter(Synth *s,
+                       unsigned int index,
+                       unsigned int inBuffer,
+                       unsigned int size) {
+    s->filter[index].accum = malloc(sizeof(float) * size);
+    if(s->filter[index].accum == NULL) {
+        LOG_PRINTF(s, "Failed to allocate filter accumulation buffer.\n");
+        return(-1);
+    }
+    s->filter[index].size = size;
+    s->filter[index].accumPos = 0;
+    s->filter[index].inBuffer = inBuffer;
+    s->buffer[inBuffer].ref++;
+    s->filter[index].inBufferStart = 0;
+    s->filter[index].slices = 1;
+    s->filter[index].mode = SYNTH_SLICE_CONSTANT;
+    s->filter[index].sliceBuffer = inBuffer;
+    s->buffer[inBuffer].ref++;
+    s->filter[index].slice = 0;
+    s->filter[index].slicePos = 0;
+    s->filter[index].outBuffer = 0;
+    s->filter[index].outPos = 0;
+
+    return(0);
+}
+
+static int is_valid_filter(Synth *s, unsigned int index) {
+    if(index > s->filtersmem ||
+       s->filter[index].accum == NULL) {
+        LOG_PRINTF(s, "Invalid filter index.\n");
+        return(0);
+    }
+
+    return(1);
+}
+
+int synth_add_filter(Synth *s,
+                     unsigned int inBuffer,
+                     unsigned int size) {
+    unsigned int i, j;
+    SynthFilter *temp;
+
+    if(inBuffer < s->channels) {
+        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+        return(-1);
+    }
+    inBuffer -= s->channels;
+
+    if(!is_valid_buffer(s, inBuffer)) {
+        return(-1);
+    }
+
+    if(size > s->buffer[inBuffer].size) {
+        LOG_PRINTF(s, "Input buffer isn't large enough for filter size.");
+        return(-1);
+    }
+
+    /* first loaded buffer, so do some initial setup */
+    if(s->filtersmem == 0) {
+        s->filter = malloc(sizeof(SynthFilter));
+        if(s->filter == NULL) {
+            LOG_PRINTF(s, "Failed to allocate filters memory.\n");
+            return(-1);
+        }
+        s->filtersmem = 1;
+
+        if(init_filter(s, 0, inBuffer, size) < 0) {
+            return(-1);
+        }
+        return(0);
+    }
+
+    /* find first NULL buffer and assign it */
+    for(i = 0; i < s->filtersmem; i++) {
+        if(s->filter[i].accum == NULL) {
+            if(init_filter(s, i, inBuffer, size) < 0) {
+                return(-1);
+            }
+            return(i);
+        }
+    }
+
+    /* expand buffer if there's no free slots */
+    temp = realloc(s->filter,
+                   sizeof(SynthFilter) * s->filtersmem * 2);
+    if(temp == NULL) {
+        LOG_PRINTF(s, "Failed to allocate filters memory.\n");
+        return(-1);
+    }
+    s->filter = temp;
+    s->filtersmem *= 2;
+    /* initialize empty excess buffers as empty */
+    for(j = i + 1; j < s->filtersmem; j++) {
+        s->filter[j].accum = NULL;
+    }
+
+    if(init_filter(s, i, inBuffer, size) < 0) {
+        return(-1);
+    }
+    return(i);
+}
+
+int synth_free_filter(Synth *s, unsigned int index) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    /* remove a reference */
+    if(s->filter[index].outBuffer >= s->channels) {
+        s->buffer[s->filter[index].outBuffer - s->channels].ref--;
+    }
+    s->buffer[s->filter[index].inBuffer].ref--;
+    s->buffer[s->filter[index].sliceBuffer].ref--;
+    free(s->filter[index].accum);
+    s->filter[index].accum = NULL;
+
+    return(0);
 }

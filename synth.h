@@ -80,6 +80,11 @@ typedef enum {
     SYNTH_MODE_PHASE_SOURCE = 3
 } SynthPlayerMode;
 
+typedef enum {
+    SYNTH_SLICE_CONSTANT = 0,
+    SYNTH_SLICE_SOURCE = 1
+} SynthSliceMode;
+
 typedef struct Synth_s Synth;
 
 /*
