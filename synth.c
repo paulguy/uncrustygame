@@ -899,6 +899,57 @@ int synth_set_fragments(Synth *s,
     return(0);
 }
 
+static int init_buffer(Synth *s,
+                       unsigned int index,
+                       SynthImportType type,
+                       void *data,
+                       unsigned int size) {
+    unsigned int i;
+
+    s->buffer[index].size = size;
+    s->buffer[index].data = malloc(size * sizeof(float));
+    if(s->buffer[index].data == NULL) {
+        LOG_PRINTF(s, "Failed to allocate buffer data memory.\n");
+        return(-1);
+    }
+    if(data != NULL) {
+        if(type == SYNTH_TYPE_U8) {
+            memcpy(s->buffer[index].data, data, size * sizeof(Uint8));
+            s->U8toF32.buf = (Uint8 *)s->buffer[index].data;
+            s->U8toF32.len = size;
+            SDL_ConvertAudio(&(s->U8toF32));
+        } else if(type == SYNTH_TYPE_S16) {
+            memcpy(s->buffer[index].data, data, size * sizeof(Sint16));
+            s->S16toF32.buf = (Uint8 *)s->buffer[index].data;
+            s->S16toF32.len = size * sizeof(Sint16);
+            SDL_ConvertAudio(&(s->S16toF32));
+        } else if(type == SYNTH_TYPE_F32) {
+            memcpy(s->buffer[index].data, data, size * sizeof(float));
+        } else { /* F64 */
+            /* SDL has no conversion facilities to accept F64, so just do
+             * a cast of each value in a loop and hope it goes OK. */
+            for(i = 0; i < size; i++) {
+                s->buffer[index].data[i] = (float)(((double *)data)[i]);
+            }
+        }
+    } else {
+        memset(s->buffer[index].data, s->silence, size * sizeof(float));
+    }
+    s->buffer[index].ref = 0;
+
+    return(0);
+}
+
+static int is_valid_buffer(Synth *s, unsigned int index) {
+    if(index > s->buffersmem ||
+       s->buffer[index].data == NULL) {
+        LOG_PRINTF(s, "Invalid buffer index.\n");
+        return(0);
+    }
+
+    return(1);
+}
+
 int synth_add_buffer(Synth *s,
                      SynthImportType type,
                      void *data,
@@ -931,70 +982,21 @@ int synth_add_buffer(Synth *s,
             return(-1);
         }
         s->buffersmem = 1;
-        s->buffer[0].size = size;
-        s->buffer[0].data = malloc(size * sizeof(float));
-        if(s->buffer[0].data == NULL) {
-            LOG_PRINTF(s, "Failed to allocate buffer data memory.\n");
+
+        if(init_buffer(s, 0, type, data, size) < 0) {
             return(-1);
         }
-        if(data != NULL) {
-            if(type == SYNTH_TYPE_U8) {
-                memcpy(s->buffer[0].data, data, size * sizeof(Uint8));
-                s->U8toF32.buf = (Uint8 *)s->buffer[0].data;
-                s->U8toF32.len = size;
-                SDL_ConvertAudio(&(s->U8toF32));
-            } else if(type == SYNTH_TYPE_S16) {
-                memcpy(s->buffer[0].data, data, size * sizeof(Sint16));
-                s->S16toF32.buf = (Uint8 *)s->buffer[0].data;
-                s->S16toF32.len = size * sizeof(Sint16);
-                SDL_ConvertAudio(&(s->S16toF32));
-            } else if(type == SYNTH_TYPE_F32) {
-                memcpy(s->buffer[0].data, data, size * sizeof(float));
-            } else { /* F64 */
-                /* SDL has no conversion facilities to accept F64, so just do
-                 * a cast of each value in a loop and hope it goes OK. */
-                for(j = 0; j < size; j++) {
-                    s->buffer[0].data[j] = (float)(((double *)data)[j]);
-                }
-            }
-        } else {
-            memset(s->buffer[0].data, s->silence, size * sizeof(float));
-        }
-        s->buffer[0].ref = 0;
+
         return(s->channels);
     }
 
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->buffersmem; i++) {
-        if(s->buffer[i].size == 0) {
-            s->buffer[i].size = size;
-            s->buffer[i].data = malloc(size * sizeof(float));
-            if(s->buffer[i].data == NULL) {
-                LOG_PRINTF(s, "Failed to allocate buffer data memory.\n");
+        if(s->buffer[i].data == NULL) {
+            if(init_buffer(s, i, type, data, size) < 0) {
                 return(-1);
             }
-            if(data != NULL) {
-                if(type == SYNTH_TYPE_U8) {
-                    memcpy(s->buffer[i].data, data, size * sizeof(Uint8));
-                    s->U8toF32.buf = (Uint8 *)s->buffer[i].data;
-                    s->U8toF32.len = size;
-                    SDL_ConvertAudio(&(s->U8toF32));
-                } else if(type == SYNTH_TYPE_S16) {
-                    memcpy(s->buffer[i].data, data, size * sizeof(Sint16));
-                    s->S16toF32.buf = (Uint8 *)s->buffer[i].data;
-                    s->S16toF32.len = size * sizeof(Sint16);
-                    SDL_ConvertAudio(&(s->S16toF32));
-                } else if(type == SYNTH_TYPE_F32) {
-                    memcpy(s->buffer[i].data, data, size * sizeof(float));
-                } else { /* F64 */
-                    for(j = 0; j < size; j++) {
-                        s->buffer[i].data[j] = (float)(((double *)data)[j]);
-                    }
-                }
-            } else {
-                memset(s->buffer[i].data, s->silence, size * sizeof(float));
-            }
-            s->buffer[i].ref = 0;
+
             return(s->channels + i);
         }
     }
@@ -1010,36 +1012,13 @@ int synth_add_buffer(Synth *s,
     s->buffersmem *= 2;
     /* initialize empty excess buffers as empty */
     for(j = i + 1; j < s->buffersmem; j++) {
-        s->buffer[j].size = 0;
+        s->buffer[j].data = NULL;
     }
-    s->buffer[i].size = size;
-    s->buffer[i].data = malloc(size * sizeof(float));
-    if(s->buffer[i].data == NULL) {
-        LOG_PRINTF(s, "Failed to allocate buffer data memory.\n");
+
+    if(init_buffer(s, i, type, data, size) < 0) {
         return(-1);
     }
-    if(data != NULL) {
-        if(type == SYNTH_TYPE_U8) {
-            memcpy(s->buffer[i].data, data, size * sizeof(Uint8));
-            s->U8toF32.buf = (Uint8 *)s->buffer[i].data;
-            s->U8toF32.len = size;
-            SDL_ConvertAudio(&(s->U8toF32));
-        } else if(type == SYNTH_TYPE_S16) {
-            memcpy(s->buffer[i].data, data, size * sizeof(Sint16));
-            s->S16toF32.buf = (Uint8 *)s->buffer[i].data;
-            s->S16toF32.len = size * sizeof(Sint16);
-            SDL_ConvertAudio(&(s->S16toF32));
-        } else if(type == SYNTH_TYPE_F32) {
-            memcpy(s->buffer[i].data, data, size * sizeof(float));
-        } else { /* F64 */
-            for(j = 0; j < size; j++) {
-                s->buffer[i].data[j] = (float)(((double *)data)[j]);
-            }
-        }
-    } else {
-        memset(s->buffer[i].data, s->silence, size * sizeof(float));
-    }
-    s->buffer[i].ref = 0;
+
     return(s->channels + i);
 }
 
@@ -1050,15 +1029,13 @@ int synth_free_buffer(Synth *s, unsigned int index) {
     }
     index -= s->channels;
 
-    if(index > s->buffersmem ||
-       s->buffer[index].size == 0 ||
+    if(!is_valid_buffer(s, index) ||
        s->buffer[index].ref != 0) {
-        LOG_PRINTF(s, "Invalid buffer index or buffer in use.\n");
         return(-1);
     }
 
     free(s->buffer[index].data);
-    s->buffer[index].size = 0;
+    s->buffer[index].data = NULL;
 
     return(0);
 }
@@ -1069,21 +1046,17 @@ int synth_silence_buffer(Synth *s,
                          unsigned int length) {
     float *o;
     unsigned int os;
-    Uint8 silence = s->silence;
 
     if(index < s->channels) {
         o = &(s->channelbuffer[index].data[s->writecursor]);
         os = synth_get_samples_needed(s);
     } else {
         index -= s->channels;
-        if(index > s->buffersmem ||
-           s->buffer[index].size == 0) {
-            LOG_PRINTF(s, "Invalid buffer index.\n");
+        if(!is_valid_buffer(s, index)) {
             return(-1);
         }
         o = s->buffer[index].data;
         os = s->buffer[index].size;
-        silence = s->silence;
     }
 
     if(start >= os ||
@@ -1094,9 +1067,51 @@ int synth_silence_buffer(Synth *s,
 
     o = &(o[start]);
 
-    memset(o, silence, length * sizeof(float));
+    /* always deals with float buffers, whether it's output or otherwise */
+    memset(o, 0, length * sizeof(float));
 
     return(0);
+}
+
+static void init_player(Synth *s,
+                        unsigned int index,
+                        unsigned int inBuffer) {
+    s->player[index].inUse = 1;
+    s->player[index].inBuffer = inBuffer;
+    s->buffer[inBuffer].ref++; /* add a reference */
+    s->player[index].outBuffer = 0; /* A 0th buffer will have to exist at least */
+    s->player[index].inPos = 0.0;
+    s->player[index].outPos = 0;
+    s->player[index].outOp = SYNTH_OUTPUT_ADD;
+    s->player[index].volMode = SYNTH_VOLUME_CONSTANT;
+    s->player[index].volume = 1.0;
+    s->player[index].volBuffer = inBuffer; /* 0 is output only, so this is the only sane
+                                default here.  It won't do anything weird.
+                                */
+    s->buffer[inBuffer].ref++;
+    s->player[index].volPos = 0;
+    s->player[index].mode = SYNTH_MODE_ONCE;
+    s->player[index].loopStart = 0;
+    s->player[index].loopEnd = s->buffer[inBuffer].size - 1;
+    s->player[index].phaseBuffer = inBuffer; /* this would have some weird effect, but
+                                  at least it won't fail? */
+    s->buffer[inBuffer].ref++;
+    s->player[index].phasePos = 0;
+    s->player[index].speedMode = SYNTH_SPEED_CONSTANT;
+    s->player[index].speed = 1.0;
+    s->player[index].speedBuffer = inBuffer; /* same */
+    s->buffer[inBuffer].ref++;
+    s->player[index].speedPos = 0;
+}
+
+static int is_valid_player(Synth *s, unsigned int index) {
+    if(index > s->playersmem ||
+       s->player[index].inUse == 0) {
+        LOG_PRINTF(s, "Invalid player index.\n");
+        return(0);
+    }
+
+    return(1);
 }
 
 int synth_add_player(Synth *s, unsigned int inBuffer) {
@@ -1109,9 +1124,7 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
     }
     inBuffer -= s->channels;
 
-    if(inBuffer > s->buffersmem ||
-       s->buffer[inBuffer].size == 0) {
-        LOG_PRINTF(s, "Invalid buffer index.\n");
+    if(!is_valid_buffer(s, inBuffer)) {
         return(-1);
     }
 
@@ -1123,61 +1136,15 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
             return(-1);
         }
         s->playersmem = 1;
-        s->player[0].inUse = 1;
-        s->player[0].inBuffer = inBuffer;
-        s->buffer[inBuffer].ref++; /* add a reference */
-        s->player[0].outBuffer = 0; /* A 0th buffer will have to exist at least */
-        s->player[0].inPos = 0.0;
-        s->player[0].outPos = 0;
-        s->player[0].outOp = SYNTH_OUTPUT_ADD;
-        s->player[0].volMode = SYNTH_VOLUME_CONSTANT;
-        s->player[0].volume = 1.0;
-        s->player[0].volBuffer = inBuffer; /* 0 is output only, so this is the only sane
-                                    default here.  It won't do anything weird.
-                                    */
-        s->buffer[inBuffer].ref++;
-        s->player[0].volPos = 0;
-        s->player[0].mode = SYNTH_MODE_ONCE;
-        s->player[0].loopStart = 0;
-        s->player[0].loopEnd = s->buffer[inBuffer].size - 1;
-        s->player[0].phaseBuffer = inBuffer; /* this would have some weird effect, but
-                                      at least it won't fail? */
-        s->buffer[inBuffer].ref++;
-        s->player[0].phasePos = 0;
-        s->player[0].speedMode = SYNTH_SPEED_CONSTANT;
-        s->player[0].speed = 1.0;
-        s->player[0].speedBuffer = inBuffer; /* same */
-        s->buffer[inBuffer].ref++;
-        s->player[0].speedPos = 0;
+
+        init_player(s, 0, inBuffer);
         return(0);
     }
 
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->playersmem; i++) {
         if(s->player[i].inUse == 0) {
-            s->player[i].inUse = 1;
-            s->player[i].inBuffer = inBuffer;
-            s->buffer[inBuffer].ref++;
-            s->player[i].outBuffer = 0;
-            s->player[i].inPos = 0.0;
-            s->player[i].outPos = 0;
-            s->player[i].outOp = SYNTH_OUTPUT_ADD;
-            s->player[i].volMode = SYNTH_VOLUME_CONSTANT;
-            s->player[i].volume = 1.0;
-            s->player[i].volBuffer = inBuffer;
-            s->buffer[inBuffer].ref++;
-            s->player[i].volPos = 0;
-            s->player[i].mode = SYNTH_MODE_ONCE;
-            s->player[i].loopStart = 0;
-            s->player[i].loopEnd = s->buffer[inBuffer].size - 1;
-            s->player[i].phaseBuffer = inBuffer;
-            s->buffer[inBuffer].ref++;
-            s->player[i].phasePos = 0;
-            s->player[i].speedMode = SYNTH_SPEED_CONSTANT;
-            s->player[i].speed = 1.0;
-            s->player[i].speedBuffer = inBuffer;
-            s->buffer[inBuffer].ref++;
-            s->player[i].speedPos = 0;
+            init_player(s, i, inBuffer);
             return(i);
         }
     }
@@ -1195,36 +1162,13 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
     for(j = i + 1; j < s->playersmem; j++) {
         s->player[j].inUse = 0;
     }
-    s->player[i].inUse = 1;
-    s->player[i].inBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->player[i].outBuffer = 0;
-    s->player[i].inPos = 0.0;
-    s->player[i].outPos = 0;
-    s->player[i].outOp = SYNTH_OUTPUT_ADD;
-    s->player[i].volMode = SYNTH_VOLUME_CONSTANT;
-    s->player[i].volume = 1.0;
-    s->player[i].volBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->player[i].volPos = 0;
-    s->player[i].mode = SYNTH_MODE_ONCE;
-    s->player[i].loopStart = 0;
-    s->player[i].loopEnd = s->buffer[inBuffer].size - 1;
-    s->player[i].phaseBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->player[i].phasePos = 0;
-    s->player[i].speedMode = SYNTH_SPEED_CONSTANT;
-    s->player[i].speed = 1.0;
-    s->player[i].speedBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->player[i].speedPos = 0;
+
+    init_player(s, i, inBuffer);
     return(i);
 }
 
 int synth_free_player(Synth *s, unsigned int index) {
-    if(index > s->playersmem ||
-       s->player[index].inUse == 0) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1244,8 +1188,7 @@ int synth_free_player(Synth *s, unsigned int index) {
 int synth_set_player_input_buffer(Synth *s,
                                   unsigned int index,
                                   unsigned int inBuffer) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1255,9 +1198,7 @@ int synth_set_player_input_buffer(Synth *s,
     }
     inBuffer -= s->channels;
 
-    if(inBuffer > s->buffersmem ||
-       s->buffer[inBuffer].size == 0) {
-        LOG_PRINTF(s, "Invalid buffer index.\n");
+    if(!is_valid_buffer(s, inBuffer)) {
         return(-1);
     }
 
@@ -1274,8 +1215,7 @@ int synth_set_player_input_buffer(Synth *s,
 int synth_set_player_input_buffer_pos(Synth *s,
                                       unsigned int index,
                                       float inPos) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1287,15 +1227,12 @@ int synth_set_player_input_buffer_pos(Synth *s,
 int synth_set_player_output_buffer(Synth *s,
                                    unsigned int index,
                                    unsigned int outBuffer) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
     if(outBuffer >= s->channels) {
-        if(outBuffer - s->channels > s->buffersmem ||
-           s->buffer[outBuffer - s->channels].size == 0) {
-            LOG_PRINTF(s, "Invalid buffer index.\n");
+        if(!is_valid_buffer(s, outBuffer - s->channels)) {
             return(-1);
         }
         if(s->player[index].outBuffer >= s->channels) {
@@ -1318,8 +1255,7 @@ int synth_set_player_output_buffer(Synth *s,
 int synth_set_player_output_buffer_pos(Synth *s,
                                        unsigned int index,
                                        unsigned int outPos) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1331,8 +1267,7 @@ int synth_set_player_output_buffer_pos(Synth *s,
 int synth_set_player_output_mode(Synth *s,
                                  unsigned int index,
                                  SynthOutputOperation outOp) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1353,8 +1288,7 @@ int synth_set_player_output_mode(Synth *s,
 int synth_set_player_volume_mode(Synth *s,
                                  unsigned int index,
                                  SynthVolumeMode volMode) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1375,8 +1309,7 @@ int synth_set_player_volume_mode(Synth *s,
 int synth_set_player_volume(Synth *s,
                             unsigned int index,
                             float volume) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1388,8 +1321,7 @@ int synth_set_player_volume(Synth *s,
 int synth_set_player_volume_source(Synth *s,
                                    unsigned int index,
                                    unsigned int volBuffer) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1399,9 +1331,7 @@ int synth_set_player_volume_source(Synth *s,
     }
     volBuffer -= s->channels;
 
-    if(volBuffer > s->buffersmem ||
-       s->buffer[volBuffer].size == 0) {
-        LOG_PRINTF(s, "Invalid buffer index.\n");
+    if(!is_valid_buffer(s, volBuffer)) {
         return(-1);
     }
 
@@ -1416,8 +1346,7 @@ int synth_set_player_volume_source(Synth *s,
 int synth_set_player_mode(Synth *s,
                           unsigned int index,
                           SynthPlayerMode mode) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1440,8 +1369,7 @@ int synth_set_player_mode(Synth *s,
 int synth_set_player_loop_start(Synth *s,
                                 unsigned int index,
                                 unsigned int loopStart) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1462,8 +1390,7 @@ int synth_set_player_loop_start(Synth *s,
 int synth_set_player_loop_end(Synth *s,
                               unsigned int index,
                               unsigned int loopEnd) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1484,8 +1411,7 @@ int synth_set_player_loop_end(Synth *s,
 int synth_set_player_phase_source(Synth *s,
                                    unsigned int index,
                                    unsigned int phaseBuffer) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1495,9 +1421,7 @@ int synth_set_player_phase_source(Synth *s,
     }
     phaseBuffer -= s->channels;
 
-    if(phaseBuffer > s->buffersmem ||
-       s->buffer[phaseBuffer].size == 0) {
-        LOG_PRINTF(s, "Invalid buffer index.\n");
+    if(!is_valid_buffer(s, phaseBuffer)) {
         return(-1);
     }
 
@@ -1512,8 +1436,7 @@ int synth_set_player_phase_source(Synth *s,
 int synth_set_player_speed_mode(Synth *s,
                                 unsigned int index,
                                 SynthSpeedMode speedMode) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1534,8 +1457,7 @@ int synth_set_player_speed_mode(Synth *s,
 int synth_set_player_speed(Synth *s,
                            unsigned int index,
                            float speed) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1547,8 +1469,7 @@ int synth_set_player_speed(Synth *s,
 int synth_set_player_speed_source(Synth *s,
                                   unsigned int index,
                                   unsigned int speedBuffer) {
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
 
@@ -1558,9 +1479,7 @@ int synth_set_player_speed_source(Synth *s,
     }
     speedBuffer -= s->channels;
 
-    if(speedBuffer > s->buffersmem ||
-       s->buffer[speedBuffer].size == 0) {
-        LOG_PRINTF(s, "Invalid buffer index.\n");
+    if(!is_valid_buffer(s, speedBuffer)) {
         return(-1);
     }
 
@@ -1591,10 +1510,10 @@ int synth_run_player(Synth *s,
     unsigned int loopLen;
     float lastInPos;
 
-    if(index > s->playersmem) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+    if(!is_valid_player(s, index)) {
         return(-1);
     }
+
     p = &(s->player[index]);
     i = &(s->buffer[p->inBuffer]);
     if(p->outBuffer < s->channels) {
