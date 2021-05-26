@@ -531,4 +531,36 @@ int synth_run_player(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples);
 
+int synth_add_filter(Synth *s,
+                     unsigned int inBuffer,
+                     unsigned int size);
+int synth_free_filter(Synth *s, unsigned int index);
+int synth_set_filter_input_buffer(Synth *s,
+                                  unsigned int index,
+                                  unsigned int inBuffer);
+int synth_set_filter_input_buffer_start(Synth *s,
+                                        unsigned int index,
+                                        unsigned int startPos);
+int synth_set_filter_slices(Synth *s,
+                            unsigned int index,
+                            unsigned int slices);
+int synth_set_filter_mode(Synth *s,
+                          unsigned int index,
+                          SynthSliceMode mode);
+int synth_set_filter_slice(Synth *s,
+                           unsigned int index,
+                           unsigned int slice);
+int synth_set_filter_slice_source(Synth *s,
+                                  unsigned int index,
+                                  unsigned int sliceBuffer);
+int synth_set_filter_output_buffer(Synth *s,
+                                         unsigned int index,
+                                         unsigned int outBuffer);
+int synth_set_filter_output_buffer_pos(Synth *s,
+                                       unsigned int index,
+                                       unsigned int outPos);
+int synth_run_filter(Synth *s,
+                     unsigned int index,
+                     unsigned int reqSamples);
+
 #endif

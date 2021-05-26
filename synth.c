@@ -75,7 +75,7 @@ typedef struct {
     unsigned int accumPos;
 
     unsigned int inBuffer;
-    unsigned int inBufferStart;
+    unsigned int startPos;
     unsigned int slices;
     SynthSliceMode mode;
     unsigned int sliceBuffer;
@@ -1268,6 +1268,11 @@ int synth_set_player_output_buffer_pos(Synth *s,
         return(-1);
     }
 
+    if(outPos >= s->buffer[s->player[index].outBuffer].size) {
+        LOG_PRINTF(s, "Output position past end of buffer.\n");
+        return(-1);
+    }
+
     s->player[index].outPos = outPos;
 
     return(0);
@@ -2103,12 +2108,12 @@ static int init_filter(Synth *s,
     s->filter[index].accumPos = 0;
     s->filter[index].inBuffer = inBuffer;
     s->buffer[inBuffer].ref++;
-    s->filter[index].inBufferStart = 0;
+    s->filter[index].startPos = 0;
     s->filter[index].slices = 1;
     s->filter[index].mode = SYNTH_SLICE_CONSTANT;
+    s->filter[index].slice = 0;
     s->filter[index].sliceBuffer = inBuffer;
     s->buffer[inBuffer].ref++;
-    s->filter[index].slice = 0;
     s->filter[index].slicePos = 0;
     s->filter[index].outBuffer = 0;
     s->filter[index].outPos = 0;
@@ -2207,4 +2212,184 @@ int synth_free_filter(Synth *s, unsigned int index) {
     s->filter[index].accum = NULL;
 
     return(0);
+}
+
+int synth_set_filter_input_buffer(Synth *s,
+                                  unsigned int index,
+                                  unsigned int inBuffer) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(inBuffer < s->channels) {
+        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+        return(-1);
+    }
+    inBuffer -= s->channels;
+
+    if(!is_valid_buffer(s, inBuffer)) {
+        return(-1);
+    }
+
+    s->buffer[s->filter[index].inBuffer].ref--;
+    s->filter[index].inBuffer = inBuffer;
+    s->buffer[inBuffer].ref++;
+
+    return(0);
+}
+
+int synth_set_filter_input_buffer_start(Synth *s,
+                                        unsigned int index,
+                                        unsigned int startPos) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(startPos + (s->filter[index].size * s->filter[index].slices) >
+       s->buffer[s->filter[index].inBuffer].size) {
+        LOG_PRINTF(s, "Buffer start would make slices exceed buffer size.\n");
+        return(-1);
+    }
+
+    s->filter[index].startPos = startPos;
+
+    return(0);
+}
+
+int synth_set_filter_slices(Synth *s,
+                            unsigned int index,
+                            unsigned int slices) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(s->filter[index].startPos + (s->filter[index].size * slices) >
+       s->buffer[s->filter[index].inBuffer].size) {
+        LOG_PRINTF(s, "Slices count would exceed buffer size.\n");
+        return(-1);
+    }
+
+    s->filter[index].slices = slices;
+    s->filter[index].slice = 0;
+
+    return(0);
+}
+
+int synth_set_filter_mode(Synth *s,
+                          unsigned int index,
+                          SynthSliceMode mode) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    switch(mode) {
+        case SYNTH_SLICE_CONSTANT:
+        case SYNTH_SLICE_SOURCE:
+            break;
+        default:
+            LOG_PRINTF(s, "Invalid filter mode.\n");
+            return(-1);
+    }
+
+    s->filter[index].mode = mode;
+
+    return(0);
+}
+
+int synth_set_filter_slice(Synth *s,
+                           unsigned int index,
+                           unsigned int slice) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(slice > s->filter[index].slices) {
+        LOG_PRINTF(s, "Slice is greater than configured slices.\n");
+        return(-1);
+    }
+
+    s->filter[index].slice = slice;
+
+    return(0);
+}
+
+int synth_set_filter_slice_source(Synth *s,
+                                  unsigned int index,
+                                  unsigned int sliceBuffer) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(sliceBuffer < s->channels) {
+        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+        return(-1);
+    }
+    sliceBuffer -= s->channels;
+
+    if(!is_valid_buffer(s, sliceBuffer)) {
+        return(-1);
+    }
+
+    s->buffer[s->filter[index].sliceBuffer].ref--;
+    s->filter[index].inBuffer = sliceBuffer;
+    s->buffer[sliceBuffer].ref++;
+    s->filter[index].slicePos = 0;
+
+    return(0);
+}
+
+int synth_set_filter_output_buffer(Synth *s,
+                                         unsigned int index,
+                                         unsigned int outBuffer) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(outBuffer >= s->channels) {
+        if(!is_valid_buffer(s, outBuffer - s->channels)) {
+            return(-1);
+        }
+        if(s->filter[index].outBuffer >= s->channels) {
+            s->buffer[s->filter[index].outBuffer - s->channels].ref--;
+        }
+        s->filter[index].outBuffer = outBuffer;
+        s->buffer[outBuffer - s->channels].ref++;
+        s->filter[index].outPos = 0;
+    } else {
+        if(s->filter[index].outBuffer >= s->channels) {
+            s->buffer[s->filter[index].outBuffer - s->channels].ref--;
+        }
+        s->filter[index].outBuffer = outBuffer;
+        s->filter[index].outPos = 0;
+    }
+
+    return(0);
+}
+
+int synth_set_filter_output_buffer_pos(Synth *s,
+                                       unsigned int index,
+                                       unsigned int outPos) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    if(outPos >= s->buffer[s->filter[index].outBuffer].size) {
+        LOG_PRINTF(s, "Output position past end of buffer.\n");
+        return(-1);
+    }
+
+    s->filter[index].outPos = outPos;
+
+    return(0);
+}
+
+int synth_run_filter(Synth *s,
+                     unsigned int index,
+                     unsigned int reqSamples) {
+    if(!is_valid_filter(s, index)) {
+        return(-1);
+    }
+
+    /* TODO: implement anything */
+    return(reqSamples);
 }
