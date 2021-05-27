@@ -75,6 +75,9 @@ typedef struct {
     unsigned int accumPos;
 
     unsigned int inBuffer;
+    unsigned int inPos;
+
+    unsigned int filterBuffer;
     unsigned int startPos;
     unsigned int slices;
     SynthSliceMode mode;
@@ -219,9 +222,6 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
             break; \
         case SYNTH_MODE_LOOP: \
             LOG_PRINTF(s, "Loop\n"); \
-            break; \
-        case SYNTH_MODE_PINGPONG: \
-            LOG_PRINTF(s, "Ping Pong Loop\n"); \
             break; \
         case SYNTH_MODE_PHASE_SOURCE: \
             LOG_PRINTF(s, "Source/Modulate\n"); \
@@ -901,7 +901,7 @@ int synth_set_fragments(Synth *s,
             return(-1);
         }
         memset(s->channelbuffer[i].data,
-               s->silence,
+               0,
                sizeof(float) * s->buffersize);
     }
 
@@ -909,47 +909,58 @@ int synth_set_fragments(Synth *s,
 }
 
 static int init_buffer(Synth *s,
-                       unsigned int index,
+                       SynthBuffer *b,
                        SynthImportType type,
                        void *data,
                        unsigned int size) {
     unsigned int i;
 
-    s->buffer[index].size = size;
-    s->buffer[index].data = malloc(size * sizeof(float));
-    if(s->buffer[index].data == NULL) {
+    b->size = size;
+    b->data = malloc(size * sizeof(float));
+    if(b->data == NULL) {
         LOG_PRINTF(s, "Failed to allocate buffer data memory.\n");
         return(-1);
     }
     if(data != NULL) {
         if(type == SYNTH_TYPE_U8) {
-            memcpy(s->buffer[index].data, data, size * sizeof(Uint8));
-            s->U8toF32.buf = (Uint8 *)s->buffer[index].data;
+            memcpy(b->data, data, size * sizeof(Uint8));
+            s->U8toF32.buf = (Uint8 *)b->data;
             s->U8toF32.len = size;
             SDL_ConvertAudio(&(s->U8toF32));
         } else if(type == SYNTH_TYPE_S16) {
-            memcpy(s->buffer[index].data, data, size * sizeof(Sint16));
-            s->S16toF32.buf = (Uint8 *)s->buffer[index].data;
+            memcpy(b->data, data, size * sizeof(Sint16));
+            s->S16toF32.buf = (Uint8 *)b->data;
             s->S16toF32.len = size * sizeof(Sint16);
             SDL_ConvertAudio(&(s->S16toF32));
         } else if(type == SYNTH_TYPE_F32) {
-            memcpy(s->buffer[index].data, data, size * sizeof(float));
+            memcpy(b->data, data, size * sizeof(float));
         } else { /* F64 */
             /* SDL has no conversion facilities to accept F64, so just do
              * a cast of each value in a loop and hope it goes OK. */
             for(i = 0; i < size; i++) {
-                s->buffer[index].data[i] = (float)(((double *)data)[i]);
+                b->data[i] = (float)(((double *)data)[i]);
             }
         }
     } else {
-        memset(s->buffer[index].data, s->silence, size * sizeof(float));
+        memset(b->data, s->silence, size * sizeof(float));
     }
-    s->buffer[index].ref = 0;
+    b->ref = 0;
 
     return(0);
 }
 
-static int is_valid_buffer(Synth *s, unsigned int index) {
+#define BUFFER_INPUT_ONLY (1)
+static int is_valid_buffer(Synth *s, unsigned int index, int input) {
+    if(index < s->channels) {
+        if(input) {
+            LOG_PRINTF(s, "Output buffer cannot be used as input.\n");
+            return(0);
+        } else {
+            return(1);
+        }
+    }
+
+    index -= s->channels;
     if(index > s->buffersmem ||
        s->buffer[index].data == NULL) {
         LOG_PRINTF(s, "Invalid buffer index.\n");
@@ -957,6 +968,46 @@ static int is_valid_buffer(Synth *s, unsigned int index) {
     }
 
     return(1);
+}
+
+static void *get_buffer_data(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        return(&(s->channelbuffer[index].data[s->writecursor]));
+    }
+
+    return(s->buffer[index - s->channels].data);
+}
+
+static int get_buffer_size(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        return(synth_get_samples_needed(s));
+    }
+
+    return(s->buffer[index - s->channels].size);
+}
+
+static void add_buffer_ref(Synth *s, unsigned int index) {
+    if(index >= s->channels) {
+        s->buffer[index - s->channels].ref++;
+    }
+}
+
+static void free_buffer_ref(Synth *s, unsigned int index) {
+    if(index >= s->channels) {
+        if(s->buffer[index - s->channels].ref == 0) {
+            LOG_PRINTF(s, "WARNING: Attenpt to free reference to buffer with no references.\n");
+            return;
+        }
+        s->buffer[index - s->channels].ref--;
+    }
+}
+
+static unsigned int get_buffer_ref(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        return(0);
+    }
+
+    return(s->buffer[index - s->channels].ref);
 }
 
 int synth_add_buffer(Synth *s,
@@ -992,7 +1043,7 @@ int synth_add_buffer(Synth *s,
         }
         s->buffersmem = 1;
 
-        if(init_buffer(s, 0, type, data, size) < 0) {
+        if(init_buffer(s, &(s->buffer[0]), type, data, size) < 0) {
             return(-1);
         }
 
@@ -1002,7 +1053,7 @@ int synth_add_buffer(Synth *s,
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->buffersmem; i++) {
         if(s->buffer[i].data == NULL) {
-            if(init_buffer(s, i, type, data, size) < 0) {
+            if(init_buffer(s, &(s->buffer[i]), type, data, size) < 0) {
                 return(-1);
             }
 
@@ -1024,7 +1075,7 @@ int synth_add_buffer(Synth *s,
         s->buffer[j].data = NULL;
     }
 
-    if(init_buffer(s, i, type, data, size) < 0) {
+    if(init_buffer(s, &(s->buffer[i]), type, data, size) < 0) {
         return(-1);
     }
 
@@ -1032,19 +1083,15 @@ int synth_add_buffer(Synth *s,
 }
 
 int synth_free_buffer(Synth *s, unsigned int index) {
-    if(index < s->channels) {
-        LOG_PRINTF(s, "Can't free output buffers.\n");
+    if(!is_valid_buffer(s, index, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    index -= s->channels;
-
-    if(!is_valid_buffer(s, index) ||
-       s->buffer[index].ref != 0) {
+    if(get_buffer_ref(s, index) != 0) {
+        LOG_PRINTF(s, "Buffer is still referenced.\n");
         return(-1);
     }
-
-    free(s->buffer[index].data);
-    s->buffer[index].data = NULL;
+    free(s->buffer[index - s->channels].data);
+    s->buffer[index - s->channels].data = NULL;
 
     return(0);
 }
@@ -1056,26 +1103,18 @@ int synth_silence_buffer(Synth *s,
     float *o;
     unsigned int os;
 
-    if(index < s->channels) {
-        o = &(s->channelbuffer[index].data[s->writecursor]);
-        os = synth_get_samples_needed(s);
-    } else {
-        index -= s->channels;
-        if(!is_valid_buffer(s, index)) {
-            return(-1);
-        }
-        o = s->buffer[index].data;
-        os = s->buffer[index].size;
+    if(!is_valid_buffer(s, index, 0)) {
+        return(-1);
     }
+    o = get_buffer_data(s, index);
+    os = get_buffer_size(s, index);
 
     if(start >= os ||
        start + length > os) {
         LOG_PRINTF(s, "Bound(s) out of buffer range.\n");
         return(0);
     }
-
     o = &(o[start]);
-
     /* always deals with float buffers, whether it's output or otherwise */
     memset(o, 0, length * sizeof(float));
 
@@ -1083,57 +1122,51 @@ int synth_silence_buffer(Synth *s,
 }
 
 static void init_player(Synth *s,
-                        unsigned int index,
+                        SynthPlayer *p,
                         unsigned int inBuffer) {
-    s->player[index].inUse = 1;
-    s->player[index].inBuffer = inBuffer;
-    s->buffer[inBuffer].ref++; /* add a reference */
-    s->player[index].outBuffer = 0; /* A 0th buffer will have to exist at least */
-    s->player[index].inPos = 0.0;
-    s->player[index].outPos = 0;
-    s->player[index].outOp = SYNTH_OUTPUT_ADD;
-    s->player[index].volMode = SYNTH_VOLUME_CONSTANT;
-    s->player[index].volume = 1.0;
-    s->player[index].volBuffer = inBuffer; /* 0 is output only, so this is the only sane
+    p->inUse = 1;
+    p->inBuffer = inBuffer;
+    add_buffer_ref(s, inBuffer);
+    p->outBuffer = 0; /* A 0th buffer will have to exist at least */
+    p->inPos = 0.0;
+    p->outPos = 0;
+    p->outOp = SYNTH_OUTPUT_ADD;
+    p->volMode = SYNTH_VOLUME_CONSTANT;
+    p->volume = 1.0;
+    p->volBuffer = inBuffer; /* 0 is output only, so this is the only sane
                                 default here.  It won't do anything weird.
                                 */
-    s->buffer[inBuffer].ref++;
-    s->player[index].volPos = 0;
-    s->player[index].mode = SYNTH_MODE_ONCE;
-    s->player[index].loopStart = 0;
-    s->player[index].loopEnd = s->buffer[inBuffer].size - 1;
-    s->player[index].phaseBuffer = inBuffer; /* this would have some weird effect, but
+    add_buffer_ref(s, inBuffer);
+    p->volPos = 0;
+    p->mode = SYNTH_MODE_ONCE;
+    p->loopStart = 0;
+    p->loopEnd = get_buffer_size(s, inBuffer) - 1;
+    p->phaseBuffer = inBuffer; /* this would have some weird effect, but
                                   at least it won't fail? */
-    s->buffer[inBuffer].ref++;
-    s->player[index].phasePos = 0;
-    s->player[index].speedMode = SYNTH_SPEED_CONSTANT;
-    s->player[index].speed = 1.0;
-    s->player[index].speedBuffer = inBuffer; /* same */
-    s->buffer[inBuffer].ref++;
-    s->player[index].speedPos = 0;
+    add_buffer_ref(s, inBuffer);
+    p->phasePos = 0;
+    p->speedMode = SYNTH_SPEED_CONSTANT;
+    p->speed = 1.0;
+    p->speedBuffer = inBuffer; /* same */
+    add_buffer_ref(s, inBuffer);
+    p->speedPos = 0;
 }
 
-static int is_valid_player(Synth *s, unsigned int index) {
+static SynthPlayer *get_player(Synth *s, unsigned int index) {
     if(index > s->playersmem ||
        s->player[index].inUse == 0) {
         LOG_PRINTF(s, "Invalid player index.\n");
-        return(0);
+        return(NULL);
     }
 
-    return(1);
+    return(&(s->player[index]));
 }
 
 int synth_add_player(Synth *s, unsigned int inBuffer) {
     unsigned int i, j;
     SynthPlayer *temp;
 
-    if(inBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
-        return(-1);
-    }
-    inBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, inBuffer)) {
+    if(!is_valid_buffer(s, inBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
 
@@ -1146,14 +1179,14 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
         }
         s->playersmem = 1;
 
-        init_player(s, 0, inBuffer);
+        init_player(s, &(s->player[0]), inBuffer);
         return(0);
     }
 
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->playersmem; i++) {
         if(s->player[i].inUse == 0) {
-            init_player(s, i, inBuffer);
+            init_player(s, &(s->player[i]), inBuffer);
             return(i);
         }
     }
@@ -1172,24 +1205,21 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
         s->player[j].inUse = 0;
     }
 
-    init_player(s, i, inBuffer);
+    init_player(s, &(s->player[i]), inBuffer);
     return(i);
 }
 
 int synth_free_player(Synth *s, unsigned int index) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    /* remove a reference */
-    if(s->player[index].outBuffer >= s->channels) {
-        s->buffer[s->player[index].outBuffer - s->channels].ref--;
-    }
-    s->buffer[s->player[index].inBuffer].ref--;
-    s->buffer[s->player[index].volBuffer].ref--;
-    s->buffer[s->player[index].phaseBuffer].ref--;
-    s->buffer[s->player[index].speedBuffer].ref--;
-    s->player[index].inUse = 0;
+    free_buffer_ref(s, p->outBuffer);
+    free_buffer_ref(s, p->inBuffer);
+    free_buffer_ref(s, p->volBuffer);
+    free_buffer_ref(s, p->phaseBuffer);
+    free_buffer_ref(s, p->speedBuffer);
+    p->inUse = 0;
 
     return(0);
 }
@@ -1197,26 +1227,19 @@ int synth_free_player(Synth *s, unsigned int index) {
 int synth_set_player_input_buffer(Synth *s,
                                   unsigned int index,
                                   unsigned int inBuffer) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(inBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+    if(!is_valid_buffer(s, inBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    inBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, inBuffer)) {
-        return(-1);
-    }
-
-    s->buffer[s->player[index].inBuffer].ref--;
-    s->player[index].inBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->player[index].inPos = 0.0;
-    s->player[index].loopStart = 0;
-    s->player[index].loopEnd = s->buffer[inBuffer].size - 1;
+    free_buffer_ref(s, p->inBuffer);
+    p->inBuffer = inBuffer;
+    add_buffer_ref(s, inBuffer);
+    p->inPos = 0.0;
+    p->loopStart = 0;
+    p->loopEnd = get_buffer_size(s, index) - 1;
 
     return(0);
 }
@@ -1224,11 +1247,11 @@ int synth_set_player_input_buffer(Synth *s,
 int synth_set_player_input_buffer_pos(Synth *s,
                                       unsigned int index,
                                       float inPos) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    s->player[index].inPos = inPos;
+    p->inPos = inPos;
 
     return(0);
 }
@@ -1236,27 +1259,17 @@ int synth_set_player_input_buffer_pos(Synth *s,
 int synth_set_player_output_buffer(Synth *s,
                                    unsigned int index,
                                    unsigned int outBuffer) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(outBuffer >= s->channels) {
-        if(!is_valid_buffer(s, outBuffer - s->channels)) {
-            return(-1);
-        }
-        if(s->player[index].outBuffer >= s->channels) {
-            s->buffer[s->player[index].outBuffer - s->channels].ref--;
-        }
-        s->player[index].outBuffer = outBuffer;
-        s->buffer[outBuffer - s->channels].ref++;
-        s->player[index].outPos = 0;
-    } else {
-        if(s->player[index].outBuffer >= s->channels) {
-            s->buffer[s->player[index].outBuffer - s->channels].ref--;
-        }
-        s->player[index].outBuffer = outBuffer;
-        s->player[index].outPos = 0;
+    if(!is_valid_buffer(s, outBuffer, 0)) {
+        return(-1);
     }
+    free_buffer_ref(s, p->outBuffer);
+    p->outBuffer = outBuffer;
+    add_buffer_ref(s, outBuffer);
+    p->outPos = 0;
 
     return(0);
 }
@@ -1264,16 +1277,15 @@ int synth_set_player_output_buffer(Synth *s,
 int synth_set_player_output_buffer_pos(Synth *s,
                                        unsigned int index,
                                        unsigned int outPos) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(outPos >= s->buffer[s->player[index].outBuffer].size) {
+    if((int)outPos >= get_buffer_size(s, p->outBuffer)) {
         LOG_PRINTF(s, "Output position past end of buffer.\n");
         return(-1);
     }
-
-    s->player[index].outPos = outPos;
+    p->outPos = outPos;
 
     return(0);
 }
@@ -1281,7 +1293,8 @@ int synth_set_player_output_buffer_pos(Synth *s,
 int synth_set_player_output_mode(Synth *s,
                                  unsigned int index,
                                  SynthOutputOperation outOp) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
 
@@ -1293,8 +1306,7 @@ int synth_set_player_output_mode(Synth *s,
             LOG_PRINTF(s, "Invalid player output mode.\n");
             return(-1);
     }
-
-    s->player[index].outOp = outOp;
+    p->outOp = outOp;
 
     return(0);
 }
@@ -1302,7 +1314,8 @@ int synth_set_player_output_mode(Synth *s,
 int synth_set_player_volume_mode(Synth *s,
                                  unsigned int index,
                                  SynthVolumeMode volMode) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
 
@@ -1314,8 +1327,7 @@ int synth_set_player_volume_mode(Synth *s,
             LOG_PRINTF(s, "Invalid player volume mode.\n");
             return(-1);
     }
-
-    s->player[index].volMode = volMode;
+    p->volMode = volMode;
 
     return(0);
 }
@@ -1323,11 +1335,11 @@ int synth_set_player_volume_mode(Synth *s,
 int synth_set_player_volume(Synth *s,
                             unsigned int index,
                             float volume) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    s->player[index].volume = volume;
+    p->volume = volume;
 
     return(0);
 }
@@ -1335,24 +1347,17 @@ int synth_set_player_volume(Synth *s,
 int synth_set_player_volume_source(Synth *s,
                                    unsigned int index,
                                    unsigned int volBuffer) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(volBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+    if(!is_valid_buffer(s, volBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    volBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, volBuffer)) {
-        return(-1);
-    }
-
-    s->buffer[s->player[index].volBuffer].ref--;
-    s->player[index].volBuffer = volBuffer;
-    s->buffer[volBuffer].ref++;
-    s->player[index].volPos = 0;
+    free_buffer_ref(s, p->volBuffer);
+    p->volBuffer = volBuffer;
+    add_buffer_ref(s, volBuffer);
+    p->volPos = 0;
 
     return(0);
 }
@@ -1360,22 +1365,21 @@ int synth_set_player_volume_source(Synth *s,
 int synth_set_player_mode(Synth *s,
                           unsigned int index,
                           SynthPlayerMode mode) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
 
     switch(mode) {
         case SYNTH_MODE_ONCE:
         case SYNTH_MODE_LOOP:
-        case SYNTH_MODE_PINGPONG:
         case SYNTH_MODE_PHASE_SOURCE:
             break;
         default:
             LOG_PRINTF(s, "Invalid player output mode.\n");
             return(-1);
     }
-
-    s->player[index].mode = mode;
+    p->mode = mode;
 
     return(0);
 }
@@ -1383,20 +1387,19 @@ int synth_set_player_mode(Synth *s,
 int synth_set_player_loop_start(Synth *s,
                                 unsigned int index,
                                 unsigned int loopStart) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(loopStart >= s->buffer[s->player[index].inBuffer].size) {
+    if((int)loopStart >= get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "Player loop start out of buffer range.\n");
         return(-1);
     }
-
-    if(loopStart >= s->player[index].loopEnd) {
+    if(loopStart >= p->loopEnd) {
         LOG_PRINTF(s, "Loop start must be before loop end.\n");
         return(-1);
     }
-    s->player[index].loopStart = loopStart;
+    p->loopStart = loopStart;
 
     return(0);
 }
@@ -1404,20 +1407,19 @@ int synth_set_player_loop_start(Synth *s,
 int synth_set_player_loop_end(Synth *s,
                               unsigned int index,
                               unsigned int loopEnd) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(loopEnd >= s->buffer[s->player[index].inBuffer].size) {
+    if((int)loopEnd >= get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "Player loop start out of buffer range.\n");
         return(-1);
     }
-
-    if(loopEnd <= s->player[index].loopStart) {
+    if(loopEnd <= p->loopStart) {
         LOG_PRINTF(s, "Loop end must be after loop start.\n");
         return(-1);
     }
-    s->player[index].loopEnd = loopEnd;
+    p->loopEnd = loopEnd;
 
     return(0);
 }
@@ -1425,24 +1427,17 @@ int synth_set_player_loop_end(Synth *s,
 int synth_set_player_phase_source(Synth *s,
                                    unsigned int index,
                                    unsigned int phaseBuffer) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(phaseBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+    if(!is_valid_buffer(s, phaseBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    phaseBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, phaseBuffer)) {
-        return(-1);
-    }
-
-    s->buffer[s->player[index].phaseBuffer].ref--;
-    s->player[index].phaseBuffer = phaseBuffer;
-    s->buffer[phaseBuffer].ref++;
-    s->player[index].phasePos = 0;
+    free_buffer_ref(s, p->phaseBuffer);
+    p->phaseBuffer = phaseBuffer;
+    add_buffer_ref(s, phaseBuffer);
+    p->phasePos = 0;
 
     return(0);
 }
@@ -1450,7 +1445,8 @@ int synth_set_player_phase_source(Synth *s,
 int synth_set_player_speed_mode(Synth *s,
                                 unsigned int index,
                                 SynthSpeedMode speedMode) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
 
@@ -1462,8 +1458,7 @@ int synth_set_player_speed_mode(Synth *s,
             LOG_PRINTF(s, "Invalid player speed mode.\n");
             return(-1);
     }
-
-    s->player[index].speedMode = speedMode;
+    p->speedMode = speedMode;
 
     return(0);
 }
@@ -1471,11 +1466,11 @@ int synth_set_player_speed_mode(Synth *s,
 int synth_set_player_speed(Synth *s,
                            unsigned int index,
                            float speed) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    s->player[index].speed = speed;
+    p->speed = speed;
 
     return(0);
 }
@@ -1483,24 +1478,17 @@ int synth_set_player_speed(Synth *s,
 int synth_set_player_speed_source(Synth *s,
                                   unsigned int index,
                                   unsigned int speedBuffer) {
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
         return(-1);
     }
-
-    if(speedBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+    if(!is_valid_buffer(s, speedBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    speedBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, speedBuffer)) {
-        return(-1);
-    }
-
-    s->buffer[s->player[index].speedBuffer].ref--;
-    s->player[index].speedBuffer = speedBuffer;
-    s->buffer[speedBuffer].ref++;
-    s->player[index].speedPos = 0;
+    free_buffer_ref(s, p->speedBuffer);
+    p->speedBuffer = speedBuffer;
+    add_buffer_ref(s, speedBuffer);
+    p->speedPos = 0;
 
     return(0);
 }
@@ -1509,645 +1497,351 @@ int synth_set_player_speed_source(Synth *s,
  * try to figure out as many conditions and values ahead of time to keep the
  * loops tight and small and hopefully that'll help the compiler figure out
  * how to make them faster? */
-int synth_run_player(Synth *s,
+int synth_run_player(Synth *syn,
                      unsigned int index,
                      unsigned int reqSamples) {
-    unsigned int samples;
-    unsigned int todo;
-    SynthPlayer *p;
-    SynthBuffer *i;
-    float *o;
-    unsigned int os;
-    SynthBuffer *sp;
-    SynthBuffer *v;
-    SynthBuffer *ph;
-    unsigned int loopLen;
-    float lastInPos;
+    int samples;
+    int todo;
 
-    if(!is_valid_player(s, index)) {
+    SynthPlayer *pl = get_player(syn, index);
+    if(pl == NULL) {
         return(-1);
     }
+    float vol = pl->volume;
 
-    p = &(s->player[index]);
-    i = &(s->buffer[p->inBuffer]);
-    if(p->outBuffer < s->channels) {
-        o = &(s->channelbuffer[p->outBuffer].data[s->writecursor]);
-        os = synth_get_samples_needed(s);
-        if(p->outPos >= os) {
-            return(0);
-        }
-    } else {
-        o = s->buffer[s->player[index].outBuffer - s->channels].data;
-        os = s->buffer[s->player[index].outBuffer - s->channels].size;
-    }
+    float *i = get_buffer_data(syn, pl->inBuffer);
+    float *o = get_buffer_data(syn, pl->outBuffer);
+    int outPos = pl->outPos;
 
-    /* TODO actual player logic */
+    todo = MIN((int)reqSamples,
+               get_buffer_size(syn, pl->outBuffer) - outPos);
+    /* silence a warning */
     samples = 0;
-    todo = reqSamples;
-    if(p->mode == SYNTH_MODE_ONCE &&
-       p->speedMode == SYNTH_SPEED_CONSTANT) {
-        if(p->inPos >= i->size) {
-            return(0);
+    /* TODO actual player logic */
+    if(pl->mode == SYNTH_MODE_ONCE &&
+       pl->speedMode == SYNTH_SPEED_CONSTANT) {
+        float inPos = pl->inPos;
+        float speed = pl->speed;
+        todo = MIN(todo, ((float)get_buffer_size(syn, pl->inBuffer)
+                          - inPos) / speed);
+        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+           pl->outOp == SYNTH_OUTPUT_REPLACE) {
+            for(samples = 0; samples < todo; samples++) {
+                o[outPos] = i[(int)inPos] * vol;
+                outPos++;
+                inPos += speed;
+            }
+        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+                  pl->outOp == SYNTH_OUTPUT_ADD) {
+            for(samples = 0; samples < todo; samples++) {
+                o[outPos] += i[(int)inPos] * vol;
+                outPos++;
+                inPos += speed;
+            }
+        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+            float *v = get_buffer_data(syn, pl->volBuffer);
+            int volPos = pl->volPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
+            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    volPos++;
+                    inPos += speed;
+                }
+            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    volPos++;
+                    inPos += speed;
+                }
+            }
+            pl->volPos = volPos;
         }
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
-            todo = MIN(todo, ((float)(i->size) - p->inPos) /
-                             p->speed);
+        pl->inPos = inPos;
+    } else if(pl->mode == SYNTH_MODE_ONCE &&
+              pl->speedMode == SYNTH_SPEED_SOURCE) {
+        float *s = get_buffer_data(syn, pl->speedBuffer);
+        int is = get_buffer_size(syn, pl->inBuffer);
+        float inPos = pl->inPos;
+        int speedPos = pl->speedPos;
+        float speed = pl->speed;
+        todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
+        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+           pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                p->inPos += p->speed;
+                o[outPos] = i[(int)inPos] * vol;
+                outPos++;
+                inPos += s[speedPos] * speed;
+                speedPos++;
+                if(inPos >= is) {
+                    break;
+                }
             }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
-            todo = MIN(todo, ((float)(i->size) - p->inPos) /
-                             p->speed);
+        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+                  pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                p->inPos += p->speed;
+                o[outPos] += i[(int)inPos] * vol;
+                outPos++;
+                inPos += s[speedPos] * speed;
+                speedPos++;
+                if(inPos >= is) {
+                    break;
+                }
             }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            todo = MIN(todo, ((float)(i->size) - p->inPos) /
-                             p->speed);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                p->inPos += p->speed;
-                p->volPos = (p->volPos + 1) % v->size;
+        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+            float *v = get_buffer_data(syn, pl->volBuffer);
+            int volPos = pl->volPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
+            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    inPos += s[speedPos] * speed;
+                    speedPos++;
+                    volPos++;
+                    if(inPos >= is) {
+                        break;
+                    }
+                }
+            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    inPos += s[speedPos] * speed;
+                    speedPos++;
+                    volPos++;
+                    if(inPos >= is) {
+                        break;
+                    }
+                }
             }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            todo = MIN(todo, ((float)(i->size) - p->inPos) /
-                             p->speed);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                p->inPos += p->speed;
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
+            pl->volPos = volPos;
         }
-    } else if(p->mode == SYNTH_MODE_ONCE &&
-              p->speedMode == SYNTH_SPEED_SOURCE) {
-        sp = &(s->buffer[p->speedBuffer]);
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
+        pl->inPos = inPos;
+        pl->speedPos = speedPos;
+    } else if(pl->mode == SYNTH_MODE_LOOP &&
+              pl->speedMode == SYNTH_SPEED_CONSTANT) {
+        float inPos = pl->inPos;
+        float speed = pl->speed;
+        float loopLen = pl->loopEnd - pl->loopStart;
+        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+           pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                p->inPos += sp->data[p->speedPos] * p->speed;
-                if(p->inPos >= i->size) {
-                    break;
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                p->inPos += sp->data[p->speedPos] * p->speed;
-                if(p->inPos >= i->size) {
-                    break;
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                p->inPos += sp->data[p->speedPos] * p->speed;
-                if(p->inPos >= i->size) {
-                    break;
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                p->inPos += sp->data[p->speedPos] * p->speed;
-                if(p->inPos >= i->size) {
-                    break;
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
-        }
-    } else if(p->mode == SYNTH_MODE_LOOP &&
-              p->speedMode == SYNTH_SPEED_CONSTANT) {
-        loopLen = p->loopEnd - p->loopStart;
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
+                o[outPos] = i[(int)inPos] * vol;
+                outPos++;
+                inPos += speed;
                 /* can't do this without branching that I know of, not sure
-                 * if it matters.. make sure it only triggers on transition. */
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+                 * if it matters.. */
+                if(inPos > pl->loopEnd) {
+                    inPos -= loopLen;
                 }
             }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
+        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+                  pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+                o[outPos] += i[(int)inPos] * vol;
+                outPos++;
+                inPos += speed;
+                if(inPos > pl->loopEnd) {
+                    inPos -= loopLen;
                 }
             }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+            float *v = get_buffer_data(syn, pl->volBuffer);
+            int volPos = pl->volPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
+            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    inPos += speed;
+                    if(inPos > pl->loopEnd) {
+                        inPos -= loopLen;
+                    }
+                    volPos++;
                 }
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    inPos += speed;
+                    if(inPos > pl->loopEnd) {
+                        inPos -= loopLen;
+                    }
+                    volPos++;
                 }
-                p->volPos = (p->volPos + 1) % v->size;
             }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
+            pl->volPos = volPos;
         }
-    } else if(p->mode == SYNTH_MODE_LOOP &&
-              p->speedMode == SYNTH_SPEED_SOURCE) {
-        loopLen = p->loopEnd - p->loopStart;
-        sp = &(s->buffer[p->speedBuffer]);
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
+        pl->inPos = inPos;
+    } else if(pl->mode == SYNTH_MODE_LOOP &&
+              pl->speedMode == SYNTH_SPEED_SOURCE) {
+        float *s = get_buffer_data(syn, pl->speedBuffer);
+        float inPos = pl->inPos;
+        int speedPos = pl->speedPos;
+        float speed = pl->speed;
+        todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
+        float loopLen = pl->loopEnd - pl->loopStart;
+        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+           pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+                o[outPos] = i[(int)inPos] * vol;
+                outPos++;
+                inPos += s[speedPos] * speed;
+                if(inPos > pl->loopEnd) {
+                    inPos -= loopLen;
                 }
-                p->speedPos = (p->speedPos + 1) % sp->size;
+                speedPos++;
             }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
+        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+                  pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+                o[outPos] += i[(int)inPos] * vol;
+                outPos++;
+                inPos += s[speedPos] * speed;
+                if(inPos > pl->loopEnd) {
+                    inPos -= loopLen;
                 }
-                p->speedPos = (p->speedPos + 1) % sp->size;
+                speedPos++;
             }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+            float *v = get_buffer_data(syn, pl->volBuffer);
+            int volPos = pl->volPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
+            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    inPos += s[speedPos] * speed;
+                    if(inPos > pl->loopEnd) {
+                        inPos -= loopLen;
+                    }
+                    speedPos++;
+                    volPos++;
                 }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
+            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
+                    outPos++;
+                    inPos += s[speedPos] * speed;
+                    if(inPos > pl->loopEnd) {
+                        inPos -= loopLen;
+                    }
+                    speedPos++;
+                    volPos++;
                 }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-                p->volPos = (p->volPos + 1) % v->size;
             }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
+            pl->volPos = volPos;
         }
-    } else if(p->mode == SYNTH_MODE_PINGPONG &&
-              p->speedMode == SYNTH_SPEED_CONSTANT) {
-        loopLen = p->loopEnd - p->loopStart;
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
+        pl->inPos = inPos;
+        pl->speedPos = speedPos;
+    } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
+        float *p = get_buffer_data(syn, pl->phaseBuffer);
+        int phasePos = pl->phasePos;
+        float loopLen = pl->loopEnd - pl->loopStart;
+        todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
+        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+           pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
+                o[outPos] =
+                    i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
+                      + pl->loopStart] * vol;
+                outPos++;
+                phasePos++;
+            }
+        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+                  pl->outOp == SYNTH_OUTPUT_ADD) {
+            for(samples = 0; samples < todo; samples++) {
+                o[outPos] =
+                    i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
+                      + pl->loopStart] * vol;
+                outPos++;
+                phasePos++;
+            }
+        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+            float *v = get_buffer_data(syn, pl->volBuffer);
+            int volPos = pl->volPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
+            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] =
+                        i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
+                          + pl->loopStart] * v[volPos] * vol;
+                    outPos++;
+                    volPos++;
+                    phasePos++;
+                }
+            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    o[outPos] +=
+                        i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
+                          + pl->loopStart] * v[volPos] * vol;
+                    outPos++;
+                    volPos++;
+                    phasePos++;
                 }
             }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos = fmodf(p->inPos + p->speed, i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
+            pl->volPos = volPos;
         }
-    } else if(p->mode == SYNTH_MODE_PINGPONG &&
-              p->speedMode == SYNTH_SPEED_SOURCE) {
-        loopLen = p->loopEnd - p->loopStart;
-        sp = &(s->buffer[p->speedBuffer]);
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[(int)p->inPos] * v->data[p->volPos] * p->volume;
-                p->outPos++;
-                lastInPos = p->inPos;
-                p->inPos =
-                    fmodf(p->inPos +
-                          (sp->data[p->speedPos] * p->speed),
-                          i->size);
-                if(lastInPos <= p->loopEnd &&
-                   p->inPos > p->loopEnd) {
-                    p->inPos -= loopLen;
-                    p->speed = -(p->speed);
-                } else if(lastInPos >= p->loopStart &&
-                          p->inPos < p->loopStart) {
-                    p->inPos += loopLen;
-                    p->speed = -(p->speed);
-                }
-                p->speedPos = (p->speedPos + 1) % sp->size;
-                p->volPos = (p->volPos + 1) % v->size;
-            }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
-        }
-    } else if(p->mode == SYNTH_MODE_PHASE_SOURCE) {
-        ph = &(s->buffer[p->phaseBuffer]);
-        loopLen = p->loopEnd - p->loopStart;
-        if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-           p->outOp == SYNTH_OUTPUT_REPLACE) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
-                            + p->loopStart]
-                    * p->volume;
-                p->outPos++;
-                p->phasePos = (p->phasePos + 1) % ph->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_CONSTANT &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
-                            + p->loopStart]
-                    * p->volume;
-                p->outPos++;
-                p->phasePos = (p->phasePos + 1) % ph->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_REPLACE) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] =
-                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
-                            + p->loopStart]
-                    * p->volume;
-                p->outPos++;
-                p->volPos = (p->volPos + 1) % v->size;
-                p->phasePos = (p->phasePos + 1) % ph->size;
-            }
-        } else if(p->volMode == SYNTH_VOLUME_SOURCE &&
-                  p->outOp == SYNTH_OUTPUT_ADD) {
-            v = &(s->buffer[p->volBuffer]);
-            todo = MIN(todo, os - p->outPos);
-            for(samples = 0; samples < todo; samples++) {
-                o[p->outPos] +=
-                    i->data[((int)fabsf(ph->data[p->phasePos] * loopLen) % loopLen)
-                            + p->loopStart]
-                    * p->volume;
-                p->outPos++;
-                p->volPos = (p->volPos + 1) % v->size;
-                p->phasePos = (p->phasePos + 1) % ph->size;
-            }
-        } else {
-            LOG_PRINTF(s, "Invalid output mode.\n");
-            return(-1);
-        }
-    } else {
-        LOG_PRINTF(s, "Invalid player mode.\n");
-        return(-1);
+        pl->phasePos = phasePos;
     }
+    pl->outPos = outPos;
 
     return(samples);
 }
 
 static int init_filter(Synth *s,
-                       unsigned int index,
-                       unsigned int inBuffer,
+                       SynthFilter *f,
+                       unsigned int filterBuffer,
                        unsigned int size) {
-    s->filter[index].accum = malloc(sizeof(float) * size);
-    if(s->filter[index].accum == NULL) {
+    f->accum = malloc(sizeof(float) * size);
+    if(f->accum == NULL) {
         LOG_PRINTF(s, "Failed to allocate filter accumulation buffer.\n");
         return(-1);
     }
-    s->filter[index].size = size;
-    s->filter[index].accumPos = 0;
-    s->filter[index].inBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->filter[index].startPos = 0;
-    s->filter[index].slices = 1;
-    s->filter[index].mode = SYNTH_SLICE_CONSTANT;
-    s->filter[index].slice = 0;
-    s->filter[index].sliceBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
-    s->filter[index].slicePos = 0;
-    s->filter[index].outBuffer = 0;
-    s->filter[index].outPos = 0;
+    f->size = size;
+    f->accumPos = 0;
+    f->inBuffer = filterBuffer;
+    s->buffer[filterBuffer].ref++;
+    f->inPos = 0;
+    f->filterBuffer = filterBuffer;
+    s->buffer[filterBuffer].ref++;
+    f->startPos = 0;
+    f->slices = 1;
+    f->mode = SYNTH_SLICE_CONSTANT;
+    f->slice = 0;
+    f->sliceBuffer = filterBuffer;
+    s->buffer[filterBuffer].ref++;
+    f->slicePos = 0;
+    f->outBuffer = 0;
+    f->outPos = 0;
 
     return(0);
 }
 
-static int is_valid_filter(Synth *s, unsigned int index) {
+static SynthFilter *get_filter(Synth *s, unsigned int index) {
     if(index > s->filtersmem ||
        s->filter[index].accum == NULL) {
         LOG_PRINTF(s, "Invalid filter index.\n");
-        return(0);
+        return(NULL);
     }
 
-    return(1);
+    return(&(s->filter[index]));
 }
 
 int synth_add_filter(Synth *s,
-                     unsigned int inBuffer,
+                     unsigned int filterBuffer,
                      unsigned int size) {
     unsigned int i, j;
     SynthFilter *temp;
 
-    if(inBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
-        return(-1);
-    }
-    inBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, inBuffer)) {
+    if(!is_valid_buffer(s, filterBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
 
-    if(size > s->buffer[inBuffer].size) {
+    if(get_buffer_size(s, filterBuffer) < (int)size) {
         LOG_PRINTF(s, "Input buffer isn't large enough for filter size.");
         return(-1);
     }
@@ -2161,7 +1855,7 @@ int synth_add_filter(Synth *s,
         }
         s->filtersmem = 1;
 
-        if(init_filter(s, 0, inBuffer, size) < 0) {
+        if(init_filter(s, &(s->filter[0]), filterBuffer, size) < 0) {
             return(-1);
         }
         return(0);
@@ -2170,7 +1864,7 @@ int synth_add_filter(Synth *s,
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->filtersmem; i++) {
         if(s->filter[i].accum == NULL) {
-            if(init_filter(s, i, inBuffer, size) < 0) {
+            if(init_filter(s, &(s->filter[0]), filterBuffer, size) < 0) {
                 return(-1);
             }
             return(i);
@@ -2191,25 +1885,27 @@ int synth_add_filter(Synth *s,
         s->filter[j].accum = NULL;
     }
 
-    if(init_filter(s, i, inBuffer, size) < 0) {
+    if(init_filter(s, &(s->filter[i]), filterBuffer, size) < 0) {
         return(-1);
     }
     return(i);
 }
 
 int synth_free_filter(Synth *s, unsigned int index) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
 
     /* remove a reference */
-    if(s->filter[index].outBuffer >= s->channels) {
-        s->buffer[s->filter[index].outBuffer - s->channels].ref--;
+    if(f->outBuffer >= s->channels) {
+        s->buffer[f->outBuffer - s->channels].ref--;
     }
-    s->buffer[s->filter[index].inBuffer].ref--;
-    s->buffer[s->filter[index].sliceBuffer].ref--;
-    free(s->filter[index].accum);
-    s->filter[index].accum = NULL;
+    s->buffer[f->inBuffer].ref--;
+    s->buffer[f->filterBuffer].ref--;
+    s->buffer[f->sliceBuffer].ref--;
+    free(f->accum);
+    f->accum = NULL;
 
     return(0);
 }
@@ -2217,41 +1913,54 @@ int synth_free_filter(Synth *s, unsigned int index) {
 int synth_set_filter_input_buffer(Synth *s,
                                   unsigned int index,
                                   unsigned int inBuffer) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
-
-    if(inBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+    if(!is_valid_buffer(s, inBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    inBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, inBuffer)) {
-        return(-1);
-    }
-
-    s->buffer[s->filter[index].inBuffer].ref--;
-    s->filter[index].inBuffer = inBuffer;
-    s->buffer[inBuffer].ref++;
+    free_buffer_ref(s, f->inBuffer);
+    f->inBuffer = inBuffer;
+    add_buffer_ref(s, inBuffer);
+    f->inPos = 0;
 
     return(0);
 }
 
-int synth_set_filter_input_buffer_start(Synth *s,
-                                        unsigned int index,
-                                        unsigned int startPos) {
-    if(!is_valid_filter(s, index)) {
+int synth_set_filter_buffer(Synth *s,
+                            unsigned int index,
+                            unsigned int filterBuffer) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
+    if(!is_valid_buffer(s, filterBuffer, BUFFER_INPUT_ONLY)) {
+        return(-1);
+    }
+    free_buffer_ref(s, f->filterBuffer);
+    f->filterBuffer = filterBuffer;
+    add_buffer_ref(s, filterBuffer);
+    f->startPos = 0;
+    f->slices = 1;
+    f->slice = 0;
 
-    if(startPos + (s->filter[index].size * s->filter[index].slices) >
-       s->buffer[s->filter[index].inBuffer].size) {
+    return(0);
+}
+
+int synth_set_filter_buffer_start(Synth *s,
+                                        unsigned int index,
+                                        unsigned int startPos) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
+        return(-1);
+    }
+    if(startPos + (f->size * f->slices) >
+       (unsigned int)get_buffer_size(s, f->filterBuffer)) {
         LOG_PRINTF(s, "Buffer start would make slices exceed buffer size.\n");
         return(-1);
     }
-
-    s->filter[index].startPos = startPos;
+    f->startPos = startPos;
 
     return(0);
 }
@@ -2259,18 +1968,17 @@ int synth_set_filter_input_buffer_start(Synth *s,
 int synth_set_filter_slices(Synth *s,
                             unsigned int index,
                             unsigned int slices) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
-
-    if(s->filter[index].startPos + (s->filter[index].size * slices) >
-       s->buffer[s->filter[index].inBuffer].size) {
+    if(f->startPos + (f->size * slices) >
+       (unsigned int)get_buffer_size(s, f->filterBuffer)) {
         LOG_PRINTF(s, "Slices count would exceed buffer size.\n");
         return(-1);
     }
-
-    s->filter[index].slices = slices;
-    s->filter[index].slice = 0;
+    f->slices = slices;
+    f->slice = 0;
 
     return(0);
 }
@@ -2278,7 +1986,8 @@ int synth_set_filter_slices(Synth *s,
 int synth_set_filter_mode(Synth *s,
                           unsigned int index,
                           SynthSliceMode mode) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
 
@@ -2290,8 +1999,7 @@ int synth_set_filter_mode(Synth *s,
             LOG_PRINTF(s, "Invalid filter mode.\n");
             return(-1);
     }
-
-    s->filter[index].mode = mode;
+    f->mode = mode;
 
     return(0);
 }
@@ -2299,16 +2007,15 @@ int synth_set_filter_mode(Synth *s,
 int synth_set_filter_slice(Synth *s,
                            unsigned int index,
                            unsigned int slice) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
-
-    if(slice > s->filter[index].slices) {
+    if(slice > f->slices) {
         LOG_PRINTF(s, "Slice is greater than configured slices.\n");
         return(-1);
     }
-
-    s->filter[index].slice = slice;
+    f->slice = slice;
 
     return(0);
 }
@@ -2316,24 +2023,17 @@ int synth_set_filter_slice(Synth *s,
 int synth_set_filter_slice_source(Synth *s,
                                   unsigned int index,
                                   unsigned int sliceBuffer) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
-
-    if(sliceBuffer < s->channels) {
-        LOG_PRINTF(s, "Output buffer can't be used as input.\n");
+    if(!is_valid_buffer(s, sliceBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    sliceBuffer -= s->channels;
-
-    if(!is_valid_buffer(s, sliceBuffer)) {
-        return(-1);
-    }
-
-    s->buffer[s->filter[index].sliceBuffer].ref--;
-    s->filter[index].inBuffer = sliceBuffer;
-    s->buffer[sliceBuffer].ref++;
-    s->filter[index].slicePos = 0;
+    free_buffer_ref(s, f->sliceBuffer);
+    f->sliceBuffer = sliceBuffer;
+    add_buffer_ref(s, sliceBuffer);
+    f->slicePos = 0;
 
     return(0);
 }
@@ -2341,27 +2041,17 @@ int synth_set_filter_slice_source(Synth *s,
 int synth_set_filter_output_buffer(Synth *s,
                                          unsigned int index,
                                          unsigned int outBuffer) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
-
-    if(outBuffer >= s->channels) {
-        if(!is_valid_buffer(s, outBuffer - s->channels)) {
-            return(-1);
-        }
-        if(s->filter[index].outBuffer >= s->channels) {
-            s->buffer[s->filter[index].outBuffer - s->channels].ref--;
-        }
-        s->filter[index].outBuffer = outBuffer;
-        s->buffer[outBuffer - s->channels].ref++;
-        s->filter[index].outPos = 0;
-    } else {
-        if(s->filter[index].outBuffer >= s->channels) {
-            s->buffer[s->filter[index].outBuffer - s->channels].ref--;
-        }
-        s->filter[index].outBuffer = outBuffer;
-        s->filter[index].outPos = 0;
+    if(!is_valid_buffer(s, outBuffer, 0)) {
+        return(-1);
     }
+    free_buffer_ref(s, f->outBuffer);
+    f->outBuffer = outBuffer;
+    add_buffer_ref(s, outBuffer);
+    f->outPos = 0;
 
     return(0);
 }
@@ -2369,16 +2059,15 @@ int synth_set_filter_output_buffer(Synth *s,
 int synth_set_filter_output_buffer_pos(Synth *s,
                                        unsigned int index,
                                        unsigned int outPos) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
-
-    if(outPos >= s->buffer[s->filter[index].outBuffer].size) {
+    if((int)outPos >= get_buffer_size(s, f->outBuffer)) {
         LOG_PRINTF(s, "Output position past end of buffer.\n");
         return(-1);
     }
-
-    s->filter[index].outPos = outPos;
+    f->outPos = outPos;
 
     return(0);
 }
@@ -2386,7 +2075,8 @@ int synth_set_filter_output_buffer_pos(Synth *s,
 int synth_run_filter(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples) {
-    if(!is_valid_filter(s, index)) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
         return(-1);
     }
 

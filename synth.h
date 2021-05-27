@@ -76,8 +76,7 @@ typedef enum {
 typedef enum {
     SYNTH_MODE_ONCE = 0,
     SYNTH_MODE_LOOP = 1,
-    SYNTH_MODE_PINGPONG = 2,
-    SYNTH_MODE_PHASE_SOURCE = 3
+    SYNTH_MODE_PHASE_SOURCE = 2
 } SynthPlayerMode;
 
 typedef enum {
@@ -420,8 +419,6 @@ int synth_set_player_volume_source(Synth *s,
  * ONCE: Play the sample once then stop once the end is reached.
  * LOOP: Continuously play the sample until the loop end is reached then
  *       continue back to the loop start indefinitely.
- * PINGPONG: Play forward until loop end, then play backwards until loop start
- *           then repeat indefinitely
  * PHASE_SOURCE: Read phase source from a buffer, where 0.0 represents the loop
  *               start position of the input buffer and 1.0 represents the loop
  *               end position.  This overrides any speed settings.

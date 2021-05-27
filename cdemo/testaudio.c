@@ -84,11 +84,11 @@ int audio_frame_cb(void *priv, Synth *s) {
             return(-1);
         }
         if(synth_free_buffer(s, as->leftBuffer) < 0) {
-            fprintf(stderr, "Failed to left channel buffer.\n");
+            fprintf(stderr, "Failed to free left channel buffer.\n");
             return(-1);
         }
         if(synth_free_buffer(s, as->rightBuffer) < 0) {
-            fprintf(stderr, "Failed to right channel buffer.\n");
+            fprintf(stderr, "Failed to free right channel buffer.\n");
             return(-1);
         }
         /* remake them with the new fragment size */
