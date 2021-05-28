@@ -1,0 +1,17 @@
+buffers:
+ input
+ filter
+ slice
+ accumulator
+ output
+
+for each requested sample
+ fetch input sample
+ determine filter slice to use from slice buffer sample
+ apply to accumulator for each filter sample
+ put first item in accumulator buffer to output
+ advance input, slice, accumulator and output pointers
+ as accumulator pointer advances, it'll usually split between its end and
+ beginning, so it needs to be done in 2 parts.
+ if any buffers run out (except of course filter), stop and return the amount
+ of samples that could be completed
