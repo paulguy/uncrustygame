@@ -52,7 +52,7 @@ typedef struct {
 
     SynthOutputOperation outOp;
 
-    SynthVolumeMode volMode;
+    SynthAutoMode volMode;
     float volume;
     unsigned int volBuffer;
     unsigned int volPos;
@@ -63,7 +63,7 @@ typedef struct {
     unsigned int phaseBuffer;
     unsigned int phasePos;
 
-    SynthSpeedMode speedMode;
+    SynthAutoMode speedMode;
     float speed;
     unsigned int speedBuffer;
     unsigned int speedPos;
@@ -80,13 +80,19 @@ typedef struct {
     unsigned int filterBuffer;
     unsigned int startPos;
     unsigned int slices;
-    SynthSliceMode mode;
+    SynthAutoMode mode;
     unsigned int sliceBuffer;
     unsigned int slice;
     unsigned int slicePos;
 
     unsigned int outBuffer;
     unsigned int outPos;
+    SynthOutputOperation outOp;
+
+    SynthAutoMode moistureMode;
+    float moisture;
+    unsigned int moistureBuffer;
+    unsigned int moisturePos;
 } SynthFilter;
 
 struct Synth_s {
@@ -203,10 +209,10 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     } \
     LOG_PRINTF(s, " Volume Mode: "); \
     switch((PLR)->volMode) { \
-        case SYNTH_VOLUME_CONSTANT: \
+        case SYNTH_AUTO_CONSTANT: \
             LOG_PRINTF(s, "Constant\n"); \
             break; \
-        case SYNTH_VOLUME_SOURCE: \
+        case SYNTH_AUTO_SOURCE: \
             LOG_PRINTF(s, "Source/Modulate\n"); \
             break; \
         default: \
@@ -235,10 +241,10 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR)->phasePos); \
     LOG_PRINTF(s, " Speed Mode: "); \
     switch((PLR)->speedMode) { \
-        case SYNTH_SPEED_CONSTANT: \
+        case SYNTH_AUTO_CONSTANT: \
             LOG_PRINTF(s, "Constant\n"); \
             break; \
-        case SYNTH_SPEED_SOURCE: \
+        case SYNTH_AUTO_SOURCE: \
             LOG_PRINTF(s, "Source/Modulate\n"); \
             break; \
         default: \
@@ -942,7 +948,7 @@ static int init_buffer(Synth *s,
             }
         }
     } else {
-        memset(b->data, s->silence, size * sizeof(float));
+        memset(b->data, 0, size * sizeof(float));
     }
     b->ref = 0;
 
@@ -1131,7 +1137,7 @@ static void init_player(Synth *s,
     p->inPos = 0.0;
     p->outPos = 0;
     p->outOp = SYNTH_OUTPUT_ADD;
-    p->volMode = SYNTH_VOLUME_CONSTANT;
+    p->volMode = SYNTH_AUTO_CONSTANT;
     p->volume = 1.0;
     p->volBuffer = inBuffer; /* 0 is output only, so this is the only sane
                                 default here.  It won't do anything weird.
@@ -1145,7 +1151,7 @@ static void init_player(Synth *s,
                                   at least it won't fail? */
     add_buffer_ref(s, inBuffer);
     p->phasePos = 0;
-    p->speedMode = SYNTH_SPEED_CONSTANT;
+    p->speedMode = SYNTH_AUTO_CONSTANT;
     p->speed = 1.0;
     p->speedBuffer = inBuffer; /* same */
     add_buffer_ref(s, inBuffer);
@@ -1313,15 +1319,15 @@ int synth_set_player_output_mode(Synth *s,
 
 int synth_set_player_volume_mode(Synth *s,
                                  unsigned int index,
-                                 SynthVolumeMode volMode) {
+                                 SynthAutoMode volMode) {
     SynthPlayer *p = get_player(s, index);
     if(p == NULL) {
         return(-1);
     }
 
     switch(volMode) {
-        case SYNTH_VOLUME_CONSTANT:
-        case SYNTH_VOLUME_SOURCE:
+        case SYNTH_AUTO_CONSTANT:
+        case SYNTH_AUTO_SOURCE:
             break;
         default:
             LOG_PRINTF(s, "Invalid player volume mode.\n");
@@ -1444,15 +1450,15 @@ int synth_set_player_phase_source(Synth *s,
 
 int synth_set_player_speed_mode(Synth *s,
                                 unsigned int index,
-                                SynthSpeedMode speedMode) {
+                                SynthAutoMode speedMode) {
     SynthPlayer *p = get_player(s, index);
     if(p == NULL) {
         return(-1);
     }
 
     switch(speedMode) {
-        case SYNTH_SPEED_CONSTANT:
-        case SYNTH_SPEED_SOURCE:
+        case SYNTH_AUTO_CONSTANT:
+        case SYNTH_AUTO_SOURCE:
             break;
         default:
             LOG_PRINTF(s, "Invalid player speed mode.\n");
@@ -1519,26 +1525,26 @@ int synth_run_player(Synth *syn,
     samples = 0;
     /* TODO actual player logic */
     if(pl->mode == SYNTH_MODE_ONCE &&
-       pl->speedMode == SYNTH_SPEED_CONSTANT) {
+       pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos;
         float speed = pl->speed;
         todo = MIN(todo, ((float)get_buffer_size(syn, pl->inBuffer)
                           - inPos) / speed);
-        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] = i[(int)inPos] * vol;
                 outPos++;
                 inPos += speed;
             }
-        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] += i[(int)inPos] * vol;
                 outPos++;
                 inPos += speed;
             }
-        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
             float *v = get_buffer_data(syn, pl->volBuffer);
             int volPos = pl->volPos;
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
@@ -1561,14 +1567,14 @@ int synth_run_player(Synth *syn,
         }
         pl->inPos = inPos;
     } else if(pl->mode == SYNTH_MODE_ONCE &&
-              pl->speedMode == SYNTH_SPEED_SOURCE) {
+              pl->speedMode == SYNTH_AUTO_SOURCE) {
         float *s = get_buffer_data(syn, pl->speedBuffer);
         int is = get_buffer_size(syn, pl->inBuffer);
         float inPos = pl->inPos;
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
-        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] = i[(int)inPos] * vol;
@@ -1579,7 +1585,7 @@ int synth_run_player(Synth *syn,
                     break;
                 }
             }
-        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] += i[(int)inPos] * vol;
@@ -1590,7 +1596,7 @@ int synth_run_player(Synth *syn,
                     break;
                 }
             }
-        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
             float *v = get_buffer_data(syn, pl->volBuffer);
             int volPos = pl->volPos;
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
@@ -1622,11 +1628,11 @@ int synth_run_player(Synth *syn,
         pl->inPos = inPos;
         pl->speedPos = speedPos;
     } else if(pl->mode == SYNTH_MODE_LOOP &&
-              pl->speedMode == SYNTH_SPEED_CONSTANT) {
+              pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos;
         float speed = pl->speed;
         float loopLen = pl->loopEnd - pl->loopStart;
-        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] = i[(int)inPos] * vol;
@@ -1638,7 +1644,7 @@ int synth_run_player(Synth *syn,
                     inPos -= loopLen;
                 }
             }
-        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] += i[(int)inPos] * vol;
@@ -1648,7 +1654,7 @@ int synth_run_player(Synth *syn,
                     inPos -= loopLen;
                 }
             }
-        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
             float *v = get_buffer_data(syn, pl->volBuffer);
             int volPos = pl->volPos;
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
@@ -1677,14 +1683,14 @@ int synth_run_player(Synth *syn,
         }
         pl->inPos = inPos;
     } else if(pl->mode == SYNTH_MODE_LOOP &&
-              pl->speedMode == SYNTH_SPEED_SOURCE) {
+              pl->speedMode == SYNTH_AUTO_SOURCE) {
         float *s = get_buffer_data(syn, pl->speedBuffer);
         float inPos = pl->inPos;
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
         float loopLen = pl->loopEnd - pl->loopStart;
-        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] = i[(int)inPos] * vol;
@@ -1695,7 +1701,7 @@ int synth_run_player(Synth *syn,
                 }
                 speedPos++;
             }
-        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] += i[(int)inPos] * vol;
@@ -1706,7 +1712,7 @@ int synth_run_player(Synth *syn,
                 }
                 speedPos++;
             }
-        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
             float *v = get_buffer_data(syn, pl->volBuffer);
             int volPos = pl->volPos;
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
@@ -1742,7 +1748,7 @@ int synth_run_player(Synth *syn,
         int phasePos = pl->phasePos;
         float loopLen = pl->loopEnd - pl->loopStart;
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
-        if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] =
@@ -1751,7 +1757,7 @@ int synth_run_player(Synth *syn,
                 outPos++;
                 phasePos++;
             }
-        } else if(pl->volMode == SYNTH_VOLUME_CONSTANT &&
+        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
                 o[outPos] =
@@ -1760,7 +1766,7 @@ int synth_run_player(Synth *syn,
                 outPos++;
                 phasePos++;
             }
-        } else if(pl->volMode == SYNTH_VOLUME_SOURCE) {
+        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
             float *v = get_buffer_data(syn, pl->volBuffer);
             int volPos = pl->volPos;
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
@@ -1804,19 +1810,24 @@ static int init_filter(Synth *s,
     f->size = size;
     f->accumPos = 0;
     f->inBuffer = filterBuffer;
-    s->buffer[filterBuffer].ref++;
+    add_buffer_ref(s, filterBuffer);
     f->inPos = 0;
     f->filterBuffer = filterBuffer;
-    s->buffer[filterBuffer].ref++;
+    add_buffer_ref(s, filterBuffer);
     f->startPos = 0;
     f->slices = 1;
-    f->mode = SYNTH_SLICE_CONSTANT;
+    f->mode = SYNTH_AUTO_CONSTANT;
     f->slice = 0;
     f->sliceBuffer = filterBuffer;
-    s->buffer[filterBuffer].ref++;
+    add_buffer_ref(s, filterBuffer);
     f->slicePos = 0;
     f->outBuffer = 0;
     f->outPos = 0;
+    f->outOp = SYNTH_OUTPUT_ADD;
+    f->moistureMode = SYNTH_AUTO_CONSTANT;
+    f->moisture = 1.0;
+    f->moistureBuffer = filterBuffer;
+    add_buffer_ref(s, filterBuffer);
 
     return(0);
 }
@@ -1858,6 +1869,7 @@ int synth_add_filter(Synth *s,
         if(init_filter(s, &(s->filter[0]), filterBuffer, size) < 0) {
             return(-1);
         }
+        synth_reset_filter(s, 0);
         return(0);
     }
 
@@ -1867,6 +1879,7 @@ int synth_add_filter(Synth *s,
             if(init_filter(s, &(s->filter[0]), filterBuffer, size) < 0) {
                 return(-1);
             }
+            synth_reset_filter(s, i);
             return(i);
         }
     }
@@ -1888,6 +1901,7 @@ int synth_add_filter(Synth *s,
     if(init_filter(s, &(s->filter[i]), filterBuffer, size) < 0) {
         return(-1);
     }
+    synth_reset_filter(s, i);
     return(i);
 }
 
@@ -1906,6 +1920,17 @@ int synth_free_filter(Synth *s, unsigned int index) {
     s->buffer[f->sliceBuffer].ref--;
     free(f->accum);
     f->accum = NULL;
+
+    return(0);
+}
+
+int synth_reset_filter(Synth *s, unsigned int index) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
+        return(-1);
+    }
+
+    memset(f->accum, 0, sizeof(float) * f->size);
 
     return(0);
 }
@@ -1985,15 +2010,15 @@ int synth_set_filter_slices(Synth *s,
 
 int synth_set_filter_mode(Synth *s,
                           unsigned int index,
-                          SynthSliceMode mode) {
+                          SynthAutoMode mode) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
     }
 
     switch(mode) {
-        case SYNTH_SLICE_CONSTANT:
-        case SYNTH_SLICE_SOURCE:
+        case SYNTH_AUTO_CONSTANT:
+        case SYNTH_AUTO_SOURCE:
             break;
         default:
             LOG_PRINTF(s, "Invalid filter mode.\n");
@@ -2072,14 +2097,287 @@ int synth_set_filter_output_buffer_pos(Synth *s,
     return(0);
 }
 
-int synth_run_filter(Synth *s,
-                     unsigned int index,
-                     unsigned int reqSamples) {
+int synth_set_filter_output_mode(Synth *s,
+                                 unsigned int index,
+                                 SynthOutputOperation outOp) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
     }
 
-    /* TODO: implement anything */
+    switch(outOp) {
+        case SYNTH_OUTPUT_REPLACE:
+        case SYNTH_OUTPUT_ADD:
+            break;
+        default:
+            LOG_PRINTF(s, "Invalid filter output mode.\n");
+            return(-1);
+    }
+    f->outOp = outOp;
+
+    return(0);
+}
+
+int synth_set_filter_moisture_mode(Synth *s,
+                                   unsigned int index,
+                                   SynthAutoMode moistureMode) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
+        return(-1);
+    }
+
+    switch(moistureMode) {
+        case SYNTH_AUTO_CONSTANT:
+        case SYNTH_AUTO_SOURCE:
+            break;
+        default:
+            LOG_PRINTF(s, "Invalid moisture mode.\n");
+            return(-1);
+    }
+    f->moistureMode = moistureMode;
+
+    return(0);
+}
+
+int synth_set_filter_moisture(Synth *s,
+                              unsigned int index,
+                              float moisture) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
+        return(-1);
+    }
+    f->moisture = moisture;
+
+    return(0);
+}
+
+int synth_set_filter_moisture_source(Synth *s,
+                                     unsigned int index,
+                                     unsigned int moistureBuffer) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
+        return(-1);
+    }
+    if(!is_valid_buffer(s, moistureBuffer, BUFFER_INPUT_ONLY)) {
+        return(-1);
+    }
+    free_buffer_ref(s, f->moistureBuffer);
+    f->moistureBuffer = moistureBuffer;
+    add_buffer_ref(s, moistureBuffer);
+    f->moisturePos = 0;
+
+    return(0);
+}
+
+int synth_run_filter(Synth *syn,
+                     unsigned int index,
+                     unsigned int reqSamples) {
+    unsigned int j;
+    /* silence a warning */
+    unsigned int samples = 0;
+    SynthFilter *flt = get_filter(syn, index);
+    if(flt == NULL) {
+        return(-1);
+    }
+
+    /* get the buffers */
+    float *i = get_buffer_data(syn, flt->inBuffer);
+    i = &(i[flt->inPos]);
+    float *o = get_buffer_data(syn, flt->outBuffer);
+    o = &(o[flt->outPos]);
+    /* find out how big the second half of the sliding accumulator is */
+    unsigned int a2s = flt->size - flt->accumPos;
+    /* figure out the smallest of requested samples, and remaining buffers to
+     * determine how much can be done at once */
+    unsigned int todo = MIN(reqSamples, get_buffer_size(syn, flt->outBuffer) - flt->outPos);
+    todo = MIN(todo, get_buffer_size(syn, flt->inBuffer) - flt->inPos);
+    if(flt->mode == SYNTH_AUTO_CONSTANT) {
+        /* get pointer to the specifically selected filter slice */
+        float *f = get_buffer_data(syn, flt->filterBuffer);
+        f = &(f[flt->startPos + (flt->slice * flt->size)]);
+        if(flt->moistureMode == SYNTH_AUTO_CONSTANT) {
+            if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    unsigned int pos = 0;
+                    /* update the first half of the accumulation buffer */
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    /* second half */
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    /* apply the accumulated value to the output */
+                    o[samples] = 
+                        (flt->accum[flt->accumPos] * flt->moisture) +
+                        (i[samples] * (1.0 - flt->moisture));
+                    /* advance the acumulator start and do wrapping */
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            } else if(flt->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    o[samples] += 
+                        (flt->accum[flt->accumPos] * flt->moisture) +
+                        (i[samples] * (1.0 - flt->moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            }
+        } else if(flt->moistureMode == SYNTH_AUTO_SOURCE) {
+            float *m = get_buffer_data(syn, flt->moistureBuffer);
+            m = &(m[flt->moisturePos]);
+            todo = MIN(todo, get_buffer_size(syn, flt->moistureBuffer) - flt->moisturePos);
+            float moisture;
+            if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    /* get the moisture from the moisture buffer */
+                    moisture = m[samples] * flt->moisture;
+                    o[samples] = 
+                        (flt->accum[flt->accumPos] * moisture) +
+                        (i[samples] * (1.0 - moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            } else if(flt->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * f[pos];
+                        pos++;
+                    }
+                    moisture = m[samples] * flt->moisture;
+                    o[samples] += 
+                        (flt->accum[flt->accumPos] * moisture) +
+                        (i[samples] * (1.0 - moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            }
+            flt->moisturePos += samples;
+        }
+    } else if(flt->mode == SYNTH_AUTO_SOURCE) {
+        float *s = get_buffer_data(syn, flt->sliceBuffer);
+        s = &(s[flt->slicePos]);
+        todo = MIN(todo, get_buffer_size(syn, flt->sliceBuffer) - flt->slicePos);
+        float *f = get_buffer_data(syn, flt->filterBuffer);
+        float *fs;
+        if(flt->moistureMode == SYNTH_AUTO_CONSTANT) {
+            if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    fs = &(f[flt->startPos +
+                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    o[samples] = 
+                        (flt->accum[flt->accumPos] * flt->moisture) +
+                        (i[samples] * (1.0 - flt->moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            } else if(flt->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    fs = &(f[flt->startPos +
+                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    o[samples] += 
+                        (flt->accum[flt->accumPos] * flt->moisture) +
+                        (i[samples] * (1.0 - flt->moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            }
+        } else if(flt->moistureMode == SYNTH_AUTO_SOURCE) {
+            float *m = get_buffer_data(syn, flt->moistureBuffer);
+            m = &(m[flt->moisturePos]);
+            todo = MIN(todo, get_buffer_size(syn, flt->moistureBuffer) - flt->moisturePos);
+            float moisture;
+            if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
+                for(samples = 0; samples < todo; samples++) {
+                    fs = &(f[flt->startPos +
+                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    moisture = m[samples] * flt->moisture;
+                    o[samples] = 
+                        (flt->accum[flt->accumPos] * moisture) +
+                        (i[samples] * (1.0 - moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            } else if(flt->outOp == SYNTH_OUTPUT_ADD) {
+                for(samples = 0; samples < todo; samples++) {
+                    fs = &(f[flt->startPos +
+                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    unsigned int pos = 0;
+                    for(j = flt->accumPos; j < a2s; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    for(j = 0; j < flt->accumPos; j++) {
+                        flt->accum[j] += i[samples] * fs[pos];
+                        pos++;
+                    }
+                    moisture = m[samples] * flt->moisture;
+                    o[samples] += 
+                        (flt->accum[flt->accumPos] * moisture) +
+                        (i[samples] * (1.0 - moisture));
+                    flt->accumPos = (flt->accumPos + 1) % flt->size;
+                    a2s = flt->size - flt->accumPos;
+                }
+            }
+            flt->moisturePos += samples;
+        }
+        flt->slicePos += samples;
+    }
+    flt->outPos += samples;
+    flt->inPos += samples;
+
     return(reqSamples);
 }

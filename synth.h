@@ -64,25 +64,15 @@ typedef enum {
 } SynthOutputOperation;
 
 typedef enum {
-    SYNTH_VOLUME_CONSTANT = 0,
-    SYNTH_VOLUME_SOURCE = 1
-} SynthVolumeMode;
-
-typedef enum {
-    SYNTH_SPEED_CONSTANT = 0,
-    SYNTH_SPEED_SOURCE = 1
-} SynthSpeedMode;
+    SYNTH_AUTO_CONSTANT = 0,
+    SYNTH_AUTO_SOURCE = 1
+} SynthAutoMode;
 
 typedef enum {
     SYNTH_MODE_ONCE = 0,
     SYNTH_MODE_LOOP = 1,
     SYNTH_MODE_PHASE_SOURCE = 2
 } SynthPlayerMode;
-
-typedef enum {
-    SYNTH_SLICE_CONSTANT = 0,
-    SYNTH_SLICE_SOURCE = 1
-} SynthSliceMode;
 
 typedef struct Synth_s Synth;
 
@@ -387,7 +377,7 @@ int synth_set_player_output_mode(Synth *s,
  */
 int synth_set_player_volume_mode(Synth *s,
                                  unsigned int index,
-                                 SynthVolumeMode volMode);
+                                 SynthAutoMode volMode);
 /*
  * Set the constant player volume.
  * See: synth_set_player_volume_mode
@@ -490,7 +480,7 @@ int synth_set_player_phase_source(Synth *s,
  */
 int synth_set_player_speed_mode(Synth *s,
                                 unsigned int index,
-                                SynthSpeedMode speedMode);
+                                SynthAutoMode speedMode);
 /*
  * Sets the constant player speed.
  * See: synth_set_player_speed_mode
@@ -528,10 +518,28 @@ int synth_run_player(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples);
 
+/*
+ * Create a new filter.
+ *
+ * s        the Synth structure
+ * inBuffer the buffer to apply a filter to
+ * size     the size of the filter (cannot be changed)
+ * return   the new filter handle or -1 on failure;
+ */
 int synth_add_filter(Synth *s,
                      unsigned int inBuffer,
                      unsigned int size);
+/*
+ * Free the filter, and any of its memory, see buffer/player for memory
+ * management notes.
+ * See synth_free_buffer, synth_free_player
+ *
+ * s        the Synth structure
+ * index    the filter handle index to free
+ * return   0 on success, -1 on failure
+ */
 int synth_free_filter(Synth *s, unsigned int index);
+int synth_reset_filter(Synth *s, unsigned int index);
 int synth_set_filter_input_buffer(Synth *s,
                                   unsigned int index,
                                   unsigned int inBuffer);
@@ -543,7 +551,7 @@ int synth_set_filter_slices(Synth *s,
                             unsigned int slices);
 int synth_set_filter_mode(Synth *s,
                           unsigned int index,
-                          SynthSliceMode mode);
+                          SynthAutoMode mode);
 int synth_set_filter_slice(Synth *s,
                            unsigned int index,
                            unsigned int slice);
@@ -556,6 +564,18 @@ int synth_set_filter_output_buffer(Synth *s,
 int synth_set_filter_output_buffer_pos(Synth *s,
                                        unsigned int index,
                                        unsigned int outPos);
+int synth_set_filter_output_mode(Synth *s,
+                                 unsigned int index,
+                                 SynthOutputOperation outOp);
+int synth_set_filter_moisture_mode(Synth *s,
+                                   unsigned int index,
+                                   SynthAutoMode moistureMode);
+int synth_set_filter_moisture(Synth *s,
+                              unsigned int index,
+                              float moisture);
+int synth_set_filter_moisture_source(Synth *s,
+                                     unsigned int index,
+                                     unsigned int moistureBuffer);
 int synth_run_filter(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples);
