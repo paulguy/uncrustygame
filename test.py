@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import time
 from ctypes import *
 from sdl2 import *
 import pycrustygame as cg
@@ -73,6 +74,7 @@ def main():
     sequence.write_file()
 
     running = 1
+    lastTime = time.monotonic()
     while running:
         event = SDL_Event()
 
@@ -83,6 +85,20 @@ def main():
 
         clear_frame(ll, 32, 128, 192)
         l.draw()
+
+        thisTime = time.monotonic()
+        try:
+            timeMS = int((thisTime - lastTime) * 1000)
+            while timeMS > 0:
+                seqTime, seqLine = sequence.advance(timeMS)
+                print(timeMS, end=' ')
+                print(seqTime, end=' ')
+                print(repr(seqLine))
+                timeMS -= seqTime
+        except seq.SequenceEnded as e:
+            sequence.reset()
+
+        lastTime = thisTime
         SDL_RenderPresent(renderer)
 
     SDL_DestroyRenderer(renderer)

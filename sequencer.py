@@ -7,6 +7,9 @@ FIELD_TYPE_FLOAT = "float"
 FIELD_TYPE_STR = "str"
 FIELD_TYPE_ROW = "row"
 
+class SequenceEnded(Exception):
+    pass
+
 class SequenceDescription():
     def __init__(self):
         self._column = list()
@@ -46,10 +49,10 @@ class Sequencer():
         self.reset()
 
     def reset(self):
-        self._state = list()
-        for item in self._initial:
-            self._state.append(self._row[item])
-        self._divTime = self._state[0][0]
+        self._divTime = self._row[self._initial[0]][0]
+        self._curOrder = -1
+        self._curLine = 0
+        self._lineTime = 0
 
     def _read_row(self, struct, desc, initial=False):
         changeMask = None
@@ -119,7 +122,7 @@ class Sequencer():
             if order < 0 or order > len(self._pattern) - 1:
                 raise IndexError("order refers to pattern out of range")
             self._order.append(int(item))
-
+    
     def _write_row(self, file, row, desc, initial):
         changeMask = 0
         if not initial:
@@ -175,3 +178,49 @@ class Sequencer():
         for order in self._order:
             print("{} ".format(order), end='', file=file)
         print(file=file)
+
+    def _get_row(self, desc, row):
+        newRow = list()
+        for i in range(len(desc)):
+            if isinstance(desc[i], int):
+                if row[i] == None:
+                    newRow.append(None)
+                else:
+                    newRow.append(self._get_row(self._desc._rowdesc[desc[i]], self._row[row[i]]))
+            else:
+                newRow.append(row[i])
+        return newRow
+
+    def _get_line(self, line):
+        newLine = list()
+        for i in range(len(line)):
+            newLine.append(self._get_row(self._desc._rowdesc[i], self._row[line[i]]))
+        return newLine
+
+    def advance(self, time):
+        line = None
+
+        if self._curOrder == -1 and self._curLine == 0 and self._lineTime == 0:
+            self._curOrder = 0
+            line = self._get_line(self._initial)[1:]
+            time = 0
+        elif time >= self._divTime - self._lineTime:
+            time = self._divTime - self._lineTime
+            self._lineTime = 0
+            pattern = self._pattern[self._order[self._curOrder]]
+            self._curLine += 1
+            if self._curLine == len(pattern):
+                self._curOrder += 1
+                if self._curOrder < len(self._order):
+                    self._curLine = 0
+                    pattern = self._pattern[self._order[self._curOrder]]
+                else:
+                    raise SequenceEnded()
+            line = self._get_line(pattern[self._curLine])
+            if line[0][0] != None:
+                self._divTime = line[0][0]
+            line = line[1:]
+        else:
+            self._lineTime += time
+
+        return time, line
