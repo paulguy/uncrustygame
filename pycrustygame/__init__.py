@@ -504,7 +504,9 @@ class Synth():
 
     @property
     def underrun(self):
-        return(_cg.synth_has_underrun(self._s))
+        if _cg.synth_has_underrun(self._s) == 0:
+            return False
+        return True
 
     def fragments(self, fragments :int):
         if _cg.synth_set_fragments(self._s, fragments) < 0:
@@ -634,3 +636,5 @@ class Player():
         if ret < 0:
             raise(CrustyException())
         return ret
+
+# TODO: Map filters in as a class
