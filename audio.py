@@ -40,20 +40,32 @@ class MacroReader():
         if self._line == None:
             line = self._file.readline()
             for macro in self._macros:
-                index = 0
                 newLine = ""
                 while True:
+                    index = 0
                     try:
+                        # search for instance of macro name
                         index = line[index:].index(macro)
-                        newLine += line[:index]
-                        args = line[index:].split(maxsplit=len(macro[1]))
-                        replacement = str(macro[2])
-                        for i in range(len(macro[1])):
-                            replacement.replace(macro[1][i], args[i])
-                        newLine += replacement
                     except ValueError:
-                        newLine += line[index:]
+                        # no macro found, just append the rest
+                        newLine += line
                         break
+                    # append everything up to the macro name to be replaced
+                    newLine += line[:index]
+                    # results in name, args, remainder
+                    args = line[index:].split(maxsplit=len(macro[1]) + 1)
+                    # don't need the name
+                    args = args[1:]
+                    # make a copy of the replacement string
+                    replacement = str(macro[2])
+                    # replace all instances of argument names with the provided
+                    # values
+                    for i in range(len(macro[1])):
+                        replacement.replace(macro[1][i], args[i])
+                    # append the replacement string
+                    newLine += replacement
+                    # continue with the remainder
+                    line = args[len(macro[1])]
                 line = newLine
             self._line = line.splitlines()
         line = self._line[0]
