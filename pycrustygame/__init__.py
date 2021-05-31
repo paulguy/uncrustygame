@@ -473,12 +473,17 @@ class Synth():
                                 rate, channels)
         if self._s == None:
             raise(CrustyException())
+        self._outputs = \
+            [Buffer(self, i) for i in range(self.channels)]
 
     def __del__(self):
         _cg.synth_free(self._s)
 
     def print_full_stats(self):
         _cg.synth_print_full_stats(self._s)
+
+    def get_channel_buffers(self):
+        return self._output
 
     def buffer(self, dataType :int, data :c_void_p, size :int):
         return(Buffer(self, dataType, data, size))
@@ -532,7 +537,10 @@ class Buffer():
     def __init__(self, synth :Synth, *args):
         self._s = synth
         self._b = -1
-        if isinstance(args[0], int):
+        if len(args) == 1:
+            # channel output buffers
+            self._b = args[0]
+        elif isinstance(args[0], int):
             self._b = _cg.synth_add_buffer(synth._s, args[0], args[1], args[2])
         elif isinstance(args[0], str):
             self._b = _cg.synth_buffer_from_wav(synth._s, args[0], args[1])

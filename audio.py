@@ -108,8 +108,6 @@ class AudioSequencer():
             self._tag[tagline[0]] = tagline[1]
         buffers = int(infile.readline())
         self._buffer = list()
-        # first buffer is output
-        self._buffer.append(None)
         # populated on _load(), None when unloaded, map sequence's buffers
         # to crustygame synth's buffers
         self._bufferMaps = None
@@ -128,13 +126,17 @@ class AudioSequencer():
                     # add the string to use as a filename later
                     item = bufferline[0]
             else:
-                if not isinstance(buffer[inbuf], array.array) or \
-                   buffer[inbuf].typecode != 'f':
-                    raise Exception("Buffers must be float arrays.")
-                # convert to a ctypes array so _load() can just pass it
-                # along
-                item = _create_float_array(buffers[inbuf])
-                inbuf += 1
+                if isinstance(buffer[inbuf], seq.Buffer):
+                    # import an external buffer
+                    item = buffer[inbuf]
+                elif isinstance(buffer[inbuf], array.array) and \
+                     buffer[inbuf].typecode != 'f':
+                    # convert to a ctypes array so _load() can just pass it
+                    # along
+                    item = _create_float_array(buffers[inbuf])
+                    inbuf += 1
+                else:
+                    raise Exception("Buffers must be float arrays or external Buffers.")
             self._buffer.append((item, int(bufferline[1])))
         channels = int(infile.readline())
         self._channel = list()
@@ -187,8 +189,6 @@ class AudioSequencer():
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
         # player mode
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # balance (only for output)
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
         # run length
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
         filterDesc = seqDesc.add_row_description()
@@ -202,22 +202,42 @@ class AudioSequencer():
                 seqDesc.add_column(filterDesc)
         self._seq = seq.Sequencer(seqDesc, infile)
 
+    def update_buffer(self, index, item):
+        if isinstance(item, seq.Buffer):
+            # import an external buffer
+            self._buffer[index] = item
+            if self._bufferMaps != None:
+                del self._bufferMaps[index]
+                self._bufferMaps[index] = item
+        elif not isinstance(buffer[inbuf], array.array) or \
+           buffer[inbuf].typecode != 'f':
+            raise Exception("Buffers must be float arrays.")
+        else:
+            # convert to a ctypes array so _load() can just pass it
+            # along
+            self._buffer[index] = _create_float_array(buffers[inbuf])
+            if self._bufferMaps != None:
+                del self._bufferMaps[index]
+                self._bufferMaps[index] = item
+
     def _load(self, s):
-        self._bufferMaps = list()
+        self._rate = s.rate
+        self._channels = s.channels
+        self._bufferMaps = [b for b in self.s.get_channel_buffers()]
         for buffer in self._buffer:
-            if buffer == None:
-                # output
-                self._bufferMaps.append(None)
-            elif isinstance(buffer[0], int):
+            if isinstance(buffer[0], int):
                 # silent buffer
                 length = s.rate * buffer[0] / 1000
                 self._bufferMaps.append(s.buffer(seq.SYNTH_TYPE_F32, None, length))
             elif isinstance(buffer[0], str):
                 # filename
                 self._bufferMaps.append(s.buffer_from_wav(buffer[0]))
+            elif isinstance(buffer[0], seq.Buffer):
+                # external buffer
+                self._bufferMaps.append(buffer[0])
             else:
                 # already a ctypes array
-                self._bufferMaps.append(buffer[0])
+                self._bufferMaps.append(s.buffer(seq.SYNTH_TYPE_F32, buffer[0], len(buffer[0])))
 
     def _unload(self, s):
         for buffer in self._bufferMaps:
@@ -228,9 +248,19 @@ class AudioSequencer():
         self._bufferMaps = None
 
     def reset(self):
-        # recreate buffers because buffers might have junk on them
+        """
+        Reset everything, frees all buffers and reloads them fresh, so they're
+        in a known state.
+        """
         self._unload()
         self._load()
+        self._seq.reset()
+
+    def fast_reset(self):
+        """
+        Faster reset that just resets the sequence, and should have no
+        consequences if the buffers haven't been touched.
+        """
         self._seq.reset()
 
     def looping(self):
@@ -251,8 +281,6 @@ class AudioSystem():
     def __init__(self, log_cb_return, log_cb_priv):
         self._s = Synth(audio_system_frame, self,
                         log_cb_return, log_cb_priv)
-        self._rate = self._s.rate
-        self._channels = self._s.channels
         self._fragment_size = self._s.fragment_size
         self._fragments = 0
         self._inc_fragments()
