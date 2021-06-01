@@ -27,11 +27,13 @@ class SequenceDescription():
         self._rowdesc.append(list())
         return len(self._rowdesc) - 1
 
-    def add_field(self, desc, fieldType, rowDesc=None):
+    def add_field(self, desc, fieldType, rowDesc=None, func=None, priv=None):
         if fieldType == FIELD_TYPE_ROW:
             if rowDesc < 0 or rowDesc > len(self._rowdesc) - 1:
                 raise IndexError("invalid row description index")
             self._rowdesc[desc].append(rowDesc)
+        elif func != None:
+            self._rowdesc[desc].append((fieldType, func, priv))
         else:
             self._rowdesc[desc].append(fieldType)
 
@@ -79,6 +81,9 @@ class Sequencer():
                 row.append(float(struct[pos]))
             elif desc[i] == FIELD_TYPE_STR:
                 row.append(struct[pos])
+            elif isinstance(desc[i], tuple):
+                # callable
+                row.append(desc[i][1](desc[i][2], struct[pos]))
             elif isinstance(desc[i], int):
                 rowDesc = self._desc._rowdesc[desc[i]]
                 newrow = self._read_row(struct[pos:], rowDesc, initial=initial)
@@ -143,6 +148,14 @@ class Sequencer():
                     print("{:f} ".format(row[item]), end='', file=file)
                 elif desc[item] == FIELD_TYPE_STR:
                     print(row[item], end=' ', file=file)
+                elif isinstance(desc[item], tuple):
+                    # callable, but conversion is already done
+                    if desc[item][0] == FIELD_TYPE_INT:
+                        print("{:d} ".format(row[item]), end='', file=file)
+                    elif desc[item][0] == FIELD_TYPE_FLOAT:
+                        print("{:f} ".format(row[item]), end='', file=file)
+                    elif desc[item][0] == FIELD_TYPE_STR:
+                        print(row[item], end=' ', file=file)
                 elif isinstance(desc[item], int):
                     # SEQ_FIELD_TYPE_ROW
                     rowDesc = self._desc._rowdesc[desc[item]]
@@ -182,7 +195,7 @@ class Sequencer():
     def _get_row(self, desc, row):
         newRow = list()
         for i in range(len(desc)):
-            if isinstance(desc[i], int):
+            if isinstance(desc[i], (int, tuple)):
                 if row[i] == None:
                     newRow.append(None)
                 else:

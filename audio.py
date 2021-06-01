@@ -2,6 +2,8 @@ import array
 import pycrustygame as cg
 import sequencer as seq
 
+_DEFAULT_TUNING = 440
+
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
 CHANNEL_TYPE_FILTER = "filter"
@@ -14,6 +16,9 @@ def _create_float_array(iterable):
         a[item[0]] = item[1]
 
     return(a)
+
+_NOTES = "a bc d ef g "
+
 
 class MacroReader():
     """
@@ -79,6 +84,8 @@ class AudioSequencer():
     def __init__(self, infile, buffers=None, looping=False):
         """
         Create an audio sequence from a file.
+
+        buffers is a list of either float arrays or other external Buffer objects.
         """
         self._looping = looping
         if infile.readline() != "CrustyTracker":
@@ -106,6 +113,7 @@ class AudioSequencer():
         for i in range(tags):
             tagline = infile.readline().split('=', maxsplit=1)
             self._tag[tagline[0]] = tagline[1]
+        self._tune()
         buffers = int(infile.readline())
         self._buffer = list()
         # populated on _load(), None when unloaded, map sequence's buffers
@@ -115,10 +123,14 @@ class AudioSequencer():
         for i in range(buffers):
             bufferline = infile.readline().rsplit(maxsplit=1)
             # line is either a filename and middle A frequency or
-            # a length in milliseconds and middle A frequency
+            # a length in milliseconds and middle A frequency or
+            # just a middle A frequency for a buffer to be provided
             item = None
+            freq = None
+            rate = None
             # single value means the buffer will be provided
             if len(bufferline) > 1:
+                freq = int(bufferline[1])
                 try:
                     # add the time in milliseconds of an empty buffer
                     item = int(bufferline[0])
@@ -126,18 +138,20 @@ class AudioSequencer():
                     # add the string to use as a filename later
                     item = bufferline[0]
             else:
+                freq = int(bufferline[0])
+                rate = buffers[inbuf][1]
                 if isinstance(buffer[inbuf], seq.Buffer):
                     # import an external buffer
-                    item = buffer[inbuf]
+                    item = buffers[inbuf][0]
                 elif isinstance(buffer[inbuf], array.array) and \
                      buffer[inbuf].typecode != 'f':
                     # convert to a ctypes array so _load() can just pass it
                     # along
-                    item = _create_float_array(buffers[inbuf])
+                    item = _create_float_array(buffers[inbuf][0])
                     inbuf += 1
                 else:
                     raise Exception("Buffers must be float arrays or external Buffers.")
-            self._buffer.append((item, int(bufferline[1])))
+            self._buffer.append((item, rate, freq))
         channels = int(infile.readline())
         self._channel = list()
         for i in range(channels):
@@ -175,8 +189,8 @@ class AudioSequencer():
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
         # volume mode
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # speed
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
+        # speed (frequency, /speed, note)
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_STR)
         # speed source
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
         # speed mode
@@ -202,42 +216,102 @@ class AudioSequencer():
                 seqDesc.add_column(filterDesc)
         self._seq = seq.Sequencer(seqDesc, infile)
 
-    def update_buffer(self, index, item):
+    def _tune(self):
+        tuning = None
+        try:
+            tuning = self._tag['tuning'].split()
+        except KeyError:
+            self._freqs = [_DEFAULT_TUNING * (2 ** (x / 12)) for x in range(12)]
+            return
+
+        if len(tuning) == 1:
+            tuning = float(tuning[0])
+            self._freqs = [tuning * (2 ** (x / 12)) for x in range(12)]
+        elif len(tuning) == 12:
+            self._freqs = [float(x) for x in tuning]
+        else:
+            raise Exception("'tuning' tag must be middle A or all 12 middle octave notes.")
+
+    def _get_speed(self, speed, tuning, rate):
+        # literal speed
+        if speed[0] == '/':
+            return float(speed[1:])
+        freq = 0
+        # frequency
+        try:
+            freq = float(speed)
+        except ValueError:
+            # note
+            note = _NOTES.index(speed[0].lower())
+            octave = 4
+            if len(speed) > 1:
+                try:
+                    octave = int(speed[1])
+                except ValueError:
+                    if len(speed) > 2:
+                        try:
+                            octave = int(speed[2])
+                        except ValueError:
+                            pass
+                if speed[1] == '#':
+                    note += 1;
+                    if note == 12:
+                        octave += 1
+                        note = 0
+                elif speed[1] == 'b':
+                    note -= 1;
+                    if note == -1:
+                        octave -= 1
+                        note = 11
+            freq = self._freqs[note]
+            if octave < 4:
+                freq /= 5 - octave
+            elif octave > 4:
+                freq *= octave - 3
+
+        return (freq / tuning) * (self._rate / rate)
+
+    def update_buffer(self, index, item, rate):
         if isinstance(item, seq.Buffer):
             # import an external buffer
             self._buffer[index] = item
+            self._bufferRates[index] = rate
             if self._bufferMaps != None:
                 del self._bufferMaps[index]
                 self._bufferMaps[index] = item
-        elif not isinstance(buffer[inbuf], array.array) or \
-           buffer[inbuf].typecode != 'f':
-            raise Exception("Buffers must be float arrays.")
-        else:
+        elif isinstance(buffer[inbuf], array.array) and \
+             buffer[inbuf].typecode != 'f':
             # convert to a ctypes array so _load() can just pass it
             # along
             self._buffer[index] = _create_float_array(buffers[inbuf])
+            self._bufferRates[index] = rate
             if self._bufferMaps != None:
                 del self._bufferMaps[index]
                 self._bufferMaps[index] = item
+        else:
+            raise Exception("Buffers must be float arrays.")
 
     def _load(self, s):
         self._rate = s.rate
         self._channels = s.channels
-        self._bufferMaps = [b for b in self.s.get_channel_buffers()]
+        self._bufferInfo = [(b, self._rate) for b in range(self._channels)]
         for buffer in self._buffer:
             if isinstance(buffer[0], int):
                 # silent buffer
-                length = s.rate * buffer[0] / 1000
-                self._bufferMaps.append(s.buffer(seq.SYNTH_TYPE_F32, None, length))
+                length = self._rate * buffer[0] / 1000
+                b = s.buffer(seq.SYNTH_TYPE_F32, None, length)
+                self._bufferInfo.append((int(b), self._rate))
             elif isinstance(buffer[0], str):
                 # filename
-                self._bufferMaps.append(s.buffer_from_wav(buffer[0]))
+                b, r = s.buffer_from_wav(buffer[0])
+                self._bufferInfo.append((int(b), r))
             elif isinstance(buffer[0], seq.Buffer):
                 # external buffer
-                self._bufferMaps.append(buffer[0])
+                self._bufferInfo.append((int(buffer[0]), buffer[1]))
             else:
                 # already a ctypes array
-                self._bufferMaps.append(s.buffer(seq.SYNTH_TYPE_F32, buffer[0], len(buffer[0])))
+                b = s.buffer(seq.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
+                self._bufferInfo.append((int(buffer[0]), buffer[1]))
 
     def _unload(self, s):
         for buffer in self._bufferMaps:

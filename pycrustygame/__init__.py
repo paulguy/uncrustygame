@@ -473,17 +473,12 @@ class Synth():
                                 rate, channels)
         if self._s == None:
             raise(CrustyException())
-        self._outputs = \
-            [Buffer(self, i) for i in range(self.channels)]
 
     def __del__(self):
         _cg.synth_free(self._s)
 
     def print_full_stats(self):
         _cg.synth_print_full_stats(self._s)
-
-    def get_channel_buffers(self):
-        return self._output
 
     def buffer(self, dataType :int, data :c_void_p, size :int):
         return(Buffer(self, dataType, data, size))
