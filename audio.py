@@ -118,7 +118,7 @@ class AudioSequencer():
         self._buffer = list()
         # populated on _load(), None when unloaded, map sequence's buffers
         # to crustygame synth's buffers
-        self._bufferMaps = None
+        self._bufferInfo = None
         inbuf = 0
         for i in range(buffers):
             bufferline = infile.readline().rsplit(maxsplit=1)
@@ -232,7 +232,7 @@ class AudioSequencer():
         else:
             raise Exception("'tuning' tag must be middle A or all 12 middle octave notes.")
 
-    def _get_speed(self, speed, tuning, rate):
+    def _get_speed(self, speed, tuning, inrate, outrate):
         # literal speed
         if speed[0] == '/':
             return float(speed[1:])
@@ -269,7 +269,7 @@ class AudioSequencer():
             elif octave > 4:
                 freq *= octave - 3
 
-        return (freq / tuning) * (self._rate / rate)
+        return (freq / tuning) * (outrate / inrate)
 
     def update_buffer(self, index, item, rate):
         if isinstance(item, seq.Buffer):
@@ -294,32 +294,33 @@ class AudioSequencer():
     def _load(self, s):
         self._rate = s.rate
         self._channels = s.channels
-        self._bufferInfo = [(b, self._rate) for b in range(self._channels)]
+        self._bufferInfo = [(None, self._rate) for b in range(self._channels)]
+        self._localBuffers = list()
         for buffer in self._buffer:
             if isinstance(buffer[0], int):
                 # silent buffer
                 length = self._rate * buffer[0] / 1000
                 b = s.buffer(seq.SYNTH_TYPE_F32, None, length)
-                self._bufferInfo.append((int(b), self._rate))
+                self._bufferInfo.append((b, self._rate))
+                self._localBuffers.append(b)
             elif isinstance(buffer[0], str):
                 # filename
                 b, r = s.buffer_from_wav(buffer[0])
-                self._bufferInfo.append((int(b), r))
+                self._bufferInfo.append((b, r))
+                self._localBuffers.append(b)
             elif isinstance(buffer[0], seq.Buffer):
                 # external buffer
-                self._bufferInfo.append((int(buffer[0]), buffer[1]))
+                self._bufferInfo.append((buffer[0], buffer[1]))
             else:
                 # already a ctypes array
                 b = s.buffer(seq.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
-                self._bufferInfo.append((int(buffer[0]), buffer[1]))
+                self._bufferInfo.append((b, buffer[1]))
+                self._localBuffers.append(b)
 
     def _unload(self, s):
-        for buffer in self._bufferMaps:
-            if buffer == None:
-                continue
-            else:
-                del buffer
-        self._bufferMaps = None
+        for buffer in self._localBuffers:
+            del buffer
+        self._localBuffers = list()
 
     def reset(self):
         """
