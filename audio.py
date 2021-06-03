@@ -102,17 +102,22 @@ class AudioSequencer():
         # provided when the macro is used like:
         # name arg0 arg1 ...
         for i in range(macros):
-            macroline = infile.readline().split('=', maxsplit=1)
+            line = infile.readline().split('#', maxsplit=1)
+            if len(line[0]) == 0:
+                continue
+            macroline = line[0].split('=', maxsplit=1)
             lhs = macroline[0].split()
             macroname = lhs[0]
             macroargs = lhs[1:]
-            macroline = macroline[1].split('#', maxsplit=1)
-            self._macro.append(macroname, macroargs, macroline)
+            self._macro.append(macroname, macroargs, macroline[1])
         infile = MacroReader(infile, macros)
         tags = int(infile.readline())
         self._tag = dict()
         for i in range(tags):
-            tagline = infile.readline().split('=', maxsplit=1)
+            line = infile.readline().split('#', maxsplit=1)
+            if len(line[0]) == 0:
+                continue
+            tagline = line.split('=', maxsplit=1)
             self._tag[tagline[0]] = tagline[1]
         self._tune()
         buffers = int(infile.readline())
@@ -122,7 +127,10 @@ class AudioSequencer():
         self._bufferInfo = None
         inbuf = 0
         for i in range(buffers):
-            bufferline = infile.readline().rsplit(maxsplit=1)
+            line = infile.readline().split('#', maxsplit=1)
+            if len(line[0]) == 0:
+                continue
+            bufferline = line.split(maxsplit=1)
             # line is either a filename and middle A frequency or
             # a length in milliseconds and middle A frequency or
             # just a middle A frequency for a buffer to be provided
