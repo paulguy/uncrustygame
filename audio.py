@@ -106,7 +106,8 @@ class AudioSequencer():
             lhs = macroline[0].split()
             macroname = lhs[0]
             macroargs = lhs[1:]
-            self._macro.append(macroname, macroargs, macroline[1])
+            macroline = macroline[1].split('#', maxsplit=1)
+            self._macro.append(macroname, macroargs, macroline)
         infile = MacroReader(infile, macros)
         tags = int(infile.readline())
         self._tag = dict()
@@ -128,17 +129,18 @@ class AudioSequencer():
             item = None
             freq = None
             rate = None
-            # single value means the buffer will be provided
-            if len(bufferline) > 1:
-                freq = int(bufferline[1])
+            freq = int(bufferline[0])
+            # allow starting the second arg with a # to explicitly indicate a
+            # comment
+            if len(bufferline) > 1 and bufferline[1][0] != '#':
+                # single value means the buffer will be provided
                 try:
                     # add the time in milliseconds of an empty buffer
-                    item = int(bufferline[0])
+                    item = int(bufferline[1].split('#', maxsplit=1)[0])
                 except ValueError:
                     # add the string to use as a filename later
-                    item = bufferline[0]
+                    item = bufferline[1].split('#', maxsplit=1)[0].strip()
             else:
-                freq = int(bufferline[0])
                 rate = buffers[inbuf][1]
                 if isinstance(buffer[inbuf], seq.Buffer):
                     # import an external buffer
@@ -155,7 +157,7 @@ class AudioSequencer():
         channels = int(infile.readline())
         self._channel = list()
         for i in range(channels):
-            channel = infile.readline().lower()
+            channel = infile.readline().split('#', maxsplit=1).strip().lower()
             if channel == CHANNEL_TYPE_SILENCE:
                 self._channel.append(CHANNEL_TYPE_SILENCE)
             if channel == CHANNEL_TYPE_PLAYER:
