@@ -89,10 +89,10 @@ typedef struct {
     unsigned int outPos;
     SynthOutputOperation outOp;
 
-    SynthAutoMode moistureMode;
-    float moisture;
-    unsigned int moistureBuffer;
-    unsigned int moisturePos;
+    SynthAutoMode volMode;
+    float vol;
+    unsigned int volBuffer;
+    unsigned int volPos;
 } SynthFilter;
 
 struct Synth_s {
@@ -1257,6 +1257,10 @@ int synth_set_player_input_buffer_pos(Synth *s,
     if(p == NULL) {
         return(-1);
     }
+    if(inPos < 0.0 || (int)inPos >= get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "Input position out of buffer bounds.\n");
+        return(-1);
+    }
     p->inPos = inPos;
 
     return(0);
@@ -1798,6 +1802,75 @@ int synth_run_player(Synth *syn,
     return(samples);
 }
 
+int synth_player_stopped_reason(Synth *syn,
+                                unsigned int index,
+                                unsigned int requested,
+                                unsigned int returned) {
+    int reason = 0;
+    SynthPlayer *pl = get_player(syn, index);
+    if(pl == NULL) {
+        return(-1);
+    }
+
+    if(requested - returned == 0) {
+        reason |= SYNTH_STOPPED_REQUESTED;
+    }
+
+    if(get_buffer_size(syn, pl->outBuffer) - pl->outPos == 0) {
+        reason |= SYNTH_STOPPED_OUTBUFFER;
+    }
+
+    if(pl->mode == SYNTH_MODE_ONCE &&
+       pl->speedMode == SYNTH_AUTO_CONSTANT) {
+        if(get_buffer_size(syn, pl->inBuffer) - pl->inPos == 0) {
+            reason |= SYNTH_STOPPED_INBUFFER;
+        }
+        if(pl->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    } else if(pl->mode == SYNTH_MODE_ONCE &&
+              pl->speedMode == SYNTH_AUTO_SOURCE) {
+        if(get_buffer_size(syn, pl->speedBuffer) - pl->speedPos == 0) {
+            reason |= SYNTH_STOPPED_SPEEDBUFFER;
+        }
+        if(pl->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    } else if(pl->mode == SYNTH_MODE_LOOP &&
+              pl->speedMode == SYNTH_AUTO_CONSTANT) {
+        if(pl->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    } else if(pl->mode == SYNTH_MODE_LOOP &&
+              pl->speedMode == SYNTH_AUTO_SOURCE) {
+        if(get_buffer_size(syn, pl->speedBuffer) - pl->speedPos == 0) {
+            reason |= SYNTH_STOPPED_SPEEDBUFFER;
+        }
+        if(pl->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
+        if(get_buffer_size(syn, pl->phaseBuffer) - pl->phasePos == 0) {
+            reason |= SYNTH_STOPPED_PHASEBUFFER;
+        }
+        if(pl->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    }
+
+    return(reason);
+}
+
 static int init_filter(Synth *s,
                        SynthFilter *f,
                        unsigned int filterBuffer,
@@ -1824,10 +1897,11 @@ static int init_filter(Synth *s,
     f->outBuffer = 0;
     f->outPos = 0;
     f->outOp = SYNTH_OUTPUT_ADD;
-    f->moistureMode = SYNTH_AUTO_CONSTANT;
-    f->moisture = 1.0;
-    f->moistureBuffer = filterBuffer;
+    f->volMode = SYNTH_AUTO_CONSTANT;
+    f->vol = 1.0;
+    f->volBuffer = filterBuffer;
     add_buffer_ref(s, filterBuffer);
+    f->volPos = 0;
 
     return(0);
 }
@@ -1953,6 +2027,22 @@ int synth_set_filter_input_buffer(Synth *s,
     return(0);
 }
 
+int synth_set_filter_input_buffer_pos(Synth *s,
+                                      unsigned int index,
+                                      unsigned int inPos) {
+    SynthFilter *f = get_filter(s, index);
+    if(f == NULL) {
+        return(-1);
+    }
+    if((int)inPos >= get_buffer_size(s, f->inBuffer)) {
+        LOG_PRINTF(s, "Input position past end of buffer.\n");
+        return(-1);
+    }
+    f->inPos = inPos;
+
+    return(0);
+}
+
 int synth_set_filter_buffer(Synth *s,
                             unsigned int index,
                             unsigned int filterBuffer) {
@@ -1974,8 +2064,8 @@ int synth_set_filter_buffer(Synth *s,
 }
 
 int synth_set_filter_buffer_start(Synth *s,
-                                        unsigned int index,
-                                        unsigned int startPos) {
+                                  unsigned int index,
+                                  unsigned int startPos) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
@@ -2064,8 +2154,8 @@ int synth_set_filter_slice_source(Synth *s,
 }
 
 int synth_set_filter_output_buffer(Synth *s,
-                                         unsigned int index,
-                                         unsigned int outBuffer) {
+                                   unsigned int index,
+                                   unsigned int outBuffer) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
@@ -2118,53 +2208,53 @@ int synth_set_filter_output_mode(Synth *s,
     return(0);
 }
 
-int synth_set_filter_moisture_mode(Synth *s,
-                                   unsigned int index,
-                                   SynthAutoMode moistureMode) {
+int synth_set_filter_volume_mode(Synth *s,
+                                 unsigned int index,
+                                 SynthAutoMode volMode) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
     }
 
-    switch(moistureMode) {
+    switch(volMode) {
         case SYNTH_AUTO_CONSTANT:
         case SYNTH_AUTO_SOURCE:
             break;
         default:
-            LOG_PRINTF(s, "Invalid moisture mode.\n");
+            LOG_PRINTF(s, "Invalid volume mode.\n");
             return(-1);
     }
-    f->moistureMode = moistureMode;
+    f->volMode = volMode;
 
     return(0);
 }
 
-int synth_set_filter_moisture(Synth *s,
-                              unsigned int index,
-                              float moisture) {
+int synth_set_filter_volume(Synth *s,
+                            unsigned int index,
+                            float vol) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
     }
-    f->moisture = moisture;
+    f->vol = vol;
 
     return(0);
 }
 
-int synth_set_filter_moisture_source(Synth *s,
-                                     unsigned int index,
-                                     unsigned int moistureBuffer) {
+int synth_set_filter_volume_source(Synth *s,
+                                   unsigned int index,
+                                   unsigned int volBuffer) {
     SynthFilter *f = get_filter(s, index);
     if(f == NULL) {
         return(-1);
     }
-    if(!is_valid_buffer(s, moistureBuffer, BUFFER_INPUT_ONLY)) {
+    if(!is_valid_buffer(s, volBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
     }
-    free_buffer_ref(s, f->moistureBuffer);
-    f->moistureBuffer = moistureBuffer;
-    add_buffer_ref(s, moistureBuffer);
-    f->moisturePos = 0;
+    free_buffer_ref(s, f->volBuffer);
+    f->volBuffer = volBuffer;
+    add_buffer_ref(s, volBuffer);
+    f->volPos = 0;
 
     return(0);
 }
@@ -2195,7 +2285,7 @@ int synth_run_filter(Synth *syn,
         /* get pointer to the specifically selected filter slice */
         float *f = get_buffer_data(syn, flt->filterBuffer);
         f = &(f[flt->startPos + (flt->slice * flt->size)]);
-        if(flt->moistureMode == SYNTH_AUTO_CONSTANT) {
+        if(flt->volMode == SYNTH_AUTO_CONSTANT) {
             if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
                     unsigned int pos = 0;
@@ -2210,9 +2300,7 @@ int synth_run_filter(Synth *syn,
                         pos++;
                     }
                     /* apply the accumulated value to the output */
-                    o[samples] = 
-                        (flt->accum[flt->accumPos] * flt->moisture) +
-                        (i[samples] * (1.0 - flt->moisture));
+                    o[samples] = flt->accum[flt->accumPos] * flt->vol;
                     /* advance the acumulator start and do wrapping */
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
@@ -2228,18 +2316,15 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * f[pos];
                         pos++;
                     }
-                    o[samples] += 
-                        (flt->accum[flt->accumPos] * flt->moisture) +
-                        (i[samples] * (1.0 - flt->moisture));
+                    o[samples] += flt->accum[flt->accumPos] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
             }
-        } else if(flt->moistureMode == SYNTH_AUTO_SOURCE) {
-            float *m = get_buffer_data(syn, flt->moistureBuffer);
-            m = &(m[flt->moisturePos]);
-            todo = MIN(todo, get_buffer_size(syn, flt->moistureBuffer) - flt->moisturePos);
-            float moisture;
+        } else if(flt->volMode == SYNTH_AUTO_SOURCE) {
+            float *v = get_buffer_data(syn, flt->volBuffer);
+            v = &(v[flt->volPos]);
+            todo = MIN(todo, get_buffer_size(syn, flt->volBuffer) - flt->volPos);
             if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
                     unsigned int pos = 0;
@@ -2251,11 +2336,9 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * f[pos];
                         pos++;
                     }
-                    /* get the moisture from the moisture buffer */
-                    moisture = m[samples] * flt->moisture;
-                    o[samples] = 
-                        (flt->accum[flt->accumPos] * moisture) +
-                        (i[samples] * (1.0 - moisture));
+                    /* apply the volume from the volume buffer */
+                    o[samples] = flt->accum[flt->accumPos] *
+                                 v[samples] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
@@ -2270,15 +2353,13 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * f[pos];
                         pos++;
                     }
-                    moisture = m[samples] * flt->moisture;
-                    o[samples] += 
-                        (flt->accum[flt->accumPos] * moisture) +
-                        (i[samples] * (1.0 - moisture));
+                    o[samples] += flt->accum[flt->accumPos] *
+                                  v[samples] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
             }
-            flt->moisturePos += samples;
+            flt->volPos += samples;
         }
     } else if(flt->mode == SYNTH_AUTO_SOURCE) {
         float *s = get_buffer_data(syn, flt->sliceBuffer);
@@ -2286,7 +2367,7 @@ int synth_run_filter(Synth *syn,
         todo = MIN(todo, get_buffer_size(syn, flt->sliceBuffer) - flt->slicePos);
         float *f = get_buffer_data(syn, flt->filterBuffer);
         float *fs;
-        if(flt->moistureMode == SYNTH_AUTO_CONSTANT) {
+        if(flt->volMode == SYNTH_AUTO_CONSTANT) {
             if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
                     fs = &(f[flt->startPos +
@@ -2300,9 +2381,7 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * fs[pos];
                         pos++;
                     }
-                    o[samples] = 
-                        (flt->accum[flt->accumPos] * flt->moisture) +
-                        (i[samples] * (1.0 - flt->moisture));
+                    o[samples] = flt->accum[flt->accumPos] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
@@ -2319,18 +2398,15 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * fs[pos];
                         pos++;
                     }
-                    o[samples] += 
-                        (flt->accum[flt->accumPos] * flt->moisture) +
-                        (i[samples] * (1.0 - flt->moisture));
+                    o[samples] += flt->accum[flt->accumPos] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
             }
-        } else if(flt->moistureMode == SYNTH_AUTO_SOURCE) {
-            float *m = get_buffer_data(syn, flt->moistureBuffer);
-            m = &(m[flt->moisturePos]);
-            todo = MIN(todo, get_buffer_size(syn, flt->moistureBuffer) - flt->moisturePos);
-            float moisture;
+        } else if(flt->volMode == SYNTH_AUTO_SOURCE) {
+            float *v = get_buffer_data(syn, flt->volBuffer);
+            v = &(v[flt->volPos]);
+            todo = MIN(todo, get_buffer_size(syn, flt->volBuffer) - flt->volPos);
             if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
                     fs = &(f[flt->startPos +
@@ -2344,10 +2420,8 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * fs[pos];
                         pos++;
                     }
-                    moisture = m[samples] * flt->moisture;
-                    o[samples] = 
-                        (flt->accum[flt->accumPos] * moisture) +
-                        (i[samples] * (1.0 - moisture));
+                    o[samples] = flt->accum[flt->accumPos] *
+                                 v[samples] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
@@ -2364,15 +2438,13 @@ int synth_run_filter(Synth *syn,
                         flt->accum[j] += i[samples] * fs[pos];
                         pos++;
                     }
-                    moisture = m[samples] * flt->moisture;
-                    o[samples] += 
-                        (flt->accum[flt->accumPos] * moisture) +
-                        (i[samples] * (1.0 - moisture));
+                    o[samples] += flt->accum[flt->accumPos] *
+                                  v[samples] * flt->vol;
                     flt->accumPos = (flt->accumPos + 1) % flt->size;
                     a2s = flt->size - flt->accumPos;
                 }
             }
-            flt->moisturePos += samples;
+            flt->volPos += samples;
         }
         flt->slicePos += samples;
     }
@@ -2380,4 +2452,44 @@ int synth_run_filter(Synth *syn,
     flt->inPos += samples;
 
     return(reqSamples);
+}
+
+int synth_filter_stopped_reason(Synth *syn,
+                                unsigned int index,
+                                unsigned int requested,
+                                unsigned int returned) {
+    int reason = 0;
+    SynthFilter *flt = get_filter(syn, index);
+    if(flt == NULL) {
+        return(-1);
+    }
+
+    if(requested - returned == 0) {
+        reason |= SYNTH_STOPPED_REQUESTED;
+    }
+    if(get_buffer_size(syn, flt->outBuffer) - flt->outPos == 0) {
+        reason |= SYNTH_STOPPED_OUTBUFFER;
+    }
+    if(get_buffer_size(syn, flt->inBuffer) - flt->inPos == 0) {
+        reason |= SYNTH_STOPPED_INBUFFER;
+    }
+
+    if(flt->mode == SYNTH_AUTO_CONSTANT) {
+        if(flt->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, flt->volBuffer) - flt->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    } else if(flt->mode == SYNTH_AUTO_SOURCE) {
+        if(get_buffer_size(syn, flt->sliceBuffer) - flt->slicePos == 0) {
+            reason |= SYNTH_STOPPED_SLICEBUFFER;
+        }
+        if(flt->volMode == SYNTH_AUTO_SOURCE) {
+            if(get_buffer_size(syn, flt->volBuffer) - flt->volPos == 0) {
+                reason |= SYNTH_STOPPED_VOLBUFFER;
+            }
+        }
+    }
+
+    return(reason);
 }

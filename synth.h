@@ -74,6 +74,14 @@ typedef enum {
     SYNTH_MODE_PHASE_SOURCE = 2
 } SynthPlayerMode;
 
+#define SYNTH_STOPPED_REQUESTED   (0x01)
+#define SYNTH_STOPPED_OUTBUFFER   (0x02)
+#define SYNTH_STOPPED_INBUFFER    (0x04)
+#define SYNTH_STOPPED_VOLBUFFER   (0x08)
+#define SYNTH_STOPPED_SPEEDBUFFER (0x10)
+#define SYNTH_STOPPED_PHASEBUFFER (0x20)
+#define SYNTH_STOPPED_SLICEBUFFER (0x40)
+
 typedef struct Synth_s Synth;
 
 /*
@@ -379,7 +387,9 @@ int synth_set_player_volume_mode(Synth *s,
                                  unsigned int index,
                                  SynthAutoMode volMode);
 /*
- * Set the constant player volume.
+ * Set the constant player volume.  0.0 to mute, 1.0 for original volume,
+ * greater values to amplify, lesser values to make it quieter, negative values
+ * to invert, if you really want to.
  * See: synth_set_player_volume_mode
  *
  * s        the Synth structure
@@ -517,6 +527,20 @@ int synth_set_player_speed_source(Synth *s,
 int synth_run_player(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples);
+/*
+ * Determine criteria for why the player stopped.
+ * See: SYNTH_STOPPED_*
+ *
+ * s            the Synth structure
+ * index        the player index
+ * requested    the number of samples which were requested
+ * returned     the number of samples which were returned
+ * return       A bitfield of reasons.
+ */
+int synth_player_stopped_reason(Synth *syn,
+                                unsigned int index,
+                                unsigned int requested,
+                                unsigned int returned);
 
 /*
  * Create a new filter.
@@ -539,45 +563,203 @@ int synth_add_filter(Synth *s,
  * return   0 on success, -1 on failure
  */
 int synth_free_filter(Synth *s, unsigned int index);
+/*
+ * Reset the filter accumulation state, so if it's started to be used on
+ * another buffer, it won't have weird discontinuity from previous processed content.
+ *
+ * s        the Synth structure
+ * index    the filter to reset
+ * return   0 on success, -1 on failure
+ */
 int synth_reset_filter(Synth *s, unsigned int index);
+/*
+ * Set the buffer to apply a filter to.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * inBuffer the input buffer index
+ * return   0 on success, -1 on failure
+ */
 int synth_set_filter_input_buffer(Synth *s,
                                   unsigned int index,
                                   unsigned int inBuffer);
-int synth_set_filter_input_buffer_start(Synth *s,
-                                        unsigned int index,
-                                        unsigned int startPos);
+/*
+ * Sets the starting position on processing the input buffer.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * inPos    the position in the buffer, in samples
+ * return   0 on success, -1 on failure
+ */
+int synth_set_filter_input_buffer_pos(Synth *s,
+                                      unsigned int index,
+                                      unsigned int inPos);
+/*
+ * Set the buffer containing the filter kernel(s) this filter should use.
+ *
+ * s            the Synth structure
+ * index        the filter to update
+ * filterBuffer the index of the buffer containing filter kernels
+ * return       0 on success, -1 on failure
+ */
+int synth_set_filter_buffer(Synth *s,
+                            unsigned int index,
+                            unsigned int filterBuffer);
+/*
+ * Set the position in the buffer where kernel(s) should start to be referenced
+ * from.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * startPos the sample where the filter(s) start
+ * return   0 on success, -1 on failure
+ */
+int synth_set_filter_buffer_start(Synth *s,
+                                  unsigned int index,
+                                  unsigned int startPos);
+/*
+ * Set the number of consecutive filter kernels starting from the start
+ * position which are in the filter buffer.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * slices   the number of slices
+ * return   0 on success, -1 on failure
+ */
 int synth_set_filter_slices(Synth *s,
                             unsigned int index,
                             unsigned int slices);
+/*
+ * Set whether the filter slice is a constant value (CONSTANT) or whether a
+ * buffer should be read to determine which slice should be used per input
+ * sample (SOURCE).
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * mode     the filter mode
+ * return   0 on success, -1 on failure
+ */
 int synth_set_filter_mode(Synth *s,
                           unsigned int index,
                           SynthAutoMode mode);
+/*
+ * Set the constant filter slice value to use.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * slice    the slice index
+ * return   0 on success, -1 on failure
+ */
 int synth_set_filter_slice(Synth *s,
                            unsigned int index,
                            unsigned int slice);
+/*
+ * Provide the source buffer for slices, valid values are 0.0 to 1.0,
+ * everything else will just wrap between those values.  0.0 will be the filter
+ * at startPos and 1.0 will be the last numbered filter slice, and values in
+ * between will be which is linearly nearest.
+ *
+ * s            the Synth structure
+ * indxx        the filter to update
+ * sliceBuffer  The buffer containing the continuous slice selections
+ * return       0 on success, -1 on failure
+ */
 int synth_set_filter_slice_source(Synth *s,
                                   unsigned int index,
                                   unsigned int sliceBuffer);
+/*
+ * Set the buffer to be output to.
+ *
+ * s            theSynth structure
+ * index        the filter to update
+ * outBuffer    the buffer to output to
+ * return       0 on success, -1 on failure
+ */
 int synth_set_filter_output_buffer(Synth *s,
-                                         unsigned int index,
-                                         unsigned int outBuffer);
+                                   unsigned int index,
+                                   unsigned int outBuffer);
+/*
+ * Set the buffer output position.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * outPos   the position of the output buffer to output to
+ * return   0 on success, -1 on failure
+ */
 int synth_set_filter_output_buffer_pos(Synth *s,
                                        unsigned int index,
                                        unsigned int outPos);
+/*
+ * Set the filter's output mode.  Either overwrite values in the output buffer
+ * (REPLACE) or add/mix them together (ADD).
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * outOp    the output operation
+ * return   0 on success, -1 onf ailure
+ */
 int synth_set_filter_output_mode(Synth *s,
                                  unsigned int index,
                                  SynthOutputOperation outOp);
-int synth_set_filter_moisture_mode(Synth *s,
+/*
+ * Set the filter's volume mode.  Either a constant value (CONSTANT) or from a
+ * source buffer (SOURCE) with the constant value applied.
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * volMode  the volume mode
+ * return   0 on success, -1 on failure
+ */
+int synth_set_filter_volume_mode(Synth *s,
+                                 unsigned int index,
+                                 SynthAutoMode volMode);
+/*
+ * Set the filter's output volume.
+ * See: synth_set_player_volume
+ *
+ * s        the Synth structure
+ * index    the filter to update
+ * vol      the volume
+ * return   0 on success, -1 on failure
+ */
+int synth_set_filter_volume(Synth *s,
+                            unsigned int index,
+                            float vol);
+/*
+ * Set the source buffer for the filter output volume.
+ *
+ * s            the Synth structure
+ * index        the filter to update
+ * volBuffer    the volume buffer index
+ * return       0 on success, -1 on failure
+ */
+int synth_set_filter_volume_source(Synth *s,
                                    unsigned int index,
-                                   SynthAutoMode moistureMode);
-int synth_set_filter_moisture(Synth *s,
-                              unsigned int index,
-                              float moisture);
-int synth_set_filter_moisture_source(Synth *s,
-                                     unsigned int index,
-                                     unsigned int moistureBuffer);
+                                   unsigned int volBuffer);
+/*
+ * Run the filter for a certain number of samples.
+ *
+ * s            the Synth structure
+ * index        the filter index to run
+ * reqSamples   the number of samples to try to run
+ * return       the number of samples which could run or -1 on error
+ */
 int synth_run_filter(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples);
+/*
+ * Get the reason why the filter stopped running.
+ * See: SYNTH_STOPPED_*
+ *
+ * syn          the Synth structure
+ * index        the index of the filter
+ * requested    number of samples requested
+ * returned     number of samples returned
+ * return       the reason or -1 on failure
+ */
+int synth_filter_stopped_reason(Synth *syn,
+                                unsigned int index,
+                                unsigned int requested,
+                                unsigned int returned);
 
 #endif
