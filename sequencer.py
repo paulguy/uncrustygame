@@ -86,7 +86,9 @@ class Sequencer():
                 row.append(desc[i][1](desc[i][2], struct[pos]))
             elif isinstance(desc[i], int):
                 rowDesc = self._desc._rowdesc[desc[i]]
-                newrow = self._read_row(struct[pos:], rowDesc, initial=initial)
+                # pass False because an initial row argument may be an empty
+                # row
+                newrow = self._read_row(struct[pos:], rowDesc, initial=False)
                 row.append(newrow)
             pos += 1
 
@@ -210,23 +212,38 @@ class Sequencer():
             newLine.append(self._get_row(self._desc._rowdesc[i], self._row[line[i]]))
         return newLine
 
+    def set_pattern(self, pattern):
+        if pattern < 0 or pattern > len(self._pattern):
+            raise IndexError("pattern out of range")
+        self._curPattern = pattern
+        self._curLine = 0
+
+    def set_order(self, order):
+        if pattern < 0 or pattern > len(self._order):
+            raise IndexError("order out of range")
+        self._curOrder = 0
+        self._curPattern = self._order[self._curOrder]
+        self._curLine = 0
+
     def advance(self, time):
         line = None
 
         if self._curOrder == -1 and self._curLine == 0 and self._lineTime == 0:
-            self._curOrder = 0
-            line = self._get_line(self._initial)[1:]
             time = 0
+            self._curOrder = 0
+            self._curPattern = self._order[0]
+            line = self._get_line(self._initial)[1:]
         elif time >= self._divTime - self._lineTime:
             time = self._divTime - self._lineTime
             self._lineTime = 0
-            pattern = self._pattern[self._order[self._curOrder]]
+            pattern = self._pattern[self._curPattern]
             self._curLine += 1
             if self._curLine == len(pattern):
                 self._curOrder += 1
                 if self._curOrder < len(self._order):
                     self._curLine = 0
-                    pattern = self._pattern[self._order[self._curOrder]]
+                    self._curPattern = self._order[self._curOrder]
+                    pattern = self._pattern[self._curPattern]
                 else:
                     raise SequenceEnded()
             line = self._get_line(pattern[self._curLine])

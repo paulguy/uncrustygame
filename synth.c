@@ -1102,6 +1102,14 @@ int synth_free_buffer(Synth *s, unsigned int index) {
     return(0);
 }
 
+int synth_buffer_get_size(Synth *s, unsigned int index) {
+    if(!is_valid_buffer(s, index, BUFFER_INPUT_ONLY)) {
+        return(-1);
+    }
+
+    return(get_buffer_size(s, index));
+}
+
 int synth_silence_buffer(Synth *s,
                          unsigned int index,
                          unsigned int start,

@@ -80,14 +80,14 @@ class MacroReader():
             self._line = self._line[1:]
         return line
 
+
 class AudioSequencer():
-    def __init__(self, infile, buffers=None, looping=False):
+    def __init__(self, infile, buffers=None):
         """
         Create an audio sequence from a file.
 
         buffers is a list of either float arrays or other external Buffer objects.
         """
-        self._looping = looping
         if infile.readline() != "CrustyTracker":
             raise Exception("File isn't a CrustyTracker sequence.")
         self._version = int(infile.readline())
@@ -215,8 +215,59 @@ class AudioSequencer():
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
         # run length
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+        # stopped requested
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+        # stopped outbuffer
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+        # stopped inbuffer
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+        # stopped volbuffer
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+        # stopped speedbuffer
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+        # stopped phasebuffer
+        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
         filterDesc = seqDesc.add_row_description()
-        # TODO: filter rows
+        # input buffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # input buffer pos
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # output buffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # output buffer pos
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # filter buffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # filter buffer start
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # filter buffer slices
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # slice
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # slice source
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # filter mode
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # output mode
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # volume
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
+        # volume source
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # volume mode
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # run length
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+        # stopped requested
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+        # stopped outbuffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+        # stopped inbuffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+        # stopped volbuffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+        # stopped slicebuffer
+        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
         for channel in self._channel:
             if channel == CHANNEL_TYPE_SILENCE:
                 seqDesc.add_column(silenceDesc)
@@ -225,6 +276,9 @@ class AudioSequencer():
             elif channel == CHANNEL_TYPE_FILTER:
                 seqDesc.add_column(filterDesc)
         self._seq = seq.Sequencer(seqDesc, infile)
+
+    def __del__(self):
+        self._unload()
 
     def _tune(self):
         tuning = None
@@ -301,10 +355,119 @@ class AudioSequencer():
         else:
             raise Exception("Buffers must be float arrays.")
 
+    def _update_silence(self, silence, status):
+        if status[0] != None:
+            b = self._bufferInfo[status[0]][0]
+            silence[0] = b
+        if status[1] != None:
+            silence[1] = status[1]
+        if status[2] != None:
+            silence[2] = status[2]
+
+    def _update_player(self, player, status):
+        p = player[0]
+        if status[0] != None:
+            b = self._bufferInfo[status[0]][0]
+            p.input_buffer(b)
+        if status[1] != None:
+            p.input_pos(status[1])
+        if status[2] != None:
+            b = self._bufferInfo[status[2]][0]
+            p.output_buffer(b)
+        if status[3] != None:
+            p.output_pos(status[3])
+        if status[4] != None:
+            p.output_mode(status[4])
+        if status[5] != None:
+            p.volume(status[5])
+        if status[6] != None:
+            b = self._bufferInfo[status[6]][0]
+            p.output_buffer(b)
+        if status[7] != None:
+            p.volume_mode(status[7])
+        if status[8] != None:
+            p.speed(status[8])
+        if status[9] != None:
+            b = self._bufferInfo[status[9]][0]
+            p.output_buffer(b)
+        if status[10] != None:
+            p.speed_mode(status[10])
+        if status[11] != None:
+            b = self._bufferInfo[status[11]][0]
+            p.output_buffer(b)
+        if status[12] != None:
+            p.loop_start(status[12])
+        if status[13] != None:
+            p.loop_end(status[13])
+        if status[14] != None:
+            p.player_mode(status[14])
+        if status[15] != None:
+            player[1] = status[15]
+        if status[16] != None:
+            player[2] = status[16]
+        if status[17] != None:
+            player[3] = status[17]
+        if status[18] != None:
+            player[4] = status[18]
+        if status[19] != None:
+            player[5] = status[19]
+        if status[20] != None:
+            player[6] = status[20]
+        if status[21] != None:
+            player[7] = status[21]
+
+    def _update_filter(self, flt, status):
+        f = flt[0]
+        if status[0] != None:
+            b = self._bufferInfo[status[0]][0]
+            f.input_buffer(b)
+        if status[1] != None:
+            f.input_pos(status[1])
+        if status[2] != None:
+            b = self._bufferInfo[status[2]][0]
+            f.output_buffer(b)
+        if status[3] != None:
+            f.output_pos(status[3])
+        if status[4] != None:
+            b = self._bufferInfo[status[4]][0]
+            f.filter_buffer(b)
+        if status[5] != None:
+            f.filter_start(status[5])
+        if status[6] != None:
+            f.slices(status[6])
+        if status[7] != None:
+            f.slice(status[7])
+        if status[8] != None:
+            b = self._bufferInfo[status[8]][0]
+            f.slice_source(b)
+        if status[9] != None:
+            f.mode(status[9])
+        if status[10] != None:
+            f.output_mode(status[10])
+        if status[11] != None:
+            f.volume(status[11])
+        if status[12] != None:
+            b = self._bufferInfo[status[12]][0]
+            f.volume_source(b)
+        if status[13] != None:
+            f.volume_mode(status[13])
+        if status[14] != None:
+            flt[1] = status[14]
+        if status[15] != None:
+            flt[2] = status[15]
+        if status[16] != None:
+            flt[3] = status[16]
+        if status[16] != None:
+            flt[4] = status[17]
+        if status[16] != None:
+            flt[5] = status[18]
+        if status[16] != None:
+            flt[6] = status[19]
+
     def _load(self, s):
         self._rate = s.rate
         self._channels = s.channels
-        self._bufferInfo = [(None, self._rate) for b in range(self._channels)]
+        self._bufferInfo = [(b, self._rate) for b in s.output_buffers()]
         self._localBuffers = list()
         for buffer in self._buffer:
             if isinstance(buffer[0], int):
@@ -326,11 +489,45 @@ class AudioSequencer():
                 b = s.buffer(seq.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
                 self._bufferInfo.append((b, buffer[1]))
                 self._localBuffers.append(b)
+        initial = self._seq.advance(0)
+        self._localChannels = list()
+        for channel in enumerate(self._channel):
+            if channel[1] == CHANNEL_TYPE_SILENCE:
+                silence = [self._bufferInfo[initial[channel[0]][0]],
+                           initial[channel[0]][1],
+                           initial[channel[0]][2]]
+                silence[2] = 0
+                self._localChannels.append(silence)
+            elif channel[1] == CHANNEL_TYPE_PLAYER:
+                b = self._bufferInfo[initial[channel[0]][0]][0]
+                player = [s.player(b), 0, None, None, None, None, None, None]
+                self._update_player(player, initial[channel[0]])
+                player[1] = 0
+                self._localChannels.append(player)
+            elif channel[1] == CHANNEL_TYPE_FILTER:
+                b = self._bufferInfo[initial[channel[0]][4]][0]
+                flt = [s.filter(b, b.size), 0, None, None, None, None, None]
+                self._update_filter(flt, initial[channel[0]])
+                flt[1] = 0
+                self._localChannels.append(flt)
+        init = None
+        try:
+            init = self._tag['init']
+        except KeyError:
+            pass
+        if init != None:
+            self._seq.set_pattern(init)
+            self.run(-1)
 
     def _unload(self, s):
+        self._bufferInfo = None
+        # delete channels and filters which may refer to buffers first.
+        if isinstance(channel[0], (cg.Player, cg.Filter)):
+            del channel[0]
+        self._localChannels = None
         for buffer in self._localBuffers:
             del buffer
-        self._localBuffers = list()
+        self._localBuffers = None 
 
     def reset(self):
         """
@@ -338,8 +535,8 @@ class AudioSequencer():
         in a known state.
         """
         self._unload()
-        self._load()
         self._seq.reset()
+        self._load()
 
     def fast_reset(self):
         """
@@ -348,14 +545,82 @@ class AudioSequencer():
         """
         self._seq.reset()
 
-    def looping(self):
-        self._looping = True
-
-    def not_looping(self):
-        self._looping = False
+    def _run_channels(self, line, time):
+        for channel in enumerate(self._localChannels):
+            if isinstance(channel[1][0], cg.Player):
+                p = channel[1][0]
+                self._update_player(channel[1], line[channel[0]])
+                curtime = time
+                if channel[1][1] < curtime:
+                    curtime = channel[1][1]
+                while curtime > 0:
+                    taken = p.run(curtime)
+                    if taken == 0:
+                        reason = p.stopped_reason()
+                        if reason | cg.SYNTH_STOPPED_REQUESTED:
+                            self._update_player(channel[1], channel[1][2])
+                        elif reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                            self._update_player(channel[1], channel[1][3])
+                        elif reason | cg.SYNTH_STOPPED_INBUFFER:
+                            self._update_player(channel[1], channel[1][4])
+                        elif reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                            self._update_player(channel[1], channel[1][5])
+                        elif reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
+                            self._update_player(channel[1], channel[1][6])
+                        elif reason | cg.SYNTH_STOPPED_PHASEBUFFER:
+                            self._update_player(channel[1], channel[1][7])
+                    curtime -= taken
+            if isinstance(channel[1][0], cg.Filter):
+                f = channel[1][0]
+                self._update_filter(channel[1], line[channel[0]])
+                curtime = time
+                if channel[1][1] < curtime:
+                    curtime = channel[1][1]
+                while curtime > 0:
+                    taken = f.run(curtime)
+                    if taken == 0:
+                        reason = f.stopped_reason()
+                        if reason | cg.SYNTH_STOPPED_REQUESTED:
+                            self._update_filter(channel[1], channel[1][2])
+                        elif reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                            self._update_filter(channel[1], channel[1][3])
+                        elif reason | cg.SYNTH_STOPPED_INBUFFER:
+                            self._update_filter(channel[1], channel[1][4])
+                        elif reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                            self._update_filter(channel[1], channel[1][5])
+                        elif reason | cg.SYNTH_STOPPED_SLICEBUFFER:
+                            self._update_filter(channel[1], channel[1][6])
+            else: # silence
+                self._update_silence(channel[1], line[channel[0]])
+                if channel[1][2] > 0:
+                    channel[1][0].silence(channel[1][1], channel[1][2])
+                    channel[1][2] = 0
 
     def run(self, needed):
-        pass
+        if needed < 0:
+            timepassed = 0
+            while True:
+                line = None
+                time = 0
+                try:
+                    # try run for some absurd amount of time
+                    line, time = self._seq.advance(2 ** 31)
+                except seq.SequenceEnded:
+                    break
+                self._run_channels(line, time)
+                timepassed += time
+            return timepassed
+
+        remain = needed
+        while remain > 0:
+            try:
+                line, time = self._seq.advance(remain)
+            except seq.SequenceEnded:
+                break
+            self._run_channels(line, time)
+            remain -= time
+
+        return needed - remain
 
 
 @cg.SYNTH_FRAME_CB_T

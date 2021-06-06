@@ -152,6 +152,7 @@ _set_types(_cg.synth_frame, c_int, [c_void_p])
 _set_types(_cg.synth_set_fragments, c_int, [c_void_p, c_uint])
 _set_types(_cg.synth_add_buffer, c_int, [c_void_p, c_int, c_void_p, c_uint])
 _set_types(_cg.synth_free_buffer, c_int, [c_void_p, c_uint])
+_set_types(_cg.synth_buffer_get_size, c_int, [c_void_p, c_uint])
 _set_types(_cg.synth_silence_buffer, c_int, [c_void_p, c_uint, c_uint, c_uint])
 _set_types(_cg.synth_add_player, c_int, [c_void_p, c_uint])
 _set_types(_cg.synth_free_player, c_int, [c_void_p, c_uint])
@@ -501,12 +502,16 @@ class Synth():
                                 rate, channels)
         if self._s == None:
             raise CrustyException()
+        self._outputBuffers = [self.buffer(i) for i in range(self._channels)]
 
     def __del__(self):
         _cg.synth_free(self._s)
 
     def print_full_stats(self):
         _cg.synth_print_full_stats(self._s)
+
+    def output_buffers(self):
+        return self._outputBuffers
 
     def buffer(self, dataType :int, data :c_void_p, size :int):
         return Buffer(self, dataType, data, size)
@@ -581,6 +586,13 @@ class Buffer():
 
     def __int__(self):
         return self._b
+
+    @property
+    def size(self):
+        size = _cg.synth_buffer_get_size(self._s._s, self)
+        if size < 0:
+            raise CrustyException()
+        return size
 
     def silence(self, start :int, length :int):
         if _cg.synth_silence_buffer(self._s._s, self, start, length) < 0:

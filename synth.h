@@ -263,6 +263,14 @@ int synth_add_buffer(Synth *s,
  */
 int synth_free_buffer(Synth *s, unsigned int index);
 /*
+ * Get the size in samples of a buffer.
+ *
+ * s        the Synth structure
+ * index    the buffer handle index
+ * return   size in samples or -1 on failure
+ */
+int synth_buffer_get_size(Synth *s, unsigned int index);
+/*
  * Silence a buffer which contains audio.
  *
  * s        The Synth structure
