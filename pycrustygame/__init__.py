@@ -97,13 +97,12 @@ SYNTH_MODE_ONCE = 0
 SYNTH_MODE_LOOP = 1
 SYNTH_MODE_PHASE_SOURCE = 2
 
-SYNTH_STOPPED_REQUESTED = 0x01
-SYNTH_STOPPED_OUTBUFFER = 0x02
-SYNTH_STOPPED_INBUFFER = 0x04
-SYNTH_STOPPED_VOLBUFFER = 0x08
-SYNTH_STOPPED_SPEEDBUFFER = 0x10
-SYNTH_STOPPED_PHASEBUFFER = 0x20
-SYNTH_STOPPED_SLICEBUFFER = 0x40
+SYNTH_STOPPED_OUTBUFFER = 0x01
+SYNTH_STOPPED_INBUFFER = 0x02
+SYNTH_STOPPED_VOLBUFFER = 0x04
+SYNTH_STOPPED_SPEEDBUFFER = 0x08
+SYNTH_STOPPED_PHASEBUFFER = 0x10
+SYNTH_STOPPED_SLICEBUFFER = 0x20
 
 SYNTH_FRAME_CB_T = CFUNCTYPE(c_int, py_object, py_object)
 
@@ -172,7 +171,7 @@ _set_types(_cg.synth_set_player_speed_mode, c_int, [c_void_p, c_uint, c_int])
 _set_types(_cg.synth_set_player_speed, c_int, [c_void_p, c_uint, c_float])
 _set_types(_cg.synth_set_player_speed_source, c_int, [c_void_p, c_uint, c_uint])
 _set_types(_cg.synth_run_player, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.synth_player_stopped_reason, c_int, [c_void_p, c_uint, c_uint, c_uint])
+_set_types(_cg.synth_player_stopped_reason, c_int, [c_void_p, c_uint])
 
 _set_types(_cg.synth_add_filter, c_int, [c_void_p, c_uint, c_uint])
 _set_types(_cg.synth_free_filter, c_int, [c_void_p, c_uint])
@@ -191,7 +190,7 @@ _set_types(_cg.synth_set_filter_volume_mode, c_int, [c_void_p, c_uint, c_int])
 _set_types(_cg.synth_set_filter_volume, c_int, [c_void_p, c_uint, c_float])
 _set_types(_cg.synth_set_filter_volume_source, c_int, [c_void_p, c_uint, c_uint])
 _set_types(_cg.synth_run_filter, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.synth_filter_stopped_reason, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint])
+_set_types(_cg.synth_filter_stopped_reason, c_int, [c_void_p, c_uint])
 
 
 class CrustyException(Exception):
@@ -683,8 +682,8 @@ class Player():
             raise CrustyException()
         return ret
 
-    def stop_reason(self, requested :int, returned :int):
-        ret = _cg.synth_player_stopped_reason(self._s, self, requested, returned)
+    def stop_reason(self):
+        ret = _cg.synth_player_stopped_reason(self._s, self)
         if ret < 0:
             raise CrustyException()
         return ret
@@ -766,8 +765,8 @@ class Filter():
             raise CrustyException()
         return ret
 
-    def stop_reason(self, requested :int, returned :int):
-        ret = _cg.synth_filter_stopped_reason(self._s, self, requested, returned)
+    def stop_reason(self):
+        ret = _cg.synth_filter_stopped_reason(self._s, self)
         if ret < 0:
             raise CrustyException()
         return ret

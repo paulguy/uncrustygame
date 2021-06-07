@@ -74,13 +74,12 @@ typedef enum {
     SYNTH_MODE_PHASE_SOURCE = 2
 } SynthPlayerMode;
 
-#define SYNTH_STOPPED_REQUESTED   (0x01)
-#define SYNTH_STOPPED_OUTBUFFER   (0x02)
-#define SYNTH_STOPPED_INBUFFER    (0x04)
-#define SYNTH_STOPPED_VOLBUFFER   (0x08)
-#define SYNTH_STOPPED_SPEEDBUFFER (0x10)
-#define SYNTH_STOPPED_PHASEBUFFER (0x20)
-#define SYNTH_STOPPED_SLICEBUFFER (0x40)
+#define SYNTH_STOPPED_OUTBUFFER   (0x01)
+#define SYNTH_STOPPED_INBUFFER    (0x02)
+#define SYNTH_STOPPED_VOLBUFFER   (0x04)
+#define SYNTH_STOPPED_SPEEDBUFFER (0x08)
+#define SYNTH_STOPPED_PHASEBUFFER (0x10)
+#define SYNTH_STOPPED_SLICEBUFFER (0x20)
 
 typedef struct Synth_s Synth;
 
@@ -541,14 +540,9 @@ int synth_run_player(Synth *s,
  *
  * s            the Synth structure
  * index        the player index
- * requested    the number of samples which were requested
- * returned     the number of samples which were returned
  * return       A bitfield of reasons.
  */
-int synth_player_stopped_reason(Synth *syn,
-                                unsigned int index,
-                                unsigned int requested,
-                                unsigned int returned);
+int synth_player_stopped_reason(Synth *syn, unsigned int index);
 
 /*
  * Create a new filter.
@@ -765,9 +759,6 @@ int synth_run_filter(Synth *s,
  * returned     number of samples returned
  * return       the reason or -1 on failure
  */
-int synth_filter_stopped_reason(Synth *syn,
-                                unsigned int index,
-                                unsigned int requested,
-                                unsigned int returned);
+int synth_filter_stopped_reason(Synth *syn, unsigned int index);
 
 #endif

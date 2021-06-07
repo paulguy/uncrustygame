@@ -1811,17 +1811,11 @@ int synth_run_player(Synth *syn,
 }
 
 int synth_player_stopped_reason(Synth *syn,
-                                unsigned int index,
-                                unsigned int requested,
-                                unsigned int returned) {
+                                unsigned int index) {
     int reason = 0;
     SynthPlayer *pl = get_player(syn, index);
     if(pl == NULL) {
         return(-1);
-    }
-
-    if(requested - returned == 0) {
-        reason |= SYNTH_STOPPED_REQUESTED;
     }
 
     if(get_buffer_size(syn, pl->outBuffer) - pl->outPos == 0) {
@@ -2462,19 +2456,13 @@ int synth_run_filter(Synth *syn,
     return(reqSamples);
 }
 
-int synth_filter_stopped_reason(Synth *syn,
-                                unsigned int index,
-                                unsigned int requested,
-                                unsigned int returned) {
+int synth_filter_stopped_reason(Synth *syn, unsigned int index) {
     int reason = 0;
     SynthFilter *flt = get_filter(syn, index);
     if(flt == NULL) {
         return(-1);
     }
 
-    if(requested - returned == 0) {
-        reason |= SYNTH_STOPPED_REQUESTED;
-    }
     if(get_buffer_size(syn, flt->outBuffer) - flt->outPos == 0) {
         reason |= SYNTH_STOPPED_OUTBUFFER;
     }

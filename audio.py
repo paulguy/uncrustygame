@@ -546,50 +546,76 @@ class AudioSequencer():
         self._seq.reset()
 
     def _run_channels(self, line, time):
+        # for performance and simplicity reasons, this is evaluating whole
+        # channels at a time.  Alternatively, it would look to each channel
+        # for the next event then run all channels up to that event in repeat
+        # but that could allow for things to be done in very slow ways which
+        # result in a lot of very close together events.  I'm not looking to
+        # make a full DAW, but rather a simple tracker, so don't do it that way
         for channel in enumerate(self._localChannels):
             if isinstance(channel[1][0], cg.Player):
                 p = channel[1][0]
-                self._update_player(channel[1], line[channel[0]])
-                curtime = time
-                if channel[1][1] < curtime:
-                    curtime = channel[1][1]
-                while curtime > 0:
-                    taken = p.run(curtime)
-                    if taken == 0:
-                        reason = p.stopped_reason()
-                        if reason | cg.SYNTH_STOPPED_REQUESTED:
-                            self._update_player(channel[1], channel[1][2])
-                        elif reason | cg.SYNTH_STOPPED_OUTBUFFER:
-                            self._update_player(channel[1], channel[1][3])
-                        elif reason | cg.SYNTH_STOPPED_INBUFFER:
-                            self._update_player(channel[1], channel[1][4])
-                        elif reason | cg.SYNTH_STOPPED_VOLBUFFER:
-                            self._update_player(channel[1], channel[1][5])
-                        elif reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
-                            self._update_player(channel[1], channel[1][6])
-                        elif reason | cg.SYNTH_STOPPED_PHASEBUFFER:
-                            self._update_player(channel[1], channel[1][7])
-                    curtime -= taken
+                if line != None:
+                    self._update_player(channel[1], line[channel[0]])
+                reqtime = channel[1][1]
+                while time > 0:
+                    curtime = time
+                    if reqtime < curtime:
+                        curtime = reqtime
+                        reqtime = 0
+                        time -= curtime
+                    else:
+                        reqtime -= curtime
+                        time -= reqtime
+                    channel[1][1] = reqtime
+                    while curtime > 0:
+                        got = p.run(curtime)
+                        if got < curtime:
+                            reason = p.stop_reason()
+                            if reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                                self._update_player(channel[1], channel[1][3])
+                            if reason | cg.SYNTH_STOPPED_INBUFFER:
+                                self._update_player(channel[1], channel[1][4])
+                            if reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                                self._update_player(channel[1], channel[1][5])
+                            if reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
+                                self._update_player(channel[1], channel[1][6])
+                            if reason | cg.SYNTH_STOPPED_PHASEBUFFER:
+                                self._update_player(channel[1], channel[1][7])
+                            curtime -= got
+                    if channel[1][1] == 0:
+                        self._update_player(channel[1], channel[1][2])
+                    reqtime = channel[1][1]
             if isinstance(channel[1][0], cg.Filter):
                 f = channel[1][0]
-                self._update_filter(channel[1], line[channel[0]])
-                curtime = time
-                if channel[1][1] < curtime:
-                    curtime = channel[1][1]
-                while curtime > 0:
-                    taken = f.run(curtime)
-                    if taken == 0:
-                        reason = f.stopped_reason()
-                        if reason | cg.SYNTH_STOPPED_REQUESTED:
-                            self._update_filter(channel[1], channel[1][2])
-                        elif reason | cg.SYNTH_STOPPED_OUTBUFFER:
-                            self._update_filter(channel[1], channel[1][3])
-                        elif reason | cg.SYNTH_STOPPED_INBUFFER:
-                            self._update_filter(channel[1], channel[1][4])
-                        elif reason | cg.SYNTH_STOPPED_VOLBUFFER:
-                            self._update_filter(channel[1], channel[1][5])
-                        elif reason | cg.SYNTH_STOPPED_SLICEBUFFER:
-                            self._update_filter(channel[1], channel[1][6])
+                if line != None:
+                    self._update_filter(channel[1], line[channel[0]])
+                reqtime = channel[1][1]
+                while time > 0:
+                    curtime = time
+                    if reqtime < curtime:
+                        curtime = reqtime
+                        reqtime = 0
+                        time -= curtime
+                    else:
+                        reqtime -= curtime
+                        time -= reqtime
+                    channel[1][1] = reqtime
+                    while curtime > 0:
+                        got = p.run(curtime)
+                        if got < curtime:
+                            reason = f.stop_reason()
+                            if reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                                self._update_filter(channel[1], channel[1][3])
+                            if reason | cg.SYNTH_STOPPED_INBUFFER:
+                                self._update_filter(channel[1], channel[1][4])
+                            if reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                                self._update_filter(channel[1], channel[1][5])
+                            if reason | cg.SYNTH_STOPPED_SLICEBUFFER:
+                                self._update_filter(channel[1], channel[1][6])
+                    if channel[1][1] == 0:
+                        self._update_filter(channel[1], channel[1][2])
+                    reqtime = channel[1][1]
             else: # silence
                 self._update_silence(channel[1], line[channel[0]])
                 if channel[1][2] > 0:
