@@ -557,17 +557,15 @@ class AudioSequencer():
                 p = channel[1][0]
                 if line != None:
                     self._update_player(channel[1], line[channel[0]])
-                reqtime = channel[1][1]
                 while time > 0:
                     curtime = time
-                    if reqtime < curtime:
-                        curtime = reqtime
-                        reqtime = 0
+                    if channel[1][1] < curtime:
+                        curtime = channel[1][1]
+                        channel[1][1] = 0
                         time -= curtime
                     else:
-                        reqtime -= curtime
-                        time -= reqtime
-                    channel[1][1] = reqtime
+                        channel[1][1] -= curtime
+                        time -= channel[1][1]
                     while curtime > 0:
                         got = p.run(curtime)
                         if got < curtime:
@@ -585,22 +583,19 @@ class AudioSequencer():
                             curtime -= got
                     if channel[1][1] == 0:
                         self._update_player(channel[1], channel[1][2])
-                    reqtime = channel[1][1]
             if isinstance(channel[1][0], cg.Filter):
                 f = channel[1][0]
                 if line != None:
                     self._update_filter(channel[1], line[channel[0]])
-                reqtime = channel[1][1]
                 while time > 0:
                     curtime = time
-                    if reqtime < curtime:
-                        curtime = reqtime
-                        reqtime = 0
+                    if channel[1][1] < curtime:
+                        curtime = channel[1][1]
+                        channel[1][1] = 0
                         time -= curtime
                     else:
-                        reqtime -= curtime
-                        time -= reqtime
-                    channel[1][1] = reqtime
+                        channel[1][1] -= curtime
+                        time -= channel[1][1]
                     while curtime > 0:
                         got = p.run(curtime)
                         if got < curtime:
@@ -615,7 +610,6 @@ class AudioSequencer():
                                 self._update_filter(channel[1], channel[1][6])
                     if channel[1][1] == 0:
                         self._update_filter(channel[1], channel[1][2])
-                    reqtime = channel[1][1]
             else: # silence
                 self._update_silence(channel[1], line[channel[0]])
                 if channel[1][2] > 0:
