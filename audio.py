@@ -656,12 +656,14 @@ class AudioSystem():
             needed = self._s.needed
 
             for seq in self._sequences:
+                if not seq[1]:
+                    continue
                 gotzero = 0
                 while needed > 0:
                     got = seq[0].run(needed)
                     if got < needed:
-                        seq[2] += 1
-                        if seq[1]:
+                        seq[3] += 1
+                        if seq[2]:
                             if got == 0:
                                 if gotzero == 1:
                                     print("WARNING: looping sequence returned 0 consecutively")
@@ -683,9 +685,9 @@ class AudioSystem():
             # messages can be properly displayed
             return -1
 
-    def add_sequence(self, seq, looping=False):
+    def add_sequence(self, seq, enabled=True, looping=False):
         seq._load(self._s)
-        self._sequences.append([seq, looping, 0])
+        self._sequences.append([seq, enabled, looping, 0])
 
     def del_sequence(self, seq):
         try:
@@ -694,14 +696,21 @@ class AudioSystem():
         except ValueError as e:
             print("WARNING: Attempt to remove nonexistent sequence.")
 
+    def sequence_enabled(self, seq, enabled):
+        index = self._sequences.index(seq)
+        if enabled:
+            self._sequences[index][1] = True
+        else:
+            self._sequences[index][1] = False
+
     def enabled(self, enabled):
         self._s.enabled(enabled)
 
     def frame(self):
         for seq in self._sequences:
-            seq[2] = 0
+            seq[3] = 0
         self._s.frame()
 
-    def looped(self, seq):
+    def ended(self, seq):
         index = self._sequences.index(seq)
         return self._sequences[index][2]
