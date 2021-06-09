@@ -209,7 +209,8 @@ class Sequencer():
     def _get_line(self, line):
         newLine = list()
         for i in range(len(line)):
-            newLine.append(self._get_row(self._desc._rowdesc[i], self._row[line[i]]))
+            desc = self._desc._rowdesc[self._desc._column[i]]
+            newLine.append(self._get_row(desc, self._row[line[i]]))
         return newLine
 
     def set_pattern(self, pattern):

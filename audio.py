@@ -2,8 +2,6 @@ import array
 import pycrustygame as cg
 import sequencer as seq
 
-_DEFAULT_TUNING = 440
-
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
 CHANNEL_TYPE_FILTER = "filter"
@@ -26,7 +24,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(file, macros):
+    def __init__(self, file, macros):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -43,14 +41,24 @@ class MacroReader():
         Read a line with macros replaced.
         """
         if self._line == None:
-            line = self._file.readline()
+            line = ""
+            while True:
+                line += self._file.readline()
+                line = line.split('#', maxsplit=1)
+                line = line[0].strip()
+                if len(line) > 0 and line[-1] == '\\':
+                    line = line[:-1]
+                    continue
+                if len(line) > 0:
+                    break
+ 
             for macro in self._macros:
                 newLine = ""
                 while True:
                     index = 0
                     try:
                         # search for instance of macro name
-                        index = line[index:].index(macro)
+                        index = line[index:].index(macro[0])
                     except ValueError:
                         # no macro found, just append the rest
                         newLine += line
@@ -68,7 +76,7 @@ class MacroReader():
                     for i in range(len(macro[1])):
                         replacement.replace(macro[1][i], args[i])
                     # append the replacement string
-                    newLine += replacement
+                    newLine += replacement + ' '
                     # continue with the remainder
                     line = args[len(macro[1])]
                 line = newLine
@@ -82,19 +90,33 @@ class MacroReader():
 
 
 class AudioSequencer():
-    def __init__(self, infile, buffers=None):
+    def __init__(self, infile, buffer=None):
         """
         Create an audio sequence from a file.
 
         buffers is a list of either float arrays or other external Buffer objects.
         """
-        if infile.readline() != "CrustyTracker":
+        if infile.readline().strip() != "CrustyTracker":
             raise Exception("File isn't a CrustyTracker sequence.")
-        self._version = int(infile.readline())
+        line = infile.readline().split()
+        self._version = int(line[0])
+        self._seqChannels = int(line[1])
         if self._version != 1:
             raise Exception("Unsupported version: {}".format(version))
-        macros = int(infile.readline())
-        self._macro = list()
+        while True:
+            line = infile.readline().split('#', maxsplit=1)
+            line = line[0]
+            if len(line) != 0:
+                break
+        macros = int(line)
+        macro = list()
+        macro.append(("SYNTH_OUTPUT_REPLACE", (), str(cg.SYNTH_OUTPUT_REPLACE)))
+        macro.append(("SYNTH_OUTPUT_ADD", (), str(cg.SYNTH_OUTPUT_ADD)))
+        macro.append(("SYNTH_AUTO_CONSTANT", (), str(cg.SYNTH_AUTO_CONSTANT)))
+        macro.append(("SYNTH_AUTO_SOURCE", (), str(cg.SYNTH_AUTO_SOURCE)))
+        macro.append(("SYNTH_MODE_ONCE", (), str(cg.SYNTH_MODE_ONCE)))
+        macro.append(("SYNTH_MODE_LOOP", (), str(cg.SYNTH_MODE_ONCE)))
+        macro.append(("SYNTH_MODE_PHASE_SOURCE", (), str(cg.SYNTH_MODE_ONCE)))
         # read a list of macros, macros are formatted:
         # name arg0name arg1name ...=replacement
         # macro names are found in the file and replaced with replacement
@@ -102,70 +124,60 @@ class AudioSequencer():
         # provided when the macro is used like:
         # name arg0 arg1 ...
         for i in range(macros):
-            line = infile.readline().split('#', maxsplit=1)
-            if len(line[0]) == 0:
-                continue
+            line = ""
+            while True:
+                line += infile.readline()
+                line = line.split('#', maxsplit=1)
+                line = line[0].strip()
+                if len(line) > 0 and line[-1] == '\\':
+                    continue
+                if len(line) > 0:
+                    break
             macroline = line[0].split('=', maxsplit=1)
             lhs = macroline[0].split()
             macroname = lhs[0]
             macroargs = lhs[1:]
-            self._macro.append(macroname, macroargs, macroline[1])
-        infile = MacroReader(infile, macros)
+            macro.append(macroname, macroargs, macroline[1])
+        print(macro)
+        infile = MacroReader(infile, macro)
         tags = int(infile.readline())
         self._tag = dict()
         for i in range(tags):
-            line = infile.readline().split('#', maxsplit=1)
-            if len(line[0]) == 0:
-                continue
             tagline = line.split('=', maxsplit=1)
             self._tag[tagline[0]] = tagline[1]
         self._tune()
-        buffers = int(infile.readline())
+        line = infile.readline().split()
+        buffers = int(line[0])
+        self._inbufs = int(line[1])
         self._buffer = list()
-        # populated on _load(), None when unloaded, map sequence's buffers
-        # to crustygame synth's buffers
-        self._bufferInfo = None
-        inbuf = 0
         for i in range(buffers):
-            line = infile.readline().split('#', maxsplit=1)
-            if len(line[0]) == 0:
-                continue
-            bufferline = line.split(maxsplit=1)
-            # line is either a filename and middle A frequency or
-            # a length in milliseconds and middle A frequency or
-            # just a middle A frequency for a buffer to be provided
+            bufferline = infile.readline().split(maxsplit=1)
             item = None
-            freq = None
-            rate = None
-            freq = int(bufferline[0])
-            # allow starting the second arg with a # to explicitly indicate a
-            # comment
-            if len(bufferline) > 1 and bufferline[1][0] != '#':
-                # single value means the buffer will be provided
-                try:
-                    # add the time in milliseconds of an empty buffer
-                    item = int(bufferline[1].split('#', maxsplit=1)[0])
-                except ValueError:
-                    # add the string to use as a filename later
-                    item = bufferline[1].split('#', maxsplit=1)[0].strip()
+            # single value means the buffer will be provided
+            try:
+                # add the time in milliseconds of an empty buffer
+                item = int(bufferline[1])
+            except ValueError:
+                # add the string to use as a filename later
+                item = bufferline[1].strip()
+            self._buffer.append([item, int(bufferline[0]), None])
+        for i in range(self._inbufs):
+            if isinstance(buffer[i][0], cg.Buffer):
+                # import an external buffer
+                item = buffer[i][0]
+            elif isinstance(buffer[i][0], array.array) and \
+                 buffer[i].typecode != 'f':
+                # convert to a ctypes array so _load() can just pass it
+                # along
+                item = _create_float_array(buffer[i][0])
             else:
-                rate = buffers[inbuf][1]
-                if isinstance(buffer[inbuf], seq.Buffer):
-                    # import an external buffer
-                    item = buffers[inbuf][0]
-                elif isinstance(buffer[inbuf], array.array) and \
-                     buffer[inbuf].typecode != 'f':
-                    # convert to a ctypes array so _load() can just pass it
-                    # along
-                    item = _create_float_array(buffers[inbuf][0])
-                    inbuf += 1
-                else:
-                    raise Exception("Buffers must be float arrays or external Buffers.")
-            self._buffer.append((item, rate, freq))
+                raise Exception("Buffers must be float arrays or external Buffers.")
+            self._buffer.append([item, buffer[i][1], None])
+        print(self._buffer)
         channels = int(infile.readline())
         self._channel = list()
         for i in range(channels):
-            channel = infile.readline().split('#', maxsplit=1).strip().lower()
+            channel = infile.readline().strip().lower()
             if channel == CHANNEL_TYPE_SILENCE:
                 self._channel.append(CHANNEL_TYPE_SILENCE)
             if channel == CHANNEL_TYPE_PLAYER:
@@ -174,58 +186,60 @@ class AudioSequencer():
                 self._channel.append(CHANNEL_TYPE_FILTER)
             else:
                 raise Exception("Invalid channel type: {}".format(channel))
+        print(self._channel)
+        self._localChannels = list()
         seqDesc = seq.SequenceDescription()
         silenceDesc = seqDesc.add_row_description()
-        # output buffer
+        # output buffer 0x1
         seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-        # start
+        # start         0x2
         seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-        # length
+        # length        0x4
         seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
         playerDesc = seqDesc.add_row_description()
-        # input buffer
+        # input buffer                      0x200000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # input buffer pos
+        # input buffer pos                  0x100000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-        # output buffer
+        # output buffer                     0x080000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # output buffer pos
+        # output buffer pos                 0x040000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # output mode
+        # output mode                       0x020000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # volume
+        # volume                            0x010000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-        # volume source
+        # volume source                     0x008000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # volume mode
+        # volume mode                       0x004000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # speed (frequency, /speed, note)
+        # speed (frequency, /speed, note)   0x002000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_STR)
-        # speed source
+        # speed source                      0x001000
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # speed mode
+        # speed mode                        0x000800
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # phase source
+        # phase source                      0x000400
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # loop start
+        # loop start                        0x000200
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # loop end
+        # loop end                          0x000100
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # player mode
+        # player mode                       0x000080
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # run length
+        # run length                        0x000040
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # stopped requested
+        # stopped requested                 0x000020
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped outbuffer
+        # stopped outbuffer                 0x000010
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped inbuffer
+        # stopped inbuffer                  0x000008
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped volbuffer
+        # stopped volbuffer                 0x000004
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped speedbuffer
+        # stopped speedbuffer               0x000002
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped phasebuffer
+        # stopped phasebuffer               0x000001
         seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
         filterDesc = seqDesc.add_row_description()
         # input buffer
@@ -285,25 +299,25 @@ class AudioSequencer():
         try:
             tuning = self._tag['tuning'].split()
         except KeyError:
-            self._freqs = [_DEFAULT_TUNING * (2 ** (x / 12)) for x in range(12)]
+            self._tunes = [2 ** (x / 12) for x in range(12)]
             return
 
         if len(tuning) == 1:
             tuning = float(tuning[0])
-            self._freqs = [tuning * (2 ** (x / 12)) for x in range(12)]
+            self._tunes = [tuning * (2 ** (x / 12)) for x in range(12)]
         elif len(tuning) == 12:
-            self._freqs = [float(x) for x in tuning]
+            self._tunes = [float(x) for x in tuning]
         else:
-            raise Exception("'tuning' tag must be middle A or all 12 middle octave notes.")
+            raise Exception("'tuning' tag must be some detune or all 12 note detunings.")
 
-    def _get_speed(self, speed, tuning, inrate, outrate):
+    def _get_speed(self, speed, inrate, outrate):
         # literal speed
         if speed[0] == '/':
             return float(speed[1:])
-        freq = 0
+        tune = 0.0
         # frequency
         try:
-            freq = float(speed)
+            tune = float(speed)
         except ValueError:
             # note
             note = _NOTES.index(speed[0].lower())
@@ -327,37 +341,17 @@ class AudioSequencer():
                     if note == -1:
                         octave -= 1
                         note = 11
-            freq = self._freqs[note]
+            tune = self._tunes[note]
             if octave < 4:
-                freq /= 5 - octave
+                tune /= 5 - octave
             elif octave > 4:
-                freq *= octave - 3
+                tune *= octave - 3
 
-        return (freq / tuning) * (outrate / inrate)
-
-    def update_buffer(self, index, item, rate):
-        if isinstance(item, seq.Buffer):
-            # import an external buffer
-            self._buffer[index] = item
-            self._bufferRates[index] = rate
-            if self._bufferMaps != None:
-                del self._bufferMaps[index]
-                self._bufferMaps[index] = item
-        elif isinstance(buffer[inbuf], array.array) and \
-             buffer[inbuf].typecode != 'f':
-            # convert to a ctypes array so _load() can just pass it
-            # along
-            self._buffer[index] = _create_float_array(buffers[inbuf])
-            self._bufferRates[index] = rate
-            if self._bufferMaps != None:
-                del self._bufferMaps[index]
-                self._bufferMaps[index] = item
-        else:
-            raise Exception("Buffers must be float arrays.")
+        return (outrate / inrate) * tune
 
     def _update_silence(self, silence, status):
         if status[0] != None:
-            b = self._bufferInfo[status[0]][0]
+            b = self._buffer[status[0]][2]
             silence[0] = b
         if status[1] != None:
             silence[1] = status[1]
@@ -367,13 +361,21 @@ class AudioSequencer():
     def _update_player(self, player, status):
         p = player[0]
         if status[0] != None:
-            b = self._bufferInfo[status[0]][0]
-            p.input_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            player[8] = b[1]
+            p.input_buffer(b[2])
         if status[1] != None:
             p.input_pos(status[1])
         if status[2] != None:
-            b = self._bufferInfo[status[2]][0]
-            p.output_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            player[9] = b[1]
+            p.output_buffer(b[2])
         if status[3] != None:
             p.output_pos(status[3])
         if status[4] != None:
@@ -381,26 +383,35 @@ class AudioSequencer():
         if status[5] != None:
             p.volume(status[5])
         if status[6] != None:
-            b = self._bufferInfo[status[6]][0]
-            p.output_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            p.output_buffer(b[2])
         if status[7] != None:
             p.volume_mode(status[7])
         if status[8] != None:
-            p.speed(status[8])
+            p.speed(self._get_speed(status[8], player[8], player[9]))
         if status[9] != None:
-            b = self._bufferInfo[status[9]][0]
-            p.output_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            p.output_buffer(b[2])
         if status[10] != None:
             p.speed_mode(status[10])
         if status[11] != None:
-            b = self._bufferInfo[status[11]][0]
-            p.output_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            p.output_buffer(b[2])
         if status[12] != None:
             p.loop_start(status[12])
         if status[13] != None:
             p.loop_end(status[13])
         if status[14] != None:
-            p.player_mode(status[14])
+            p.mode(status[14])
         if status[15] != None:
             player[1] = status[15]
         if status[16] != None:
@@ -419,18 +430,27 @@ class AudioSequencer():
     def _update_filter(self, flt, status):
         f = flt[0]
         if status[0] != None:
-            b = self._bufferInfo[status[0]][0]
-            f.input_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            f.input_buffer(b[2])
         if status[1] != None:
             f.input_pos(status[1])
         if status[2] != None:
-            b = self._bufferInfo[status[2]][0]
-            f.output_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            f.output_buffer(b[2])
         if status[3] != None:
             f.output_pos(status[3])
         if status[4] != None:
-            b = self._bufferInfo[status[4]][0]
-            f.filter_buffer(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            f.filter_buffer(b[2])
         if status[5] != None:
             f.filter_start(status[5])
         if status[6] != None:
@@ -438,8 +458,11 @@ class AudioSequencer():
         if status[7] != None:
             f.slice(status[7])
         if status[8] != None:
-            b = self._bufferInfo[status[8]][0]
-            f.slice_source(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            f.slice_source(b[2])
         if status[9] != None:
             f.mode(status[9])
         if status[10] != None:
@@ -447,8 +470,11 @@ class AudioSequencer():
         if status[11] != None:
             f.volume(status[11])
         if status[12] != None:
-            b = self._bufferInfo[status[12]][0]
-            f.volume_source(b)
+            buf = status[0]
+            buf -= self._seqChannels
+            buf += self._channels
+            b = self._buffer[buf]
+            f.volume_source(b[2])
         if status[13] != None:
             f.volume_mode(status[13])
         if status[14] != None:
@@ -467,49 +493,59 @@ class AudioSequencer():
     def _load(self, s):
         self._rate = s.rate
         self._channels = s.channels
-        self._bufferInfo = [(b, self._rate) for b in s.output_buffers()]
-        self._localBuffers = list()
+        if self._channels < self._seqChannels:
+            raise Exception("Not enough output channels to play sequence")
+        for b in s.output_buffers():
+            self._buffer.insert(0, [None, self._rate, b])
         for buffer in self._buffer:
-            if isinstance(buffer[0], int):
+            if buffer[0] == None:
+                # nothing to do for output buffers
+                pass
+            elif isinstance(buffer[0], int):
                 # silent buffer
                 length = self._rate * buffer[0] / 1000
-                b = s.buffer(seq.SYNTH_TYPE_F32, None, length)
-                self._bufferInfo.append((b, self._rate))
-                self._localBuffers.append(b)
+                buffer[2] = s.buffer(cg.SYNTH_TYPE_F32, None, length)
             elif isinstance(buffer[0], str):
                 # filename
                 b, r = s.buffer_from_wav(buffer[0])
-                self._bufferInfo.append((b, r))
-                self._localBuffers.append(b)
-            elif isinstance(buffer[0], seq.Buffer):
-                # external buffer
-                self._bufferInfo.append((buffer[0], buffer[1]))
+                buffer[1] = r
+                buffer[2] = b
+            elif isinstance(buffer[0], cg.Buffer):
+                buffer[2] = buffer[0]
             else:
                 # already a ctypes array
-                b = s.buffer(seq.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
-                self._bufferInfo.append((b, buffer[1]))
-                self._localBuffers.append(b)
-        initial = self._seq.advance(0)
-        self._localChannels = list()
+                b = s.buffer(cg.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
+                buffer[2] = b
+        initial = self._seq.advance(0)[1]
         for channel in enumerate(self._channel):
             if channel[1] == CHANNEL_TYPE_SILENCE:
-                silence = [self._bufferInfo[initial[channel[0]][0]],
+                buf = initial[channel[0]][0]
+                buf -= self._seqChannels
+                buf += self._channels
+                silence = [self._buffer[buf],
                            initial[channel[0]][1],
                            initial[channel[0]][2]]
                 silence[2] = 0
                 self._localChannels.append(silence)
             elif channel[1] == CHANNEL_TYPE_PLAYER:
-                b = self._bufferInfo[initial[channel[0]][0]][0]
-                player = [s.player(b), 0, None, None, None, None, None, None]
+                inbuf = initial[channel[0]][0]
+                inbuf -= self._seqChannels
+                inbuf += self._channels
+                b = self._buffer[inbuf][2]
+                player = [s.player(b), 0, None, None, None, None, None, None, None, None]
                 self._update_player(player, initial[channel[0]])
                 player[1] = 0
                 self._localChannels.append(player)
             elif channel[1] == CHANNEL_TYPE_FILTER:
-                b = self._bufferInfo[initial[channel[0]][4]][0]
+                filterbuf = initial[channel[0]][4]
+                filterbuf -= self._seqChannels
+                filterbuf += self._channels
+                b = self._buffer[filterbuf][2]
                 flt = [s.filter(b, b.size), 0, None, None, None, None, None]
                 self._update_filter(flt, initial[channel[0]])
                 flt[1] = 0
                 self._localChannels.append(flt)
+        print(self._localChannels)
         init = None
         try:
             init = self._tag['init']
@@ -519,15 +555,17 @@ class AudioSequencer():
             self._seq.set_pattern(init)
             self.run(-1)
 
-    def _unload(self, s):
-        self._bufferInfo = None
+    def _unload(self):
         # delete channels and filters which may refer to buffers first.
-        if isinstance(channel[0], (cg.Player, cg.Filter)):
-            del channel[0]
-        self._localChannels = None
-        for buffer in self._localBuffers:
-            del buffer
-        self._localBuffers = None 
+        for channel in self._localChannels:
+            if isinstance(channel[0], (cg.Player, cg.Filter)):
+                del channel[0]
+        self._localChannels = list()
+        for buffer in self._buffer:
+            if not isinstance(buffer[0], cg.Buffer):
+                b = buffer[2]
+                buffer[2] = None
+                del b
 
     def reset(self):
         """
@@ -567,7 +605,10 @@ class AudioSequencer():
                         channel[1][1] -= curtime
                         time -= channel[1][1]
                     while curtime > 0:
-                        got = p.run(curtime)
+                        # convert milliseconds to samples
+                        got = p.run(curtime * self._rate / 1000)
+                        # and back
+                        got = got * 1000 / self._rate
                         if got < curtime:
                             reason = p.stop_reason()
                             if reason | cg.SYNTH_STOPPED_OUTBUFFER:
@@ -597,7 +638,8 @@ class AudioSequencer():
                         channel[1][1] -= curtime
                         time -= channel[1][1]
                     while curtime > 0:
-                        got = p.run(curtime)
+                        got = p.run(curtime * self._rate / 1000)
+                        got = got * 1000 / self._rate
                         if got < curtime:
                             reason = f.stop_reason()
                             if reason | cg.SYNTH_STOPPED_OUTBUFFER:
@@ -631,6 +673,8 @@ class AudioSequencer():
                 timepassed += time
             return timepassed
 
+        # convert samples from the audio system to milliseconds
+        needed = needed * 1000 / self._rate
         remain = needed
         while remain > 0:
             try:
@@ -644,13 +688,14 @@ class AudioSequencer():
 
 
 @cg.SYNTH_FRAME_CB_T
-def audio_system_frame(s, priv):
-    return(priv.value._frame_cb())
+def audio_system_frame(priv, s):
+    return(0)
 
 class AudioSystem():
-    def __init__(self, log_cb_return, log_cb_priv):
-        self._s = Synth(audio_system_frame, self,
-                        log_cb_return, log_cb_priv)
+    def __init__(self, log_cb_return, log_cb_priv, rate, channels):
+        self._s = cg.Synth(audio_system_frame, self,
+                           log_cb_return, log_cb_priv,
+                           rate, channels)
         self._fragment_size = self._s.fragment_size
         self._fragments = 0
         self._inc_fragments()
@@ -658,7 +703,7 @@ class AudioSystem():
 
     def __del__(self):
         for seq in self._sequences:
-            seq._unload(self._s)
+            seq[0]._unload()
 
     def _inc_fragments(self):
         self._s.enabled(0)
@@ -678,23 +723,9 @@ class AudioSystem():
             for seq in self._sequences:
                 if not seq[1]:
                     continue
-                gotzero = 0
-                while needed > 0:
-                    got = seq[0].run(needed)
-                    if got < needed:
-                        seq[3] += 1
-                        if seq[2]:
-                            if got == 0:
-                                if gotzero == 1:
-                                    print("WARNING: looping sequence returned 0 consecutively")
-                                    break
-                                gotzero = 1
-                            else:
-                                gotzero = 0
-                            seq[0].fast_reset()
-                            needed -= got
-                        else:
-                            break
+                got = seq[0].run(needed)
+                if got < needed:
+                    seq[2] = True
 
             return 0
         except CrustyException as e:
@@ -705,32 +736,35 @@ class AudioSystem():
             # messages can be properly displayed
             return -1
 
-    def add_sequence(self, seq, enabled=True, looping=False):
+    def add_sequence(self, seq, enabled=True):
         seq._load(self._s)
-        self._sequences.append([seq, enabled, looping, 0])
+        self._sequences.append([seq, enabled, False])
 
     def del_sequence(self, seq):
-        try:
-            self._sequences.remove(seq)
-            seq._unload(self._s)
-        except ValueError as e:
-            print("WARNING: Attempt to remove nonexistent sequence.")
+        for item in self._sequences:
+            if item[0] == seq:
+                item[0]._unload()
+                self._sequences.remove(item)
+                return
+        print("WARNING: Attempt to remove sequence not added.")
 
     def sequence_enabled(self, seq, enabled):
-        index = self._sequences.index(seq)
-        if enabled:
-            self._sequences[index][1] = True
-        else:
-            self._sequences[index][1] = False
+        for item in self._sequences:
+            if item[0] == seq:
+                if enabled:
+                    item[1] = True
+                else:
+                    item[1] = False
 
     def enabled(self, enabled):
         self._s.enabled(enabled)
 
     def frame(self):
-        for seq in self._sequences:
-            seq[3] = 0
         self._s.frame()
 
     def ended(self, seq):
-        index = self._sequences.index(seq)
-        return self._sequences[index][2]
+        for item in self._sequences:
+            if item[0] == seq:
+                ended = item[2]
+                item[2] = False
+                return ended

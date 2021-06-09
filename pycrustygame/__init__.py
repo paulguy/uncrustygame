@@ -1,4 +1,4 @@
-from ctypes import c_char_p, c_int, c_uint, c_void_p, c_float, c_double, py_object, CFUNCTYPE, POINTER, CDLL
+from ctypes import c_char_p, c_int, c_uint, c_void_p, c_float, c_double, py_object, CFUNCTYPE, POINTER, CDLL, pointer
 from sdl2 import SDL_RendererInfo, SDL_Renderer, SDL_Window, SDL_Surface, SDL_Texture, SDL_PIXELFORMAT_UNKNOWN, SDL_RENDERER_SOFTWARE, SDL_WINDOWPOS_UNDEFINED, SDL_BITSPERPIXEL, SDL_ISPIXELFORMAT_ALPHA, SDL_GetNumRenderDrivers, SDL_GetRenderDriverInfo, SDL_CreateWindow, SDL_CreateRenderer
 
 LOG_CB_RETURN_T = CFUNCTYPE(None, py_object, c_char_p)
@@ -87,11 +87,8 @@ SYNTH_RUNNING = 2
 SYNTH_OUTPUT_REPLACE = 0
 SYNTH_OUTPUT_ADD = 1
 
-SYNTH_VOLUME_CONSTANT = 0
-SYNTH_VOLUME_SOURCE = 1
-
-SYNTH_SPEED_CONSTANT = 0
-SYNTH_SPEED_SOURCE = 1
+SYNTH_AUTO_CONSTANT = 0
+SYNTH_AUTO_SOURCE = 1
 
 SYNTH_MODE_ONCE = 0
 SYNTH_MODE_LOOP = 1
@@ -104,7 +101,7 @@ SYNTH_STOPPED_SPEEDBUFFER = 0x08
 SYNTH_STOPPED_PHASEBUFFER = 0x10
 SYNTH_STOPPED_SLICEBUFFER = 0x20
 
-SYNTH_FRAME_CB_T = CFUNCTYPE(c_int, py_object, py_object)
+SYNTH_FRAME_CB_T = CFUNCTYPE(c_int, py_object, c_void_p)
 
 # tilemap.h funcs
 _set_types(_cg.tilemap_tileset_from_bmp, c_int, [c_void_p, c_char_p, c_uint, c_uint])
@@ -312,7 +309,7 @@ class Layerlist():
                  renderer: SDL_Renderer,
                  texfmt :int,
                  printfunc: LOG_CB_RETURN_T,
-                 printpriv: c_void_p):
+                 printpriv):
         self._ll = _cg.layerlist_new(renderer,
                                      texfmt,
                                      printfunc,
@@ -490,18 +487,18 @@ class Synth():
     """
     def __init__(self,
                 framefunc :SYNTH_FRAME_CB_T,
-                framepriv :py_object,
+                framepriv,
                 printfunc :LOG_CB_RETURN_T,
-                printpriv :py_object,
+                printpriv,
                 rate :int,
                 channels :int):
         self._priv = (self, framepriv)
-        self._s = _cg.synth_new(framefunc, self._priv,
-                                printfunc, printpriv,
+        self._s = _cg.synth_new(framefunc, py_object(self._priv),
+                                printfunc, py_object(printpriv),
                                 rate, channels)
         if self._s == None:
             raise CrustyException()
-        self._outputBuffers = [self.buffer(i) for i in range(self._channels)]
+        self._outputBuffers = [Buffer(self, i) for i in range(self.channels)]
 
     def __del__(self):
         _cg.synth_free(self._s)
@@ -516,8 +513,8 @@ class Synth():
         return Buffer(self, dataType, data, size)
 
     def buffer_from_wav(self, filename :str):
-        rate = 0
-        return Buffer(self, filename, pointer(rate)), rate
+        rate = c_uint()
+        return Buffer(self, filename, pointer(rate)), rate.value
 
     def player(self, buffer :'Buffer'):
         return Player(self, buffer)
@@ -564,16 +561,18 @@ class Buffer():
     """
     See synth.h for details on using this library.
     """
-    def __init__(self, synth :Synth, *args):
-        self._s = synth
+    def __init__(self, *args):
+        self._s = args[0]
         self._b = -1
-        if len(args) == 1:
+        self._output = False
+        if len(args) == 2:
             # channel output buffers
-            self._b = args[0]
-        elif isinstance(args[0], int):
-            self._b = _cg.synth_add_buffer(synth._s, args[0], args[1], args[2])
-        elif isinstance(args[0], str):
-            self._b = _cg.synth_buffer_from_wav(synth._s, args[0], args[1])
+            self._b = args[1]
+            self._output = True
+        elif isinstance(args[1], int):
+            self._b = _cg.synth_add_buffer(self._s._s, args[1], args[2], args[3])
+        elif isinstance(args[1], str):
+            self._b = _cg.synth_buffer_from_wav(self._s._s, c_char_p(args[1].encode('utf-8')), args[2])
         else:
             raise TypeError()
 
@@ -581,7 +580,8 @@ class Buffer():
             raise CrustyException()
 
     def __del__(self):
-        _cg.synth_free_buffer(self._s._s, self)
+        if not self._output:
+            _cg.synth_free_buffer(self._s._s, self)
 
     def __int__(self):
         return self._b
@@ -605,85 +605,85 @@ class Player():
     def __init__(self, synth :Synth, buffer :Buffer):
         self._b = buffer
         self._s = synth
-        self._p = _cg.synth_add_player(synth, buffer)
+        self._p = _cg.synth_add_player(self._s._s, buffer)
 
         if self._p < 0:
             raise CrustyException()
 
     def __del__(self):
-        _cg.synth_free_player(self._s, self)
+        _cg.synth_free_player(self._s._s, self)
 
     def __int__(self):
         return self._p
 
     def input_buffer(self, buffer :Buffer):
-        if _cg.synth_set_player_input_buffer(self._s, self, buffer) < 0:
+        if _cg.synth_set_player_input_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
 
     def input_pos(self, pos :float):
-        if _cg.synth_set_player_input_buffer_pos(self._s, self, pos) < 0:
+        if _cg.synth_set_player_input_buffer_pos(self._s._s, self, pos) < 0:
             raise CrustyException()
 
     def output_buffer(self, buffer :Buffer):
-        if _cg.synth_set_player_output_buffer(self._s, self, buffer) < 0:
+        if _cg.synth_set_player_output_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
 
     def output_pos(self, pos :int):
-        if _cg.synth_set_player_output_buffer_pos(self._s, self, pos) < 0:
+        if _cg.synth_set_player_output_buffer_pos(self._s._s, self, pos) < 0:
             raise CrustyException()
 
     def output_mode(self, mode :int):
-        if _cg.synth_set_player_output_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_player_output_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def volume_mode(self, mode :int):
-        if _cg.synth_set_player_volume_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_player_volume_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def volume(self, volume :float):
-        if _cg.synth_set_player_volume(self._s, self, volume) < 0:
+        if _cg.synth_set_player_volume(self._s._s, self, volume) < 0:
             raise CrustyException()
 
     def volume_source(self, source :Buffer):
-        if _cg.synth_set_player_volume_source(self._s, self, source) < 0:
+        if _cg.synth_set_player_volume_source(self._s._s, self, source) < 0:
             raise CrustyException()
 
     def mode(self, mode :int):
-        if _cg.synth_set_player_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_player_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def loop_start(self, loopStart :int):
-        if _cg.synth_set_player_loop_start(self._s, self, loopStart) < 0:
+        if _cg.synth_set_player_loop_start(self._s._s, self, loopStart) < 0:
             raise CrustyException()
 
     def loop_end(self, loopEnd :int):
-        if _cg.synth_set_player_loop_end(self._s, self, loopEnd) < 0:
+        if _cg.synth_set_player_loop_end(self._s._s, self, loopEnd) < 0:
             raise CrustyException()
 
     def phase_source(self, source :Buffer):
-        if _cg.synth_set_player_phase_source(self._s, self, source) < 0:
+        if _cg.synth_set_player_phase_source(self._s._s, self, source) < 0:
             raise CrustyException()
 
     def speed_mode(self, mode :int):
-        if _cg.synth_set_player_speed_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_player_speed_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def speed(self, speed :float):
-        if _cg.synth_set_player_speed(self._s, self, speed) < 0:
+        if _cg.synth_set_player_speed(self._s._s, self, speed) < 0:
             raise CrustyException()
 
     def speed_source(self, source :Buffer):
-        if _cg.synth_set_player_speed_source(self._s, self, source) < 0:
+        if _cg.synth_set_player_speed_source(self._s._s, self, source) < 0:
             raise CrustyException()
 
     def run(self, requested :int):
-        ret = _cg.synth_run_player(self._s, self, requested)
+        ret = _cg.synth_run_player(self._s._s, self, requested)
         if ret < 0:
             raise CrustyException()
         return ret
 
     def stop_reason(self):
-        ret = _cg.synth_player_stopped_reason(self._s, self)
+        ret = _cg.synth_player_stopped_reason(self._s._s, self)
         if ret < 0:
             raise CrustyException()
         return ret
@@ -693,80 +693,80 @@ class Filter():
     def __init__(self, synth :Synth, buffer :Buffer, size :int):
         self._s = synth
         self._b = buffer
-        self._f = _cg.synth_add_filter(synth, buffer, size)
+        self._f = _cg.synth_add_filter(self._s._s, buffer, size)
         if self._f == None:
             raise CrustyException()
 
     def __del__(self):
-        _cg.synth_free_filter(self._s, self)
+        _cg.synth_free_filter(self._s._s, self)
 
     def __int__(self):
         return self._f
 
     def input_buffer(self, buffer :Buffer):
-        if _cg.synth_set_filter_input_buffer(self._s, self, buffer) < 0:
+        if _cg.synth_set_filter_input_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
 
     def input_pos(self, pos :int):
-        if _cg.synth_set_filter_input_buffer_pos(self._s, self, pos) < 0:
+        if _cg.synth_set_filter_input_buffer_pos(self._s._s, self, pos) < 0:
             raise CrustyException()
 
     def filter_buffer(self, buffer :Buffer):
-        if _cg.synth_set_filter_buffer(self._s, self, buffer) < 0:
+        if _cg.synth_set_filter_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
 
     def filter_start(self, start :int):
-        if _cg.synth_set_filter_buffer_start(self._s, self, start) < 0:
+        if _cg.synth_set_filter_buffer_start(self._s._s, self, start) < 0:
             raise CrustyException()
 
     def slices(self, slices :int):
-        if _cg.synth_set_filter_slices(self._s, self, slices) < 0:
+        if _cg.synth_set_filter_slices(self._s._s, self, slices) < 0:
             raise CrustyException()
 
     def mode(self, mode :int):
-        if _cg.synth_set_filter_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_filter_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def slice(self, sliceval :int):
-        if _cg.synth_set_filter_slice(self._s, self, sliceval) < 0:
+        if _cg.synth_set_filter_slice(self._s._s, self, sliceval) < 0:
             raise CrustyException()
 
     def slice_source(self, buffer :Buffer):
-        if _cg.synth_set_filter_slice_source(self._s, self, buffer) < 0:
+        if _cg.synth_set_filter_slice_source(self._s._s, self, buffer) < 0:
             raise CrustyException()
 
     def output_buffer(self, buffer :Buffer):
-        if _cg.synth_set_filter_output_buffer(self._s, self, buffer) < 0:
+        if _cg.synth_set_filter_output_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
 
     def output_pos(self, pos :int):
-        if _cg.synth_set_filter_output_pos(self._s, self, pos) < 0:
+        if _cg.synth_set_filter_output_pos(self._s._s, self, pos) < 0:
             raise CrustyException()
 
     def output_mode(self, mode :int):
-        if _cg.synth_set_filter_output_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_filter_output_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def volume_mode(self, mode :int):
-        if _cg.synth_set_filter_volume_mode(self._s, self, mode) < 0:
+        if _cg.synth_set_filter_volume_mode(self._s._s, self, mode) < 0:
             raise CrustyException()
 
     def volume(self, vol :float):
-        if _cg.synth_set_filter_volume(self._s, self, vol) < 0:
+        if _cg.synth_set_filter_volume(self._s._s, self, vol) < 0:
             raise CrustyException()
 
     def volume_source(self, source :Buffer):
-        if _cg.synth_set_filter_volume_source(self._s, self, source) < 0:
+        if _cg.synth_set_filter_volume_source(self._s._s, self, source) < 0:
             raise CrustyException()
 
     def run(self, requested :int):
-        ret = _cg.synth_run_filter(self._s, self, requested)
+        ret = _cg.synth_run_filter(self._s._s, self, requested)
         if ret < 0:
             raise CrustyException()
         return ret
 
     def stop_reason(self):
-        ret = _cg.synth_filter_stopped_reason(self._s, self)
+        ret = _cg.synth_filter_stopped_reason(self._s._s, self)
         if ret < 0:
             raise CrustyException()
         return ret

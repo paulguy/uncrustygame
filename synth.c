@@ -659,7 +659,7 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                                       &obtained,
                                       SDL_AUDIO_ALLOW_ANY_CHANGE);
     if(s->audiodev < 2) {
-        LOG_PRINTF(s, "Failed to open SDL audio.\n");
+        LOG_PRINTF(s, "Failed to open SDL audio: %s.\n", SDL_GetError());
         free(s);
         return(NULL);
     }
@@ -1404,16 +1404,20 @@ int synth_set_player_mode(Synth *s,
 
 int synth_set_player_loop_start(Synth *s,
                                 unsigned int index,
-                                unsigned int loopStart) {
+                                int loopStart) {
     SynthPlayer *p = get_player(s, index);
     if(p == NULL) {
         return(-1);
     }
-    if((int)loopStart >= get_buffer_size(s, p->inBuffer)) {
+    if(loopStart < 0) {
+        loopStart = get_buffer_size(s, p->inBuffer) + loopStart;
+    }
+    if(loopStart < 0 ||
+       loopStart >= get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "Player loop start out of buffer range.\n");
         return(-1);
     }
-    if(loopStart >= p->loopEnd) {
+    if((unsigned int)loopStart >= p->loopEnd) {
         LOG_PRINTF(s, "Loop start must be before loop end.\n");
         return(-1);
     }
@@ -1424,16 +1428,20 @@ int synth_set_player_loop_start(Synth *s,
 
 int synth_set_player_loop_end(Synth *s,
                               unsigned int index,
-                              unsigned int loopEnd) {
+                              int loopEnd) {
     SynthPlayer *p = get_player(s, index);
     if(p == NULL) {
         return(-1);
     }
-    if((int)loopEnd >= get_buffer_size(s, p->inBuffer)) {
-        LOG_PRINTF(s, "Player loop start out of buffer range.\n");
+    if(loopEnd < 0) {
+        loopEnd = get_buffer_size(s, p->inBuffer) + loopEnd;
+    }
+    if(loopEnd < 0 ||
+       loopEnd >= get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "Player loop end out of buffer range.\n");
         return(-1);
     }
-    if(loopEnd <= p->loopStart) {
+    if((unsigned int)loopEnd <= p->loopStart) {
         LOG_PRINTF(s, "Loop end must be after loop start.\n");
         return(-1);
     }

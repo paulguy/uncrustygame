@@ -34,6 +34,7 @@ def string_to_ints(string):
 
 
 def main():
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
     window, renderer, pixfmt = cg.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC)
     red = cg.tilemap_color(255, 0, 0, 255)
     green = cg.tilemap_color(0, 255, 0, 255)
@@ -56,47 +57,34 @@ def main():
     l.colormod(cg.tilemap_color(255, 255, 64, 192))
     l.blendmode(cg.TILEMAP_BLENDMODE_ADD) 
 
-    seqdesc = seq.SequenceDescription()
-    rowdesc = seqdesc.add_row_description()
-    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_INT)
-    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_INT)
-    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_FLOAT)
-    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_HEX)
-    seqdesc.add_field(rowdesc, seq.FIELD_TYPE_STR)
-    seqdesc.add_column(rowdesc)
-    rowdesc2 = seqdesc.add_row_description()
-    seqdesc.add_field(rowdesc2, seq.FIELD_TYPE_INT)
-    seqdesc.add_field(rowdesc2, seq.FIELD_TYPE_FLOAT)
-    seqdesc.add_field(rowdesc2, seq.FIELD_TYPE_ROW, rowDesc=rowdesc)
-    seqdesc.add_column(rowdesc2)
-    with open("testseq.txt", "r") as seqfile:
-        sequence = seq.Sequencer(seqdesc, seqfile)
-    sequence.write_file()
+    aud = audio.AudioSystem(log_cb_return, None, 48000, 2)
+    seq = None
+    with open("testseq2.txt", "r") as seqfile:
+        seq = audio.AudioSequencer(seqfile)
+    aud.add_sequence(seq)
+    aud.sequence_enabled(seq, True)
+    aud.enabled(True)
 
-    running = 1
+    running = True
+    playing = True
     lastTime = time.monotonic()
     while running:
         event = SDL_Event()
 
         while SDL_PollEvent(event):
             if event.type == SDL_QUIT:
-                running = 0
+                running = False
                 break
 
         clear_frame(ll, 32, 128, 192)
         l.draw()
+        aud.frame()
 
         thisTime = time.monotonic()
-        try:
-            timeMS = int((thisTime - lastTime) * 1000)
-            while timeMS > 0:
-                seqTime, seqLine = sequence.advance(timeMS)
-                print(timeMS, end=' ')
-                print(seqTime, end=' ')
-                print(repr(seqLine))
-                timeMS -= seqTime
-        except seq.SequenceEnded as e:
-            sequence.reset()
+        if running and aud.ended(seq):
+            print("Sequence ended")
+            aud.del_sequence(seq)
+            running = False
 
         lastTime = thisTime
         SDL_RenderPresent(renderer)

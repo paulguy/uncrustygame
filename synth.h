@@ -446,7 +446,8 @@ int synth_set_player_mode(Synth *s,
                           unsigned int index,
                           SynthPlayerMode mode);
 /*
- * Set loop start, or phase source start position.
+ * Set loop start, or phase source start position.  A negative value indicates
+ * an offset from the end.
  * See: synth_set_player_mode
  *
  * s            the Synth structure
@@ -456,9 +457,10 @@ int synth_set_player_mode(Synth *s,
  */
 int synth_set_player_loop_start(Synth *s,
                                 unsigned int index,
-                                unsigned int loopStart);
+                                int loopStart);
 /*
- * Set loop end, or phase source end position.
+ * Set loop end, or phase source end position.  A negative value indicates an
+ * offset from the end
  * See: synth_set_player_mode
  *
  * s        the Synth structure
@@ -468,7 +470,7 @@ int synth_set_player_loop_start(Synth *s,
  */
 int synth_set_player_loop_end(Synth *s,
                               unsigned int index,
-                              unsigned int loopEnd);
+                              int loopEnd);
 /*
  * Set the buffer to read phase source samples from, similar rules as volume
  * source, except instead of multiplying the output by each sample, input buffer
