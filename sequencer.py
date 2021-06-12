@@ -55,6 +55,22 @@ class Sequencer():
         self._curOrder = -1
         self._curLine = 0
         self._lineTime = 0
+        self._ended = False
+
+    def _add_row(self, newrow):
+        for row in range(len(self._row)):
+            found = True
+            if len(self._row[row]) == len(newrow):
+                for item in range(len(newrow)):
+                    if self._row[row][item] != newrow[item]:
+                        found = False
+                        break
+            else:
+                continue
+            if found:
+                return row
+        self._row.append(newrow)
+        return len(self._row) - 1
 
     def _read_row(self, struct, desc, initial=False):
         changeMask = None
@@ -92,8 +108,7 @@ class Sequencer():
                 row.append(newrow)
             pos += 1
 
-        self._row.append(row)
-        return len(self._row) - 1
+        return self._add_row(row)
 
     def _read_line(self, file, initial=False):
         structs = file.readline().split('|')
@@ -122,6 +137,7 @@ class Sequencer():
             for j in range(patlen):
                 pattern.append(self._read_line(file))
             self._pattern.append(pattern)
+        print(self._row)
 
         ordersData = file.readline().split()
         for item in ordersData:
@@ -234,24 +250,38 @@ class Sequencer():
             self._curOrder = 0
             self._curPattern = self._order[0]
             line = self._get_line(self._initial)[1:]
-        elif time >= self._divTime - self._lineTime:
-            time = self._divTime - self._lineTime
-            self._lineTime = 0
-            pattern = self._pattern[self._curPattern]
-            self._curLine += 1
-            if self._curLine == len(pattern):
-                self._curOrder += 1
-                if self._curOrder < len(self._order):
-                    self._curLine = 0
-                    self._curPattern = self._order[self._curOrder]
-                    pattern = self._pattern[self._curPattern]
-                else:
-                    raise SequenceEnded()
-            line = self._get_line(pattern[self._curLine])
-            if line[0][0] != None:
-                self._divTime = line[0][0]
-            line = line[1:]
+
+            nextline = self._get_line(self._pattern[0][0])
+            if nextline[0][0] != None:
+                self._divTime = nextline[0][0]
+            self._next = nextline[1:]
+        elif self._ended:
+            raise SequenceEnded()
         else:
-            self._lineTime += time
+            if self._next != None:
+                line = self._next
+                self._next = None
+            else:
+                line = None
+
+            if time >= self._divTime - self._lineTime:
+                time = self._divTime - self._lineTime
+                self._lineTime = 0
+                self._curLine += 1
+                if self._curLine == len(self._pattern[self._curPattern]):
+                    self._curOrder += 1
+                    if self._curOrder < len(self._order):
+                        self._curLine = 0
+                        self._curPattern = self._order[self._curOrder]
+                    else:
+                        self._ended = True
+
+                if not self._ended:
+                    nextline = self._get_line(self._pattern[self._curPattern][self._curLine])
+                    if nextline[0][0] != None:
+                        self._divTime = nextline[0][0]
+                    self._next = nextline[1:]
+            else:
+                self._lineTime += time
 
         return time, line

@@ -162,17 +162,17 @@ class AudioSequencer():
                 item = bufferline[1].strip()
             self._buffer.append([item, int(bufferline[0]), None])
         for i in range(self._inbufs):
-            if isinstance(buffer[i][0], cg.Buffer):
+            if isinstance(buffer[i], cg.Buffer):
                 # import an external buffer
-                item = buffer[i][0]
-            elif isinstance(buffer[i][0], array.array) and \
+                item = buffer[i]
+            elif isinstance(buffer[i], array.array) and \
                  buffer[i].typecode != 'f':
                 # convert to a ctypes array so _load() can just pass it
                 # along
-                item = _create_float_array(buffer[i][0])
+                item = _create_float_array(buffer[i])
             else:
                 raise Exception("Buffers must be float arrays or external Buffers.")
-            self._buffer.append([item, buffer[i][1], None])
+            self._buffer.append([item, 0, None])
         print(self._buffer)
         channels = int(infile.readline())
         self._channel = list()
@@ -311,9 +311,6 @@ class AudioSequencer():
             raise Exception("'tuning' tag must be some detune or all 12 note detunings.")
 
     def _get_speed(self, speed, inrate, outrate):
-        # literal speed
-        if speed[0] == '/':
-            return float(speed[1:])
         tune = 0.0
         # frequency
         try:
@@ -491,19 +488,21 @@ class AudioSequencer():
             flt[6] = status[19]
 
     def _load(self, s):
-        self._rate = s.rate
+        rate = s.rate
+        self._samplesms = int(rate / 1000)
         self._channels = s.channels
         if self._channels < self._seqChannels:
             raise Exception("Not enough output channels to play sequence")
         for b in s.output_buffers():
-            self._buffer.insert(0, [None, self._rate, b])
+            self._buffer.insert(0, [None, rate, b])
         for buffer in self._buffer:
             if buffer[0] == None:
                 # nothing to do for output buffers
                 pass
             elif isinstance(buffer[0], int):
                 # silent buffer
-                length = self._rate * buffer[0] / 1000
+                length = buffer[0] * self._samplesms
+                buffer[1] = rate
                 buffer[2] = s.buffer(cg.SYNTH_TYPE_F32, None, length)
             elif isinstance(buffer[0], str):
                 # filename
@@ -511,10 +510,12 @@ class AudioSequencer():
                 buffer[1] = r
                 buffer[2] = b
             elif isinstance(buffer[0], cg.Buffer):
+                buffer[1] = rate
                 buffer[2] = buffer[0]
             else:
                 # already a ctypes array
                 b = s.buffer(cg.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
+                buffer[1] = rate
                 buffer[2] = b
         initial = self._seq.advance(0)[1]
         for channel in enumerate(self._channel):
@@ -545,7 +546,6 @@ class AudioSequencer():
                 self._update_filter(flt, initial[channel[0]])
                 flt[1] = 0
                 self._localChannels.append(flt)
-        print(self._localChannels)
         init = None
         try:
             init = self._tag['init']
@@ -583,80 +583,79 @@ class AudioSequencer():
         """
         self._seq.reset()
 
-    def _run_channels(self, line, time):
+    def _run_channels(self, time, line):
         # for performance and simplicity reasons, this is evaluating whole
         # channels at a time.  Alternatively, it would look to each channel
         # for the next event then run all channels up to that event in repeat
         # but that could allow for things to be done in very slow ways which
         # result in a lot of very close together events.  I'm not looking to
         # make a full DAW, but rather a simple tracker, so don't do it that way
-        for channel in enumerate(self._localChannels):
-            if isinstance(channel[1][0], cg.Player):
-                p = channel[1][0]
+        i = 0
+        for channel in self._localChannels:
+            if isinstance(channel[0], cg.Player):
                 if line != None:
-                    self._update_player(channel[1], line[channel[0]])
+                    self._update_player(channel, line[i])
                 while time > 0:
                     curtime = time
-                    if channel[1][1] < curtime:
-                        curtime = channel[1][1]
-                        channel[1][1] = 0
-                        time -= curtime
-                    else:
-                        channel[1][1] -= curtime
-                        time -= channel[1][1]
+                    if channel[1] < curtime:
+                        curtime = channel[1]
                     while curtime > 0:
                         # convert milliseconds to samples
-                        got = p.run(curtime * self._rate / 1000)
+                        got = channel[0].run(curtime * self._samplesms)
                         # and back
-                        got = got * 1000 / self._rate
+                        got = got / self._samplesms
                         if got < curtime:
-                            reason = p.stop_reason()
+                            reason = channel[0].stop_reason()
                             if reason | cg.SYNTH_STOPPED_OUTBUFFER:
-                                self._update_player(channel[1], channel[1][3])
+                                self._update_player(channel, channel[3])
                             if reason | cg.SYNTH_STOPPED_INBUFFER:
-                                self._update_player(channel[1], channel[1][4])
+                                self._update_player(channel, channel[4])
                             if reason | cg.SYNTH_STOPPED_VOLBUFFER:
-                                self._update_player(channel[1], channel[1][5])
+                                self._update_player(channel, channel[5])
                             if reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
-                                self._update_player(channel[1], channel[1][6])
+                                self._update_player(channel, channel[6])
                             if reason | cg.SYNTH_STOPPED_PHASEBUFFER:
-                                self._update_player(channel[1], channel[1][7])
-                            curtime -= got
-                    if channel[1][1] == 0:
-                        self._update_player(channel[1], channel[1][2])
-            if isinstance(channel[1][0], cg.Filter):
-                f = channel[1][0]
+                                self._update_player(channel, channel[7])
+                        curtime -= got
+                        time -= got
+                        channel[1] -= got
+                    if channel[1] == 0:
+                        self._update_player(channel, channel[2])
+                        if channel[1] == 0:
+                            break
+            elif isinstance(channel[0], cg.Filter):
                 if line != None:
-                    self._update_filter(channel[1], line[channel[0]])
+                    self._update_filter(channel, line[i])
                 while time > 0:
                     curtime = time
-                    if channel[1][1] < curtime:
-                        curtime = channel[1][1]
-                        channel[1][1] = 0
-                        time -= curtime
-                    else:
-                        channel[1][1] -= curtime
-                        time -= channel[1][1]
+                    if channel[1] < curtime:
+                        curtime = channel[1]
                     while curtime > 0:
-                        got = p.run(curtime * self._rate / 1000)
-                        got = got * 1000 / self._rate
+                        got = channel[0].run(curtime * self._samplesms)
+                        got = got / self._samplesms
                         if got < curtime:
-                            reason = f.stop_reason()
+                            reason = channel[0].stop_reason()
                             if reason | cg.SYNTH_STOPPED_OUTBUFFER:
-                                self._update_filter(channel[1], channel[1][3])
+                                self._update_filter(channel, channel[3])
                             if reason | cg.SYNTH_STOPPED_INBUFFER:
-                                self._update_filter(channel[1], channel[1][4])
+                                self._update_filter(channel, channel[4])
                             if reason | cg.SYNTH_STOPPED_VOLBUFFER:
-                                self._update_filter(channel[1], channel[1][5])
+                                self._update_filter(channel, channel[5])
                             if reason | cg.SYNTH_STOPPED_SLICEBUFFER:
-                                self._update_filter(channel[1], channel[1][6])
-                    if channel[1][1] == 0:
-                        self._update_filter(channel[1], channel[1][2])
+                                self._update_filter(channel, channel[6])
+                        curtime -= got
+                        time -= got
+                        channel[1] -= got
+                    if channel[1] == 0:
+                        self._update_filter(channel, channel[2])
+                        if channel[1] == 0:
+                            break
             else: # silence
-                self._update_silence(channel[1], line[channel[0]])
-                if channel[1][2] > 0:
-                    channel[1][0].silence(channel[1][1], channel[1][2])
-                    channel[1][2] = 0
+                self._update_silence(channel, line[i])
+                if channel[2] > 0:
+                    channel[0].silence(channel[1], channel[2])
+                    channel[2] = 0
+            i += 1
 
     def run(self, needed):
         if needed < 0:
@@ -666,22 +665,23 @@ class AudioSequencer():
                 time = 0
                 try:
                     # try run for some absurd amount of time
-                    line, time = self._seq.advance(2 ** 31)
+                    time, line = self._seq.advance(2 ** 31)
                 except seq.SequenceEnded:
                     break
-                self._run_channels(line, time)
+                self._run_channels(time, line)
                 timepassed += time
             return timepassed
 
         # convert samples from the audio system to milliseconds
-        needed = needed * 1000 / self._rate
         remain = needed
         while remain > 0:
             try:
-                line, time = self._seq.advance(remain)
+                time, line = self._seq.advance(remain)
             except seq.SequenceEnded:
                 break
-            self._run_channels(line, time)
+            print(time)
+            print(line)
+            self._run_channels(time, line)
             remain -= time
 
         return needed - remain
@@ -689,13 +689,14 @@ class AudioSequencer():
 
 @cg.SYNTH_FRAME_CB_T
 def audio_system_frame(priv, s):
-    return(0)
+    return priv[1]._frame_cb()
 
 class AudioSystem():
     def __init__(self, log_cb_return, log_cb_priv, rate, channels):
         self._s = cg.Synth(audio_system_frame, self,
                            log_cb_return, log_cb_priv,
                            rate, channels)
+        self._samplesms = int(self._s.rate / 1000)
         self._fragment_size = self._s.fragment_size
         self._fragments = 0
         self._inc_fragments()
@@ -713,12 +714,13 @@ class AudioSystem():
     def _frame_cb(self):
         try:
             if self._s.underrun:
-                self._s.inc_fragments()
+                self._inc_fragments()
                 self._s.enabled(1)
                 # s.enabled() will eventually call this function again so when it
                 # finally returns back to here, just return again
                 return 0
             needed = self._s.needed
+            needed = int(needed / self._samplesms)
 
             for seq in self._sequences:
                 if not seq[1]:
@@ -728,7 +730,7 @@ class AudioSystem():
                     seq[2] = True
 
             return 0
-        except CrustyException as e:
+        except cg.CrustyException as e:
             # catch crusty exceptions since they'll have already printed error
             # output, then pass it down along the stack so the main loop can
             # try to do the right thing.
