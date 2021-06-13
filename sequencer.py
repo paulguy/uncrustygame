@@ -76,6 +76,8 @@ class Sequencer():
         changeMask = None
         if not initial:
             changeMask = int(struct[0], base=16)
+            if changeMask == 0:
+                return None
             struct = struct[1:]
 
         row = list()
@@ -226,7 +228,10 @@ class Sequencer():
         newLine = list()
         for i in range(len(line)):
             desc = self._desc._rowdesc[self._desc._column[i]]
-            newLine.append(self._get_row(desc, self._row[line[i]]))
+            if line[i] == None:
+                newLine.append(None)
+            else:
+                newLine.append(self._get_row(desc, self._row[line[i]]))
         return newLine
 
     def set_pattern(self, pattern):
@@ -252,7 +257,7 @@ class Sequencer():
             line = self._get_line(self._initial)[1:]
 
             nextline = self._get_line(self._pattern[0][0])
-            if nextline[0][0] != None:
+            if nextline[0] != None and nextline[0][0] != None:
                 self._divTime = nextline[0][0]
             self._next = nextline[1:]
         elif self._ended:
@@ -264,6 +269,7 @@ class Sequencer():
             else:
                 line = None
 
+            time = int(time)
             if time >= self._divTime - self._lineTime:
                 time = self._divTime - self._lineTime
                 self._lineTime = 0
@@ -278,7 +284,7 @@ class Sequencer():
 
                 if not self._ended:
                     nextline = self._get_line(self._pattern[self._curPattern][self._curLine])
-                    if nextline[0][0] != None:
+                    if nextline[0] != None and nextline[0][0] != None:
                         self._divTime = nextline[0][0]
                     self._next = nextline[1:]
             else:

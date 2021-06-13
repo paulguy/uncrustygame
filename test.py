@@ -9,7 +9,7 @@ import audio
 
 @cg.LOG_CB_RETURN_T
 def log_cb_return(priv: py_object, string :c_char_p):
-    print(string.decode("utf-8"))
+    print(string.decode("utf-8"), end='')
 
 def clear_frame(ll, r, g, b):
     if SDL_SetRenderDrawColor(ll.renderer, r, g, b, SDL_ALPHA_OPAQUE) < 0:

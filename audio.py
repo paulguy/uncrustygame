@@ -348,8 +348,12 @@ class AudioSequencer():
 
     def _update_silence(self, silence, status):
         if status[0] != None:
-            b = self._buffer[status[0]][2]
-            silence[0] = b
+            buf = status[0]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
+            b = self._buffer[buf]
+            silence[0] = b[2]
         if status[1] != None:
             silence[1] = status[1]
         if status[2] != None:
@@ -359,19 +363,21 @@ class AudioSequencer():
         p = player[0]
         if status[0] != None:
             buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
-            player[8] = b[1]
+            player[8] = b
             p.input_buffer(b[2])
         if status[1] != None:
             p.input_pos(status[1])
         if status[2] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[2]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
-            player[9] = b[1]
+            player[9] = b
             p.output_buffer(b[2])
         if status[3] != None:
             p.output_pos(status[3])
@@ -380,27 +386,30 @@ class AudioSequencer():
         if status[5] != None:
             p.volume(status[5])
         if status[6] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[6]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             p.output_buffer(b[2])
         if status[7] != None:
             p.volume_mode(status[7])
         if status[8] != None:
-            p.speed(self._get_speed(status[8], player[8], player[9]))
+            p.speed(self._get_speed(status[8], player[8][1], player[9][1]))
         if status[9] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[9]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             p.output_buffer(b[2])
         if status[10] != None:
             p.speed_mode(status[10])
         if status[11] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[11]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             p.output_buffer(b[2])
         if status[12] != None:
@@ -410,7 +419,7 @@ class AudioSequencer():
         if status[14] != None:
             p.mode(status[14])
         if status[15] != None:
-            player[1] = status[15]
+            player[1] = status[15] * self._samplesms
         if status[16] != None:
             player[2] = status[16]
         if status[17] != None:
@@ -428,24 +437,27 @@ class AudioSequencer():
         f = flt[0]
         if status[0] != None:
             buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             f.input_buffer(b[2])
         if status[1] != None:
             f.input_pos(status[1])
         if status[2] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[2]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             f.output_buffer(b[2])
         if status[3] != None:
             f.output_pos(status[3])
         if status[4] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[4]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             f.filter_buffer(b[2])
         if status[5] != None:
@@ -455,9 +467,10 @@ class AudioSequencer():
         if status[7] != None:
             f.slice(status[7])
         if status[8] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[8]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             f.slice_source(b[2])
         if status[9] != None:
@@ -467,15 +480,16 @@ class AudioSequencer():
         if status[11] != None:
             f.volume(status[11])
         if status[12] != None:
-            buf = status[0]
-            buf -= self._seqChannels
-            buf += self._channels
+            buf = status[12]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
             b = self._buffer[buf]
             f.volume_source(b[2])
         if status[13] != None:
             f.volume_mode(status[13])
         if status[14] != None:
-            flt[1] = status[14]
+            flt[1] = status[14] * self._samplesms
         if status[15] != None:
             flt[2] = status[15]
         if status[16] != None:
@@ -554,6 +568,7 @@ class AudioSequencer():
         if init != None:
             self._seq.set_pattern(init)
             self.run(-1)
+        s.print_full_stats()
 
     def _unload(self):
         # delete channels and filters which may refer to buffers first.
@@ -593,68 +608,103 @@ class AudioSequencer():
         i = 0
         for channel in self._localChannels:
             if isinstance(channel[0], cg.Player):
-                if line != None:
+                if line != None and line[i] != None:
                     self._update_player(channel, line[i])
                 while time > 0:
                     curtime = time
                     if channel[1] < curtime:
                         curtime = channel[1]
                     while curtime > 0:
-                        # convert milliseconds to samples
-                        got = channel[0].run(curtime * self._samplesms)
-                        # and back
-                        got = got / self._samplesms
-                        if got < curtime:
-                            reason = channel[0].stop_reason()
-                            if reason | cg.SYNTH_STOPPED_OUTBUFFER:
-                                self._update_player(channel, channel[3])
-                            if reason | cg.SYNTH_STOPPED_INBUFFER:
-                                self._update_player(channel, channel[4])
-                            if reason | cg.SYNTH_STOPPED_VOLBUFFER:
-                                self._update_player(channel, channel[5])
-                            if reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
-                                self._update_player(channel, channel[6])
-                            if reason | cg.SYNTH_STOPPED_PHASEBUFFER:
-                                self._update_player(channel, channel[7])
+                        got = channel[0].run(curtime)
                         curtime -= got
                         time -= got
                         channel[1] -= got
+                        if got == 0:
+                            reason = channel[0].stop_reason()
+                            changed = False
+                            if reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                                if channel[3] != None:
+                                    self._update_player(channel, channel[3])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_INBUFFER:
+                                if channel[4] != None:
+                                    self._update_player(channel, channel[4])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                                if channel[5] != None:
+                                    self._update_player(channel, channel[5])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
+                                if channel[6] != None:
+                                    self._update_player(channel, channel[6])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_PHASEBUFFER:
+                                if channel[7] != None:
+                                    self._update_player(channel, channel[7])
+                                    changed = True
+                            if not changed:
+                                break
                     if channel[1] == 0:
-                        self._update_player(channel, channel[2])
-                        if channel[1] == 0:
+                        if channel[2] != None:
+                            self._update_player(channel, channel[2])
+                        else:
                             break
+                    else:
+                        if channel[1] < time:
+                            time -= channel[1]
+                            channel[1] = 0
+                        else:
+                            channel[1] -= time
             elif isinstance(channel[0], cg.Filter):
-                if line != None:
+                if line != None and line[i] != None:
                     self._update_filter(channel, line[i])
                 while time > 0:
                     curtime = time
                     if channel[1] < curtime:
                         curtime = channel[1]
                     while curtime > 0:
-                        got = channel[0].run(curtime * self._samplesms)
-                        got = got / self._samplesms
-                        if got < curtime:
-                            reason = channel[0].stop_reason()
-                            if reason | cg.SYNTH_STOPPED_OUTBUFFER:
-                                self._update_filter(channel, channel[3])
-                            if reason | cg.SYNTH_STOPPED_INBUFFER:
-                                self._update_filter(channel, channel[4])
-                            if reason | cg.SYNTH_STOPPED_VOLBUFFER:
-                                self._update_filter(channel, channel[5])
-                            if reason | cg.SYNTH_STOPPED_SLICEBUFFER:
-                                self._update_filter(channel, channel[6])
+                        got = channel[0].run(curtime)
                         curtime -= got
                         time -= got
                         channel[1] -= got
+                        if got == 0:
+                            reason = channel[0].stop_reason()
+                            changed = False
+                            if reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                                if channel[3] != None:
+                                    self._update_filter(channel, channel[3])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_INBUFFER:
+                                if channel[4] != None:
+                                    self._update_filter(channel, channel[4])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                                if channel[5] != None:
+                                    self._update_filter(channel, channel[5])
+                                    changed = True
+                            if reason | cg.SYNTH_STOPPED_SLICEBUFFER:
+                                if channel[6] != None:
+                                    self._update_filter(channel, channel[6])
+                                    changed = True
+                            if not changed:
+                                break
                     if channel[1] == 0:
-                        self._update_filter(channel, channel[2])
-                        if channel[1] == 0:
+                        if channel[2] != None:
+                            self._update_player(channel, channel[2])
+                        else:
                             break
+                    else:
+                        if channel[1] < time:
+                            time -= channel[1]
+                            channel[1] = 0
+                        else:
+                            channel[1] -= time
             else: # silence
-                self._update_silence(channel, line[i])
-                if channel[2] > 0:
-                    channel[0].silence(channel[1], channel[2])
-                    channel[2] = 0
+                if line != None and line[i] != None:
+                    self._update_silence(channel, line[i])
+                    if channel[2] > 0:
+                        channel[0].silence(channel[1], channel[2])
+                        channel[2] = 0
             i += 1
 
     def run(self, needed):
@@ -672,17 +722,24 @@ class AudioSequencer():
                 timepassed += time
             return timepassed
 
-        # convert samples from the audio system to milliseconds
+        for channel in self._localChannels:
+            if isinstance(channel[0], cg.Player):
+                # reset output channel positions to 0
+                if channel[9][0] == None:
+                    channel[0].output_pos(0)
+
         remain = needed
         while remain > 0:
             try:
-                time, line = self._seq.advance(remain)
+                time, line = self._seq.advance(remain / self._samplesms)
             except seq.SequenceEnded:
                 break
-            print(time)
-            print(line)
+            time *= self._samplesms
             self._run_channels(time, line)
             remain -= time
+            if remain < self._samplesms:
+                self._run_channels(remain, None)
+                remain = 0
 
         return needed - remain
 
@@ -720,7 +777,6 @@ class AudioSystem():
                 # finally returns back to here, just return again
                 return 0
             needed = self._s.needed
-            needed = int(needed / self._samplesms)
 
             for seq in self._sequences:
                 if not seq[1]:
