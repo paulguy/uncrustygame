@@ -182,22 +182,22 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
 }
 
 #define PRINT_BUFFER_STATS(BUF) \
-    LOG_PRINTF(s, " Size: %u\n", (BUF)->size); \
-    LOG_PRINTF(s, " Refcount: %u\n", (BUF)->ref);
+    LOG_PRINTF(s, " Size: %u\n", (BUF).size); \
+    LOG_PRINTF(s, " Refcount: %u\n", (BUF).ref);
 
 #define PRINT_PLAYER_STATS(PLR) \
     LOG_PRINTF(s, " In Use: "); \
-    if((PLR)->inUse) { \
+    if((PLR).inUse) { \
         LOG_PRINTF(s, "Yes\n"); \
     } else { \
         LOG_PRINTF(s, "No\n"); \
     } \
-    LOG_PRINTF(s, " Input Buffer: %u\n", (PLR)->inBuffer); \
-    LOG_PRINTF(s, " Output Buffer: %u\n", (PLR)->outBuffer); \
-    LOG_PRINTF(s, " Input Buffer Pos: %f\n", (PLR)->inPos); \
-    LOG_PRINTF(s, " Output Buffer Pos: %u\n", (PLR)->outPos); \
+    LOG_PRINTF(s, " Input Buffer: %u\n", (PLR).inBuffer); \
+    LOG_PRINTF(s, " Output Buffer: %u\n", (PLR).outBuffer); \
+    LOG_PRINTF(s, " Input Buffer Pos: %f\n", (PLR).inPos); \
+    LOG_PRINTF(s, " Output Buffer Pos: %u\n", (PLR).outPos); \
     LOG_PRINTF(s, " Output Operation: "); \
-    switch((PLR)->outOp) { \
+    switch((PLR).outOp) { \
         case SYNTH_OUTPUT_REPLACE: \
             LOG_PRINTF(s, "Replace\n"); \
             break; \
@@ -208,7 +208,7 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
             LOG_PRINTF(s, "Invalid\n");\
     } \
     LOG_PRINTF(s, " Volume Mode: "); \
-    switch((PLR)->volMode) { \
+    switch((PLR).volMode) { \
         case SYNTH_AUTO_CONSTANT: \
             LOG_PRINTF(s, "Constant\n"); \
             break; \
@@ -218,11 +218,11 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
         default: \
             LOG_PRINTF(s, "Invalid\n"); \
     } \
-    LOG_PRINTF(s, " Volume: %f\n", (PLR)->volume); \
-    LOG_PRINTF(s, " Volume Source Buffer: %u\n", (PLR)->volBuffer); \
-    LOG_PRINTF(s, " Volume Source Buffer Pos: %u\n", (PLR)->volPos); \
+    LOG_PRINTF(s, " Volume: %f\n", (PLR).volume); \
+    LOG_PRINTF(s, " Volume Source Buffer: %u\n", (PLR).volBuffer); \
+    LOG_PRINTF(s, " Volume Source Buffer Pos: %u\n", (PLR).volPos); \
     LOG_PRINTF(s, " Player Mode: "); \
-    switch((PLR)->mode) { \
+    switch((PLR).mode) { \
         case SYNTH_MODE_ONCE: \
             LOG_PRINTF(s, "Play Once\n"); \
             break; \
@@ -235,12 +235,12 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
         default: \
             LOG_PRINTF(s, "Invalid\n"); \
     } \
-    LOG_PRINTF(s, " Loop Start: %u\n", (PLR)->loopStart); \
-    LOG_PRINTF(s, " Loop End: %u\n", (PLR)->loopEnd); \
-    LOG_PRINTF(s, " Phase Source Buffer: %u\n", (PLR)->phaseBuffer); \
-    LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR)->phasePos); \
+    LOG_PRINTF(s, " Loop Start: %u\n", (PLR).loopStart); \
+    LOG_PRINTF(s, " Loop End: %u\n", (PLR).loopEnd); \
+    LOG_PRINTF(s, " Phase Source Buffer: %u\n", (PLR).phaseBuffer); \
+    LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR).phasePos); \
     LOG_PRINTF(s, " Speed Mode: "); \
-    switch((PLR)->speedMode) { \
+    switch((PLR).speedMode) { \
         case SYNTH_AUTO_CONSTANT: \
             LOG_PRINTF(s, "Constant\n"); \
             break; \
@@ -250,9 +250,9 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
         default: \
             LOG_PRINTF(s, "Invalid\n"); \
     } \
-    LOG_PRINTF(s, " Speed: %f\n", (PLR)->speed); \
-    LOG_PRINTF(s, " Speed Source Buffer: %u\n", (PLR)->speedBuffer); \
-    LOG_PRINTF(s, " Speed Source Buffer Pos: %u\n", (PLR)->speedPos);
+    LOG_PRINTF(s, " Speed: %f\n", (PLR).speed); \
+    LOG_PRINTF(s, " Speed Source Buffer: %u\n", (PLR).speedBuffer); \
+    LOG_PRINTF(s, " Speed Source Buffer Pos: %u\n", (PLR).speedPos);
 
 void synth_print_full_stats(Synth *s) {
     unsigned int i;
@@ -265,8 +265,7 @@ void synth_print_full_stats(Synth *s) {
     LOG_PRINTF(s, "Audio rate: %u\n", s->rate);
     LOG_PRINTF(s, "Channels: %u\n", s->channels);
     for(i = 0; i < s->channels; i++) {
-        LOG_PRINTF(s, "Channel %u Buffer:\n", i);
-        PRINT_BUFFER_STATS(&(s->channelbuffer[i]))
+        LOG_PRINTF(s, "Channel %u Buffer Size: %u\n", i, s->channelbuffer[i].size);
     }
     LOG_PRINTF(s, "Read Cursor Pos: %u\n", s->readcursor);
     LOG_PRINTF(s, "Write Cursor Pos: %u\n", s->writecursor);
@@ -295,12 +294,12 @@ void synth_print_full_stats(Synth *s) {
     LOG_PRINTF(s, "Buffers Memory: %u\n", s->buffersmem);
     for(i = 0; i < s->buffersmem; i++) {
         LOG_PRINTF(s, "Buffer %u (%u):\n", i, i + s->channels);
-        PRINT_BUFFER_STATS(&(s->buffer[i]));
+        PRINT_BUFFER_STATS(s->buffer[i]);
     }
     LOG_PRINTF(s, "Players Memory: %u\n", s->playersmem);
     for(i = 0; i < s->playersmem; i++) {
         LOG_PRINTF(s, "Player %u:\n", i);
-        PRINT_PLAYER_STATS(&(s->player[i]));
+        PRINT_PLAYER_STATS(s->player[i]);
     }
 }
 
@@ -1103,7 +1102,7 @@ int synth_free_buffer(Synth *s, unsigned int index) {
 }
 
 int synth_buffer_get_size(Synth *s, unsigned int index) {
-    if(!is_valid_buffer(s, index, BUFFER_INPUT_ONLY)) {
+    if(!is_valid_buffer(s, index, 0)) {
         return(-1);
     }
 

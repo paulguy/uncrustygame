@@ -62,7 +62,6 @@ def main():
     with open("testseq2.txt", "r") as seqfile:
         seq = audio.AudioSequencer(seqfile)
     aud.add_sequence(seq)
-    aud.sequence_enabled(seq, True)
     aud.enabled(True)
 
     running = True
@@ -75,13 +74,18 @@ def main():
             if event.type == SDL_QUIT:
                 running = False
                 break
+            elif event.type == SDL_KEYDOWN:
+                if event.key.keysym.sym == SDLK_q:
+                    running = False
+                elif event.key.keysym.sym == SDLK_s:
+                    aud.sequence_enabled(seq, True)
 
         clear_frame(ll, 32, 128, 192)
         l.draw()
         aud.frame()
 
         thisTime = time.monotonic()
-        if running and aud.ended(seq):
+        if running and seq.ended:
             print("Sequence ended")
             aud.del_sequence(seq)
             running = False
@@ -89,6 +93,8 @@ def main():
         lastTime = thisTime
         SDL_RenderPresent(renderer)
 
+    aud.enabled(False)
+    aud.del_sequence(seq)
     SDL_DestroyRenderer(renderer)
     SDL_DestroyWindow(window)
 

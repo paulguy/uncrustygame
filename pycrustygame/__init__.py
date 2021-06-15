@@ -580,6 +580,7 @@ class Buffer():
             raise CrustyException()
 
     def __del__(self):
+        print("b" + str(int(self)))
         if not self._output:
             _cg.synth_free_buffer(self._s._s, self)
 
@@ -603,7 +604,10 @@ class Player():
     See synth.h for details on using this library.
     """
     def __init__(self, synth :Synth, buffer :Buffer):
-        self._b = buffer
+        self._ib = buffer
+        self._vb = buffer
+        self._pb = buffer
+        self._sb = buffer
         self._s = synth
         self._p = _cg.synth_add_player(self._s._s, buffer)
 
@@ -611,6 +615,7 @@ class Player():
             raise CrustyException()
 
     def __del__(self):
+        print("p" + str(int(self)))
         _cg.synth_free_player(self._s._s, self)
 
     def __int__(self):
@@ -619,6 +624,7 @@ class Player():
     def input_buffer(self, buffer :Buffer):
         if _cg.synth_set_player_input_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
+        self._ib = buffer
 
     def input_pos(self, pos :float):
         if _cg.synth_set_player_input_buffer_pos(self._s._s, self, pos) < 0:
@@ -627,6 +633,7 @@ class Player():
     def output_buffer(self, buffer :Buffer):
         if _cg.synth_set_player_output_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
+        self._ob = buffer
 
     def output_pos(self, pos :int):
         if _cg.synth_set_player_output_buffer_pos(self._s._s, self, pos) < 0:
@@ -647,6 +654,7 @@ class Player():
     def volume_source(self, source :Buffer):
         if _cg.synth_set_player_volume_source(self._s._s, self, source) < 0:
             raise CrustyException()
+        self._vb = source
 
     def mode(self, mode :int):
         if _cg.synth_set_player_mode(self._s._s, self, mode) < 0:
@@ -663,6 +671,7 @@ class Player():
     def phase_source(self, source :Buffer):
         if _cg.synth_set_player_phase_source(self._s._s, self, source) < 0:
             raise CrustyException()
+        self._pb = source
 
     def speed_mode(self, mode :int):
         if _cg.synth_set_player_speed_mode(self._s._s, self, mode) < 0:
@@ -675,6 +684,7 @@ class Player():
     def speed_source(self, source :Buffer):
         if _cg.synth_set_player_speed_source(self._s._s, self, source) < 0:
             raise CrustyException()
+        self._sb = source
 
     def run(self, requested :int):
         ret = _cg.synth_run_player(self._s._s, self, requested)
