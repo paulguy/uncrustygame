@@ -580,7 +580,6 @@ class Buffer():
             raise CrustyException()
 
     def __del__(self):
-        print("b" + str(int(self)))
         if not self._output:
             _cg.synth_free_buffer(self._s._s, self)
 
@@ -615,7 +614,6 @@ class Player():
             raise CrustyException()
 
     def __del__(self):
-        print("p" + str(int(self)))
         _cg.synth_free_player(self._s._s, self)
 
     def __int__(self):

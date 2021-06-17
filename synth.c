@@ -767,11 +767,11 @@ void synth_free(Synth *s) {
     if(s->player != NULL) {
         free(s->player);
     }
-/*
-    if(s->effect != NULL) {
-        free(s->effect);
+
+    if(s->filter != NULL) {
+        free(s->filter);
     }
-*/
+
     free(s);
 }
 
@@ -1288,6 +1288,7 @@ int synth_set_player_output_buffer(Synth *s,
     add_buffer_ref(s, outBuffer);
     p->outPos = 0;
 
+    LOG_PRINTF(s, "outbuf %u\n", p->outBuffer);
     return(0);
 }
 
@@ -1298,8 +1299,9 @@ int synth_set_player_output_buffer_pos(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if((int)outPos >= get_buffer_size(s, p->outBuffer)) {
-        LOG_PRINTF(s, "Output position past end of buffer.\n");
+    unsigned int bufsize = get_buffer_size(s, p->outBuffer);
+    if(outPos >= bufsize) {
+        LOG_PRINTF(s, "Player %u output position past end of buffer (%u > %u).\n", index, outPos, bufsize);
         return(-1);
     }
     p->outPos = outPos;

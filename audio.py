@@ -36,6 +36,9 @@ class MacroReader():
         self._macros = macros
         self._line = None
 
+    def add_macros(self, macros):
+        self._macros.extend(macros)
+
     def readline(self):
         """
         Read a line with macros replaced.
@@ -44,54 +47,69 @@ class MacroReader():
             line = ""
             while True:
                 line += self._file.readline()
-                line = line.split('#', maxsplit=1)
+                line = line.split(';', maxsplit=1)
                 line = line[0].strip()
                 if len(line) > 0 and line[-1] == '\\':
                     line = line[:-1]
                     continue
                 if len(line) > 0:
                     break
- 
-            for macro in self._macros:
-                newLine = ""
-                while True:
-                    index = 0
-                    try:
-                        # search for instance of macro name
-                        index = line[index:].index(macro[0])
-                    except ValueError:
-                        # no macro found, just append the rest
-                        newLine += line
-                        break
-                    # append everything up to the macro name to be replaced
-                    newLine += line[:index]
-                    # results in name, args, remainder
-                    args = line[index:].split(maxsplit=len(macro[1]) + 1)
-                    # don't need the name
-                    args = args[1:]
-                    # make a copy of the replacement string
-                    replacement = str(macro[2])
-                    # replace all instances of argument names with the provided
-                    # values
-                    for i in range(len(macro[1])):
-                        replacement = replacement.replace(macro[1][i], args[i])
-                    # append the replacement string
-                    newLine += replacement + ' '
-                    # if there's nothing left, break
-                    if len(args) <= len(macro[1]):
-                        break
-                    # continue with the remainder
-                    line = args[len(macro[1])]
-                line = newLine
+
+            while True:
+                changed = False
+                for macro in self._macros:
+                    newLine = ""
+                    while True:
+                        index = 0
+                        try:
+                            # search for instance of macro name
+                            index = line[index:].index(macro[0])
+                        except ValueError:
+                            # no macro found, just append the rest
+                            newLine += line
+                            break
+                        changed = True
+                        # append everything up to the macro name to be replaced
+                        newLine += line[:index]
+                        # results in name, args, remainder
+                        args = [line[index:index+len(macro[0])]]
+                        args.extend(line[index+len(macro[0]):].split(maxsplit=len(macro[1])))
+                        # don't need the name
+                        args = args[1:]
+                        # make a copy of the replacement string
+                        replacement = str(macro[2])
+                        # replace all instances of argument names with the provided
+                        # values
+                        for i in range(len(macro[1])):
+                            replacement = replacement.replace(macro[1][i], args[i])
+                        # append the replacement string
+                        newLine += replacement + ' '
+                        # if there's nothing left, break
+                        if len(args) <= len(macro[1]):
+                            break
+                        # continue with the remainder
+                        line = args[len(macro[1])]
+                    line = newLine
+                if not changed:
+                    break
             self._line = line.splitlines()
         line = self._line[0]
         if len(self._line) == 1:
             self._line = None
         else:
             self._line = self._line[1:]
-        print(line)
         return line
 
+
+_BUILTIN_MACROS = [
+    ("SYNTH_OUTPUT_REPLACE", (), str(cg.SYNTH_OUTPUT_REPLACE)),
+    ("SYNTH_OUTPUT_ADD", (), str(cg.SYNTH_OUTPUT_ADD)),
+    ("SYNTH_AUTO_CONSTANT", (), str(cg.SYNTH_AUTO_CONSTANT)),
+    ("SYNTH_AUTO_SOURCE", (), str(cg.SYNTH_AUTO_SOURCE)),
+    ("SYNTH_MODE_ONCE", (), str(cg.SYNTH_MODE_ONCE)),
+    ("SYNTH_MODE_LOOP", (), str(cg.SYNTH_MODE_LOOP)),
+    ("SYNTH_MODE_PHASE_SOURCE", (), str(cg.SYNTH_MODE_PHASE_SOURCE))
+]
 
 class AudioSequencer():
     def __init__(self, infile, buffer=None):
@@ -102,25 +120,14 @@ class AudioSequencer():
         """
         if infile.readline().strip() != "CrustyTracker":
             raise Exception("File isn't a CrustyTracker sequence.")
+        infile = MacroReader(infile, _BUILTIN_MACROS)
         line = infile.readline().split()
         self._version = int(line[0])
         self._seqChannels = int(line[1])
         if self._version != 1:
             raise Exception("Unsupported version: {}".format(version))
-        while True:
-            line = infile.readline().split('#', maxsplit=1)
-            line = line[0]
-            if len(line) != 0:
-                break
-        macros = int(line)
+        macros = int(infile.readline())
         macro = list()
-        macro.append(("SYNTH_OUTPUT_REPLACE", (), str(cg.SYNTH_OUTPUT_REPLACE)))
-        macro.append(("SYNTH_OUTPUT_ADD", (), str(cg.SYNTH_OUTPUT_ADD)))
-        macro.append(("SYNTH_AUTO_CONSTANT", (), str(cg.SYNTH_AUTO_CONSTANT)))
-        macro.append(("SYNTH_AUTO_SOURCE", (), str(cg.SYNTH_AUTO_SOURCE)))
-        macro.append(("SYNTH_MODE_ONCE", (), str(cg.SYNTH_MODE_ONCE)))
-        macro.append(("SYNTH_MODE_LOOP", (), str(cg.SYNTH_MODE_ONCE)))
-        macro.append(("SYNTH_MODE_PHASE_SOURCE", (), str(cg.SYNTH_MODE_ONCE)))
         # read a list of macros, macros are formatted:
         # name arg0name arg1name ...=replacement
         # macro names are found in the file and replaced with replacement
@@ -135,7 +142,7 @@ class AudioSequencer():
             macroargs = lhs[1:]
             macro.append((macroname, macroargs, macroline[1]))
         print(macro)
-        infile = MacroReader(infile, macro)
+        infile.add_macros(macro)
         tags = int(infile.readline())
         self._tag = dict()
         for i in range(tags):
@@ -176,7 +183,7 @@ class AudioSequencer():
             channel = infile.readline().strip().lower()
             if channel == CHANNEL_TYPE_SILENCE:
                 self._channel.append(CHANNEL_TYPE_SILENCE)
-            if channel == CHANNEL_TYPE_PLAYER:
+            elif channel == CHANNEL_TYPE_PLAYER:
                 self._channel.append(CHANNEL_TYPE_PLAYER)
             elif channel == CHANNEL_TYPE_FILTER:
                 self._channel.append(CHANNEL_TYPE_FILTER)
@@ -185,11 +192,11 @@ class AudioSequencer():
         print(self._channel)
         seqDesc = seq.SequenceDescription()
         silenceDesc = seqDesc.add_row_description()
-        # output buffer 0x1
+        # output buffer 0x4
         seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
         # start         0x2
         seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-        # length        0x4
+        # length        0x1
         seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
         playerDesc = seqDesc.add_row_description()
         # input buffer                      0x200000
@@ -353,9 +360,9 @@ class AudioSequencer():
             b = self._buffer[buf]
             silence[0] = b[2]
         if status[1] != None:
-            silence[1] = status[1]
+            silence[1] = status[1] * self._samplesms
         if status[2] != None:
-            silence[2] = status[2]
+            silence[2] = status[2] * self._samplesms
 
     def _update_player(self, player, status):
         p = player[0]
@@ -392,7 +399,7 @@ class AudioSequencer():
                 buf -= self._seqChannels
                 buf += self._channels
             b = self._buffer[buf]
-            p.output_buffer(b[2])
+            p.volume_source(b[2])
         if status[7] != None:
             p.volume_mode(status[7])
         if status[8] != None:
@@ -403,7 +410,7 @@ class AudioSequencer():
                 buf -= self._seqChannels
                 buf += self._channels
             b = self._buffer[buf]
-            p.output_buffer(b[2])
+            p.speed_source(b[2])
         if status[10] != None:
             p.speed_mode(status[10])
         if status[11] != None:
@@ -412,7 +419,7 @@ class AudioSequencer():
                 buf -= self._seqChannels
                 buf += self._channels
             b = self._buffer[buf]
-            p.output_buffer(b[2])
+            p.phase_source(b[2])
         if status[12] != None:
             p.loop_start(status[12])
         if status[13] != None:
@@ -543,6 +550,7 @@ class AudioSequencer():
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
         for channel in enumerate(self._channel):
+            print(channel)
             if channel[1] == CHANNEL_TYPE_SILENCE:
                 buf = initial[channel[0]][0]
                 buf -= self._seqChannels
@@ -609,7 +617,7 @@ class AudioSequencer():
         self._seq.reset()
         self._ended = False
 
-    def _run_channels(self, time, line):
+    def _run_channels(self, reqtime, line):
         # for performance and simplicity reasons, this is evaluating whole
         # channels at a time.  Alternatively, it would look to each channel
         # for the next event then run all channels up to that event in repeat
@@ -619,6 +627,7 @@ class AudioSequencer():
         i = 0
         for channel in self._localChannels:
             if isinstance(channel[0], cg.Player):
+                time = reqtime
                 if line != None and line[i] != None:
                     self._update_player(channel, line[i])
                 while time > 0:
@@ -666,6 +675,7 @@ class AudioSequencer():
                     channel[1] -= got
                     channel[10] += got
             elif isinstance(channel[0], cg.Filter):
+                time = reqtime
                 if line != None and line[i] != None:
                     self._update_filter(channel, line[i])
                 while time > 0:
@@ -712,7 +722,7 @@ class AudioSequencer():
                 if line != None and line[i] != None:
                     self._update_silence(channel, line[i])
                     if channel[2] > 0:
-                        channel[0].silence(channel[1], channel[2])
+                        channel[0][2].silence(channel[1], channel[2])
                         channel[2] = 0
             i += 1
 
@@ -830,7 +840,11 @@ class AudioSystem():
         self._s.enabled(enabled)
 
     def frame(self):
-        self._s.frame()
+        try:
+            self._s.frame()
+        except cg.CrustyException as e:
+            self._s.print_full_stats()
+            raise e
 
     def _reset_output_positions(self):
         for seq in self._sequences:
