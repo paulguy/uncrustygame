@@ -3,7 +3,7 @@ CrustyTracker
 0 # macros
 0 # tags
 1 0 # 1 file, 0 externals
-48000 sine.wav
+sine.wav
 1 # channels
 player
 250|2 0.0 0 0 SYNTH_OUTPUT_ADD 0.1 0 SYNTH_AUTO_CONSTANT 0 0 \

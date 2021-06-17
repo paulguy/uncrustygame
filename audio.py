@@ -156,11 +156,11 @@ class AudioSequencer():
             # single value means the buffer will be provided
             try:
                 # add the time in milliseconds of an empty buffer
-                item = int(bufferline[1])
+                item = int(bufferline[0])
             except ValueError:
                 # add the string to use as a filename later
-                item = bufferline[1].strip()
-            self._buffer.append([item, int(bufferline[0]), None])
+                item = bufferline[0].strip()
+            self._buffer.append([item, None, None])
         for i in range(self._inbufs):
             if isinstance(buffer[i], cg.Buffer):
                 # import an external buffer
@@ -779,10 +779,6 @@ class AudioSystem():
         self._fragment_size = self._s.fragment_size
         self._fragments = 0
         self._inc_fragments()
-
-    def __del__(self):
-        for seq in self._sequences:
-            seq[0]._unload()
 
     def _inc_fragments(self):
         self._s.enabled(0)

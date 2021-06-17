@@ -87,7 +87,6 @@ def main():
         thisTime = time.monotonic()
         if running and seq.ended:
             print("Sequence ended")
-            aud.del_sequence(seq)
             running = False
 
         lastTime = thisTime
