@@ -74,9 +74,12 @@ class MacroReader():
                     # replace all instances of argument names with the provided
                     # values
                     for i in range(len(macro[1])):
-                        replacement.replace(macro[1][i], args[i])
+                        replacement = replacement.replace(macro[1][i], args[i])
                     # append the replacement string
                     newLine += replacement + ' '
+                    # if there's nothing left, break
+                    if len(args) <= len(macro[1]):
+                        break
                     # continue with the remainder
                     line = args[len(macro[1])]
                 line = newLine
@@ -86,6 +89,7 @@ class MacroReader():
             self._line = None
         else:
             self._line = self._line[1:]
+        print(line)
         return line
 
 
@@ -124,20 +128,12 @@ class AudioSequencer():
         # provided when the macro is used like:
         # name arg0 arg1 ...
         for i in range(macros):
-            line = ""
-            while True:
-                line += infile.readline()
-                line = line.split('#', maxsplit=1)
-                line = line[0].strip()
-                if len(line) > 0 and line[-1] == '\\':
-                    continue
-                if len(line) > 0:
-                    break
-            macroline = line[0].split('=', maxsplit=1)
+            line = infile.readline().strip()
+            macroline = line.split('=', maxsplit=1)
             lhs = macroline[0].split()
             macroname = lhs[0]
             macroargs = lhs[1:]
-            macro.append(macroname, macroargs, macroline[1])
+            macro.append((macroname, macroargs, macroline[1]))
         print(macro)
         infile = MacroReader(infile, macro)
         tags = int(infile.readline())

@@ -1,6 +1,7 @@
 CrustyTracker
 1 2
-0 # macros
+1 # macros
+SIMPLE_NOTE NOTE=102040 0.0 NOTE 250
 0 # tags
 1 0 # 1 file, 0 externals
 sine.wav
@@ -10,19 +11,19 @@ player
 SYNTH_AUTO_CONSTANT 0 0 -1 SYNTH_MODE_ONCE 0 0 0 0 0 0 0
 1 # one pattern
 16 # rows in this pattern
-0|102040 0.0 0.8 250
+0|SIMPLE_NOTE 0.8
 0|0
 0|0
 0|0
-0|102040 0.0 1.0 250
+0|SIMPLE_NOTE 1.0
 0|0
 0|0
 0|0
-0|102040 0.0 1.2 250
+0|SIMPLE_NOTE 1.2
 0|0
 0|0
 0|0
-0|102040 0.0 1.5 250
+0|SIMPLE_NOTE 1.5
 0|0
 0|0
 0|0
