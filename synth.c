@@ -172,6 +172,8 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
         return(-1);
     }
 
+    len = len / (SDL_AUDIO_BITSIZE(spec.format) / 8);
+
     sb = synth_add_buffer(s, type, audiobuf, len);
     if(rate != NULL) {
         *rate = spec.freq;
@@ -1549,8 +1551,12 @@ int synth_run_player(Synth *syn,
        pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos;
         float speed = pl->speed;
-        todo = MIN(todo, ((float)get_buffer_size(syn, pl->inBuffer)
-                          - inPos) / speed);
+        if(speed > 0.0) {
+            todo = MIN(todo, ((float)get_buffer_size(syn, pl->inBuffer)
+                              - inPos) / speed);
+        } else {
+            todo = MIN(todo, inPos / speed);
+        }
         if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
@@ -1602,7 +1608,7 @@ int synth_run_player(Synth *syn,
                 outPos++;
                 inPos += s[speedPos] * speed;
                 speedPos++;
-                if(inPos >= is) {
+                if(inPos >= is || inPos <= 0) {
                     break;
                 }
             }
@@ -1613,7 +1619,7 @@ int synth_run_player(Synth *syn,
                 outPos++;
                 inPos += s[speedPos] * speed;
                 speedPos++;
-                if(inPos >= is) {
+                if(inPos >= is || inPos <= 0) {
                     break;
                 }
             }
@@ -1628,7 +1634,7 @@ int synth_run_player(Synth *syn,
                     inPos += s[speedPos] * speed;
                     speedPos++;
                     volPos++;
-                    if(inPos >= is) {
+                    if(inPos >= is || inPos <= 0) {
                         break;
                     }
                 }
@@ -1639,7 +1645,7 @@ int synth_run_player(Synth *syn,
                     inPos += s[speedPos] * speed;
                     speedPos++;
                     volPos++;
-                    if(inPos >= is) {
+                    if(inPos >= is || inPos <= 0) {
                         break;
                     }
                 }
@@ -1661,8 +1667,10 @@ int synth_run_player(Synth *syn,
                 inPos += speed;
                 /* can't do this without branching that I know of, not sure
                  * if it matters.. */
-                if(inPos > pl->loopEnd) {
+                if(inPos >= pl->loopEnd) {
                     inPos -= loopLen;
+                } else if(inPos <= pl->loopStart) {
+                    inPos += loopLen;
                 }
             }
         } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
@@ -1671,8 +1679,10 @@ int synth_run_player(Synth *syn,
                 o[outPos] += i[(int)inPos] * vol;
                 outPos++;
                 inPos += speed;
-                if(inPos > pl->loopEnd) {
+                if(inPos >= pl->loopEnd) {
                     inPos -= loopLen;
+                } else if(inPos <= pl->loopStart) {
+                    inPos += loopLen;
                 }
             }
         } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
@@ -1684,8 +1694,10 @@ int synth_run_player(Synth *syn,
                     o[outPos] = i[(int)inPos] * v[volPos] * vol;
                     outPos++;
                     inPos += speed;
-                    if(inPos > pl->loopEnd) {
+                    if(inPos >= pl->loopEnd) {
                         inPos -= loopLen;
+                    } else if(inPos <= pl->loopStart) {
+                        inPos += loopLen;
                     }
                     volPos++;
                 }
@@ -1696,6 +1708,8 @@ int synth_run_player(Synth *syn,
                     inPos += speed;
                     if(inPos > pl->loopEnd) {
                         inPos -= loopLen;
+                    } else if(inPos <= pl->loopStart) {
+                        inPos += loopLen;
                     }
                     volPos++;
                 }
@@ -1719,6 +1733,8 @@ int synth_run_player(Synth *syn,
                 inPos += s[speedPos] * speed;
                 if(inPos > pl->loopEnd) {
                     inPos -= loopLen;
+                } else if(inPos <= pl->loopStart) {
+                    inPos += loopLen;
                 }
                 speedPos++;
             }
@@ -1730,6 +1746,8 @@ int synth_run_player(Synth *syn,
                 inPos += s[speedPos] * speed;
                 if(inPos > pl->loopEnd) {
                     inPos -= loopLen;
+                } else if(inPos <= pl->loopStart) {
+                    inPos += loopLen;
                 }
                 speedPos++;
             }
@@ -1744,6 +1762,8 @@ int synth_run_player(Synth *syn,
                     inPos += s[speedPos] * speed;
                     if(inPos > pl->loopEnd) {
                         inPos -= loopLen;
+                    } else if(inPos <= pl->loopStart) {
+                        inPos += loopLen;
                     }
                     speedPos++;
                     volPos++;
@@ -1755,6 +1775,8 @@ int synth_run_player(Synth *syn,
                     inPos += s[speedPos] * speed;
                     if(inPos > pl->loopEnd) {
                         inPos -= loopLen;
+                    } else if(inPos <= pl->loopStart) {
+                        inPos += loopLen;
                     }
                     speedPos++;
                     volPos++;
