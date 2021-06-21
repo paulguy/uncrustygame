@@ -116,7 +116,7 @@ class AudioSequencer():
         """
         Create an audio sequence from a file.
 
-        buffers is a list of either float arrays or other external Buffer objects.
+        buffers is a list of external Buffer objects.
         """
         if infile.readline().strip() != "CrustyTracker":
             raise Exception("File isn't a CrustyTracker sequence.")
@@ -151,7 +151,7 @@ class AudioSequencer():
         self._tune()
         line = infile.readline().split()
         buffers = int(line[0])
-        self._inbufs = int(line[1])
+        inbufs = int(line[1])
         self._buffer = list()
         for i in range(buffers):
             bufferline = infile.readline().split(maxsplit=1)
@@ -164,18 +164,11 @@ class AudioSequencer():
                 # add the string to use as a filename later
                 item = bufferline[0].strip()
             self._buffer.append([item, None, None])
-        for i in range(self._inbufs):
-            if isinstance(buffer[i], cg.Buffer):
-                # import an external buffer
-                item = buffer[i]
-            elif isinstance(buffer[i], array.array) and \
-                 buffer[i].typecode != 'f':
-                # convert to a ctypes array so _load() can just pass it
-                # along
-                item = _create_float_array(buffer[i])
-            else:
-                raise Exception("Buffers must be float arrays or external Buffers.")
-            self._buffer.append([item, 0, None])
+        for i in range(inbufs):
+            if not isinstance(buffer[i], cg.Buffer):
+                raise Exception("Buffers must be external Buffers.")
+            # import an external buffer
+            self._buffer.append([buffer[i], 0, None])
         print(self._buffer)
         channels = int(infile.readline())
         self._channel = list()
@@ -539,13 +532,9 @@ class AudioSequencer():
                 buffer[1] = r
                 buffer[2] = b
             elif isinstance(buffer[0], cg.Buffer):
+                # external buffer
                 buffer[1] = rate
                 buffer[2] = buffer[0]
-            else:
-                # already a ctypes array
-                b = s.buffer(cg.SYNTH_TYPE_F32, buffer[0], len(buffer[0]))
-                buffer[1] = rate
-                buffer[2] = b
         print(self._buffer)
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
@@ -640,27 +629,39 @@ class AudioSequencer():
                         changed = False
                         if reason | cg.SYNTH_STOPPED_OUTBUFFER:
                             if channel[3] != None:
-                                self._update_player(channel, channel[3])
+                                upd = channel[3]
+                                channel[3] = None
+                                self._update_player(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_INBUFFER:
                             if channel[4] != None:
-                                self._update_player(channel, channel[4])
+                                upd = channel[4]
+                                channel[4] = None
+                                self._update_player(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_VOLBUFFER:
                             if channel[5] != None:
-                                self._update_player(channel, channel[5])
+                                upd = channel[5]
+                                channel[5] = None
+                                self._update_player(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
                             if channel[6] != None:
-                                self._update_player(channel, channel[6])
+                                upd = channel[6]
+                                channel[6] = None
+                                self._update_player(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_PHASEBUFFER:
                             if channel[7] != None:
-                                self._update_player(channel, channel[7])
+                                upd = channel[7]
+                                channel[7] = None
+                                self._update_player(channel, upd)
                                 changed = True
                         if not changed:
                             if channel[1] == 0 and channel[2] != None:
-                                self._update_player(channel, channel[2])
+                                upd = channel[2]
+                                channel[2] = None
+                                self._update_player(channel, upd)
                             else:
                                 channel[1] = 0
                                 channel[10] += time
@@ -688,23 +689,33 @@ class AudioSequencer():
                         changed = False
                         if reason | cg.SYNTH_STOPPED_OUTBUFFER:
                             if channel[3] != None:
-                                self._update_filter(channel, channel[3])
+                                upd = channel[3]
+                                channel[3] = None
+                                self._update_filter(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_INBUFFER:
                             if channel[4] != None:
-                                self._update_filter(channel, channel[4])
+                                upd = channel[4]
+                                channel[4] = None
+                                self._update_filter(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_VOLBUFFER:
                             if channel[5] != None:
-                                self._update_filter(channel, channel[5])
+                                upd = channel[5]
+                                channel[5] = None
+                                self._update_filter(channel, upd)
                                 changed = True
                         if reason | cg.SYNTH_STOPPED_SLICEBUFFER:
                             if channel[6] != None:
-                                self._update_filter(channel, channel[6])
+                                upd = channel[6]
+                                channel[6] = None
+                                self._update_filter(channel, upd)
                                 changed = True
                         if not changed:
                             if channel[1] == 0 and channel[2] != None:
-                                self._update_filter(channel, channel[2])
+                                upd = channel[2]
+                                channel[2] = None
+                                self._update_filter(channel, upd)
                             else:
                                 channel[1] = 0
                                 channel[8] += time
@@ -731,7 +742,6 @@ class AudioSequencer():
             return
 
         if needed < 0:
-            timepassed = 0
             while True:
                 line = None
                 time = 0
@@ -741,34 +751,29 @@ class AudioSequencer():
                 except seq.SequenceEnded:
                     break
                 self._run_channels(time, line)
-                timepassed += time
-            return timepassed
 
         while needed > 0:
             try:
-                time, line = self._seq.advance(int(needed / self._samplesms))
+                time, line = self._seq.advance(needed)
             except seq.SequenceEnded:
                 self._ended = True
                 break
-            time *= self._samplesms
-            self._run_channels(time, line)
+            print("{} {} {}".format(time, needed, str(line)))
+            self._run_channels(time * self._samplesms, line)
             needed -= time
-            if needed < self._samplesms:
-                self._run_channels(needed, None)
-                break
 
     def _reset_output_positions(self):
         for channel in self._localChannels:
             if isinstance(channel[0], cg.Player):
                 # reset output channel positions to 0
                 if channel[9][0] == None:
-                    channel[0].output_pos(0)
                     channel[10] = 0
+                    channel[0].output_pos(0)
             elif isinstance(channel[0], cg.Filter):
                 # reset output channel positions to 0
                 if channel[9][0] == None:
-                    channel[0].output_pos(0)
                     channel[7] = 0
+                    channel[0].output_pos(0)
 
 
 @cg.SYNTH_FRAME_CB_T
@@ -786,6 +791,17 @@ class AudioSystem():
         self._fragments = 0
         self._inc_fragments()
 
+    @property
+    def rate(self):
+        return self._s.rate
+
+    @property
+    def channels(self):
+        return self._s.channels
+
+    def buffer(self, audioType, data, size):
+        return self._s.buffer(audioType, data, size)
+
     def _inc_fragments(self):
         self._s.enabled(0)
         self._fragments += 1
@@ -801,12 +817,15 @@ class AudioSystem():
                 return 0
             needed = self._s.needed
 
-            if needed > 0:
+            if needed > self._samplesms * 2:
+                needed = int(needed / self._samplesms)
+                needed -= 1
                 self._reset_output_positions()
                 for seq in self._sequences:
                     if not seq[1]:
                         continue
                     seq[0].run(needed)
+                return needed * self._samplesms
 
             return 0
         except cg.CrustyException as e:

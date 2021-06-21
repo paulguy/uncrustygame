@@ -155,7 +155,7 @@ _set_types(_cg.synth_free_player, c_int, [c_void_p, c_uint])
 _set_types(_cg.synth_set_player_input_buffer, c_int, [c_void_p, c_uint, c_uint])
 _set_types(_cg.synth_set_player_input_buffer_pos, c_int, [c_void_p, c_uint, c_float])
 _set_types(_cg.synth_set_player_output_buffer, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.synth_set_player_output_buffer_pos, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.synth_set_player_output_buffer_pos, c_int, [c_void_p, c_uint, c_int])
 _set_types(_cg.synth_set_player_output_mode, c_int, [c_void_p, c_uint, c_int])
 _set_types(_cg.synth_set_player_volume_mode, c_int, [c_void_p, c_uint, c_int])
 _set_types(_cg.synth_set_player_volume, c_int, [c_void_p, c_uint, c_float])
@@ -288,7 +288,7 @@ def initialize_video(title :str,
     return window, renderer, pixfmt
 
 
-def _create_uint_array(iterable):
+def create_uint_array(iterable):
     arrayType = c_uint * len(iterable)
     array = arrayType()
 
@@ -297,6 +297,14 @@ def _create_uint_array(iterable):
 
     return array
 
+def create_float_array(iterable):
+    arrayType = c_float * len(iterable)
+    array = arrayType()
+
+    for item in enumerate(iterable):
+        array[item[0]] = item[1]
+
+    return array
 
 # not sure if it matters but it might or whether it'll even prevent any issues
 # but try to hold references to things in dependent objects just so the internal
@@ -404,21 +412,21 @@ class Tilemap():
             x :int, y :int,
             pitch :int, w :int, h :int,
             values :int):
-        if _cg.tilemap_set_tilemap_map(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
+        if _cg.tilemap_set_tilemap_map(self._ll._ll, self, x, y, pitch, w, h, create_uint_array(values), len(values)) < 0:
             raise CrustyException()
 
     def attr_flags(self,
                    x :int, y :int,
                    pitch :int, w :int, h :int,
                    values :c_void_p):
-        if _cg.tilemap_set_tilemap_attr_flags(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
+        if _cg.tilemap_set_tilemap_attr_flags(self._ll._ll, self, x, y, pitch, w, h, create_uint_array(values), len(values)) < 0:
             raise CrustyException()
 
     def attr_colormod(self,
                       x :int, y :int,
                       pitch :int, w :int, h: int,
                       values :c_void_p):
-        if _cg.tilemap_set_tilemap_attr_colormod(self._ll._ll, self, x, y, pitch, w, h, _create_uint_array(values), len(values)) < 0:
+        if _cg.tilemap_set_tilemap_attr_colormod(self._ll._ll, self, x, y, pitch, w, h, create_uint_array(values), len(values)) < 0:
             raise CrustyException()
 
     def update(self, x :int, y :int, w :int, h :int):

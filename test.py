@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import time
+import array
+from itertools import islice, count
 from ctypes import *
 from sdl2 import *
 import pycrustygame as cg
@@ -32,6 +34,12 @@ def string_to_ints(string):
 
     return(array)
 
+def create_linear_slope(start, end, num):
+    step = (end - start) / (num - 1)
+    slope = array.array('f', islice(count(start, step), num))
+
+    return(slope)
+        
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
@@ -58,9 +66,13 @@ def main():
     l.blendmode(cg.TILEMAP_BLENDMODE_ADD) 
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2)
+    rate = aud.rate
+    envslope = aud.buffer(cg.SYNTH_TYPE_F32,
+                          cg.create_float_array(create_linear_slope(0.0, 1.0, rate)),
+                          rate)
     seq = None
     with open("testseq2.txt", "r") as seqfile:
-        seq = audio.AudioSequencer(seqfile)
+        seq = audio.AudioSequencer(seqfile, [envslope])
     aud.add_sequence(seq)
     aud.enabled(True)
 

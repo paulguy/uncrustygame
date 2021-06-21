@@ -319,6 +319,7 @@ int synth_set_player_input_buffer(Synth *s,
                                   unsigned int inBuffer);
 /*
  * Set the position in samples that the input buffer should start playing from.
+ * Negative positions indicate a position from the end.
  *
  * s        the Synth structure
  * index    the player index to update
@@ -347,7 +348,7 @@ int synth_set_player_output_buffer(Synth *s,
  * is relative to the position which needs to be filled from, and the length
  * being the amount of samples needed, otherwise it's just the whole output
  * buffer.  Since buffers are always filled sample by sample, this value is an
- * integer.
+ * integer.  Negative positions indicate a position from the end.
  *
  * s        the Synth structure
  * index    the player index to update
@@ -356,7 +357,7 @@ int synth_set_player_output_buffer(Synth *s,
  */
 int synth_set_player_output_buffer_pos(Synth *s,
                                        unsigned int index,
-                                       unsigned int outPos);
+                                       int outPos);
 /*
  * Set the output mode or operation for the player.
  * REPLACE: just replace the value in the buffer with the result of the
