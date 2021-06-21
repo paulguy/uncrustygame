@@ -322,7 +322,7 @@ unsigned int synth_get_samples_needed(Synth *s) {
     }
 }
 
-static void update_samples_needed(Synth *s, unsigned int added) {
+static void add_samples(Synth *s, unsigned int added) {
     s->writecursor += added;
     if(s->writecursor >= s->buffersize) {
         s->writecursor -= s->buffersize;
@@ -344,7 +344,7 @@ static unsigned int get_samples_available(Synth *s) {
     }
 }
 
-static void update_samples_available(Synth *s, unsigned int consumed) {
+static void consume_samples(Synth *s, unsigned int consumed) {
     s->readcursor += consumed;
     if(s->readcursor == s->buffersize) {
         s->readcursor = 0;
@@ -455,7 +455,8 @@ void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
     unsigned int available = get_samples_available(s);
     unsigned int todo;
     /* get number of samples */
-    unsigned int length = len / (s->channels * sizeof(float));
+    unsigned int samsize = (SDL_AUDIO_BITSIZE(s->converter.dst_format) / 8) * s->channels;
+    unsigned int length = len / samsize;
 
     if(available == 0) {
         s->underrun = 1;
@@ -464,14 +465,15 @@ void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
 
     todo = MIN(length, available);
     do_synth_audio_cb(s, stream, todo);
-    update_samples_available(s, todo);
+    consume_samples(s, todo);
     length -= todo;
 
     if(length > 0) {
+        stream = &(stream[todo * samsize]);
         available = get_samples_available(s);
         todo = MIN(length, available);
         do_synth_audio_cb(s, stream, todo);
-        update_samples_available(s, todo);
+        consume_samples(s, todo);
         length -= todo;
 
         if(length > 0) {
@@ -688,20 +690,18 @@ int synth_frame(Synth *s) {
         if(got < 0) {
             return(-1);
         }
-        update_samples_needed(s, got);
+        add_samples(s, got);
         s->state = SYNTH_RUNNING;
         SDL_PauseAudioDevice(s->audiodev, 0);
     } else if(s->state == SYNTH_RUNNING) {
         needed = synth_get_samples_needed(s);
         if(needed > 0) {
             SDL_LockAudioDevice(s->audiodev);
-            /* call this again to avoid racing */
-            needed = synth_get_samples_needed(s);
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
                 return(-1);
             }
-            update_samples_needed(s, got);
+            add_samples(s, got);
             SDL_UnlockAudioDevice(s->audiodev);
         }
     }
@@ -1097,12 +1097,14 @@ int synth_set_player_input_buffer(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if(!is_valid_buffer(s, inBuffer, BUFFER_INPUT_ONLY)) {
-        return(-1);
+    if(p->inBuffer != inBuffer) {
+        if(!is_valid_buffer(s, inBuffer, BUFFER_INPUT_ONLY)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->inBuffer);
+        p->inBuffer = inBuffer;
+        add_buffer_ref(s, inBuffer);
     }
-    free_buffer_ref(s, p->inBuffer);
-    p->inBuffer = inBuffer;
-    add_buffer_ref(s, inBuffer);
     p->inPos = 0.0;
     p->loopStart = 0;
     p->loopEnd = get_buffer_size(s, index) - 1;
@@ -1137,12 +1139,14 @@ int synth_set_player_output_buffer(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if(!is_valid_buffer(s, outBuffer, 0)) {
-        return(-1);
+    if(p->outBuffer != outBuffer) {
+        if(!is_valid_buffer(s, outBuffer, 0)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->outBuffer);
+        p->outBuffer = outBuffer;
+        add_buffer_ref(s, outBuffer);
     }
-    free_buffer_ref(s, p->outBuffer);
-    p->outBuffer = outBuffer;
-    add_buffer_ref(s, outBuffer);
     p->outPos = 0;
 
     LOG_PRINTF(s, "outbuf %u\n", p->outBuffer);
@@ -1230,12 +1234,14 @@ int synth_set_player_volume_source(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if(!is_valid_buffer(s, volBuffer, BUFFER_INPUT_ONLY)) {
-        return(-1);
+    if(p->volBuffer != volBuffer) {
+        if(!is_valid_buffer(s, volBuffer, BUFFER_INPUT_ONLY)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->volBuffer);
+        p->volBuffer = volBuffer;
+        add_buffer_ref(s, volBuffer);
     }
-    free_buffer_ref(s, p->volBuffer);
-    p->volBuffer = volBuffer;
-    add_buffer_ref(s, volBuffer);
     p->volPos = 0;
 
     return(0);
@@ -1318,12 +1324,14 @@ int synth_set_player_phase_source(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if(!is_valid_buffer(s, phaseBuffer, BUFFER_INPUT_ONLY)) {
-        return(-1);
+    if(p->phaseBuffer != phaseBuffer) {
+        if(!is_valid_buffer(s, phaseBuffer, BUFFER_INPUT_ONLY)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->phaseBuffer);
+        p->phaseBuffer = phaseBuffer;
+        add_buffer_ref(s, phaseBuffer);
     }
-    free_buffer_ref(s, p->phaseBuffer);
-    p->phaseBuffer = phaseBuffer;
-    add_buffer_ref(s, phaseBuffer);
     p->phasePos = 0;
 
     return(0);
@@ -1369,12 +1377,14 @@ int synth_set_player_speed_source(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if(!is_valid_buffer(s, speedBuffer, BUFFER_INPUT_ONLY)) {
-        return(-1);
+    if(p->speedBuffer != speedBuffer) {
+        if(!is_valid_buffer(s, speedBuffer, BUFFER_INPUT_ONLY)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->speedBuffer);
+        p->speedBuffer = speedBuffer;
+        add_buffer_ref(s, speedBuffer);
     }
-    free_buffer_ref(s, p->speedBuffer);
-    p->speedBuffer = speedBuffer;
-    add_buffer_ref(s, speedBuffer);
     p->speedPos = 0;
 
     return(0);
@@ -1706,15 +1716,23 @@ int synth_run_player(Synth *syn,
         todo = MIN((int)reqSamples,
                    get_buffer_size(syn, pl->outBuffer) - (int)outPos);
 
-        /* if it would go past the end, split it in to 2 calls */
-        if((unsigned int)todo + outPos > syn->buffersize - syn->writecursor) {
+        if((unsigned int)syn->writecursor + outPos >= syn->buffersize) {
+            /* if it starts past the end, figure out where to start from the
+             * beginning */
+            unsigned int temp = syn->writecursor;
+            syn->writecursor = 0;
+            o = get_buffer_data(syn, pl->outBuffer);
+            syn->writecursor = temp;
+
+            samples = do_synth_run_player(syn, pl, i, o, syn->writecursor + outPos - syn->buffersize, todo);
+        } else if((unsigned int)syn->writecursor + outPos + todo >= syn->buffersize) {
+            /* if it would go past the end, split it in to 2 calls */
             samples = do_synth_run_player(syn, pl, i, o, outPos,
                                           syn->buffersize - syn->writecursor - outPos);
             todo -= samples;
-            /* if there's more to do and it likely returned because it
-             * completed the requested amount, try again */
-            if(todo > 0 &&
-               (unsigned int)samples + outPos == syn->buffersize - syn->writecursor) {
+            /* if there's more to do, try updating the pointer and trying
+             * again. */
+            if(todo > 0) {
                 /* store it temporarily so when it's properly updated later,
                  * it'll be correct */
                 unsigned int temp = syn->writecursor;

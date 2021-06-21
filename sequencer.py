@@ -47,6 +47,7 @@ class SequenceDescription():
 class Sequencer():
     def __init__(self, desc, file):
         self._desc = desc
+        self._lineRead = 1
         self._read_file(file)
         self.reset()
 
@@ -124,30 +125,37 @@ class Sequencer():
             newrow = self._read_row(structs[i].split(), rowDesc, initial=initial)
             fullRow.append(newrow)
 
+        self._lineRead += 1
         return fullRow
 
     def _read_file(self, file):
-        self._row = list()
-        self._pattern = list()
-        self._order = list()
-        self._initial = self._read_line(file, initial=True)
+        try:
+            self._row = list()
+            self._pattern = list()
+            self._order = list()
+            self._initial = self._read_line(file, initial=True)
 
-        patterns = int(file.readline())
-        for i in range(patterns):
-            patlen = int(file.readline())
-            pattern = list()
-            for j in range(patlen):
-                pattern.append(self._read_line(file))
-            self._pattern.append(pattern)
-        print(self._row)
+            patterns = int(file.readline())
+            self._lineRead += 1
+            for i in range(patterns):
+                patlen = int(file.readline())
+                self._lineRead += 1
+                pattern = list()
+                for j in range(patlen):
+                    pattern.append(self._read_line(file))
+                self._pattern.append(pattern)
+            print(self._row)
 
-        ordersData = file.readline().split()
-        for item in ordersData:
-            order = int(item)
-            if order < 0 or order > len(self._pattern) - 1:
-                raise IndexError("order refers to pattern out of range")
-            self._order.append(int(item))
-    
+            ordersData = file.readline().split()
+            for item in ordersData:
+                order = int(item)
+                if order < 0 or order > len(self._pattern) - 1:
+                    raise IndexError("order refers to pattern out of range")
+                self._order.append(int(item))
+        except Exception as e:
+            print("Exception on line {}.".format(self._lineRead))
+            raise e
+
     def _write_row(self, file, row, desc, initial):
         changeMask = 0
         if not initial:

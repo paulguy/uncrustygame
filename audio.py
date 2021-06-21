@@ -368,8 +368,7 @@ class AudioSequencer():
             player[8] = b
             p.input_buffer(b[2])
         if status[1] != None:
-            pos = status[1] * self._samplesms
-            p.input_pos(pos)
+            p.input_pos(status[1] * self._samplesms)
         if status[2] != None:
             buf = status[2]
             if buf >= self._seqChannels:
@@ -379,9 +378,7 @@ class AudioSequencer():
             player[9] = b
             p.output_buffer(b[2])
         if status[3] != None:
-            pos = status[3] * self._samplesms
-            player[10] = pos
-            p.output_pos(pos)
+            p.output_pos(status[3] * self._samplesms)
         if status[4] != None:
             p.output_mode(status[4])
         if status[5] != None:
@@ -444,8 +441,7 @@ class AudioSequencer():
             b = self._buffer[buf]
             f.input_buffer(b[2])
         if status[1] != None:
-            pos = status[1] * self._samplesms
-            f.input_pos(pos)
+            f.input_pos(status[1] * self._samplesms)
         if status[2] != None:
             buf = status[2]
             if buf >= self._seqChannels:
@@ -455,9 +451,7 @@ class AudioSequencer():
             flt[7] = b
             f.output_buffer(b[2])
         if status[3] != None:
-            pos = status[3] * self._samplesms
-            flt[8] = outpos
-            f.output_pos(outpos)
+            f.output_pos(statis[3] * self._samplesms)
         if status[4] != None:
             buf = status[4]
             if buf >= self._seqChannels:
@@ -664,17 +658,9 @@ class AudioSequencer():
                                 self._update_player(channel, upd)
                             else:
                                 channel[1] = 0
-                                channel[10] += time
-                                bufsize = channel[9][2].size
-                                if channel[10] >= bufsize:
-                                    channel[10] = bufsize
-                                    channel[0].output_pos(bufsize - 1)
-                                else:
-                                    channel[0].output_pos(channel[10])
                                 break
                     time -= got
                     channel[1] -= got
-                    channel[10] += got
             elif isinstance(channel[0], cg.Filter):
                 time = reqtime
                 if line != None and line[i] != None:
@@ -718,17 +704,9 @@ class AudioSequencer():
                                 self._update_filter(channel, upd)
                             else:
                                 channel[1] = 0
-                                channel[8] += time
-                                bufsize = channel[7][2].size
-                                if channel[8] >= bufsize:
-                                    channel[8] = bufsize
-                                    channel[0].output_pos(bufsize - 1)
-                                else:
-                                    channel[0].output_pos(channel[8])
                                 break
                     time -= got
                     channel[1] -= got
-                    channel[8] += got
             else: # silence
                 if line != None and line[i] != None:
                     self._update_silence(channel, line[i])
@@ -751,28 +729,31 @@ class AudioSequencer():
                 except seq.SequenceEnded:
                     break
                 self._run_channels(time, line)
-
-        while needed > 0:
+        elif needed == 0:
             try:
-                time, line = self._seq.advance(needed)
+                _, line = self._seq.advance(0)
             except seq.SequenceEnded:
                 self._ended = True
-                break
-            print("{} {} {}".format(time, needed, str(line)))
-            self._run_channels(time * self._samplesms, line)
-            needed -= time
+            self._run_channels(0, line)
+        else:
+            while needed > 0:
+                try:
+                    time, line = self._seq.advance(needed)
+                except seq.SequenceEnded:
+                    self._ended = True
+                    break
+                self._run_channels(time * self._samplesms, line)
+                needed -= time
 
     def _reset_output_positions(self):
         for channel in self._localChannels:
             if isinstance(channel[0], cg.Player):
                 # reset output channel positions to 0
                 if channel[9][0] == None:
-                    channel[10] = 0
                     channel[0].output_pos(0)
             elif isinstance(channel[0], cg.Filter):
                 # reset output channel positions to 0
                 if channel[9][0] == None:
-                    channel[7] = 0
                     channel[0].output_pos(0)
 
 
@@ -815,19 +796,15 @@ class AudioSystem():
                 # s.enabled() will eventually call this function again so when it
                 # finally returns back to here, just return again
                 return 0
-            needed = self._s.needed
 
-            if needed > self._samplesms * 2:
-                needed = int(needed / self._samplesms)
-                needed -= 1
-                self._reset_output_positions()
-                for seq in self._sequences:
-                    if not seq[1]:
-                        continue
-                    seq[0].run(needed)
-                return needed * self._samplesms
+            needed = int(self._s.needed / self._samplesms)
+            for seq in self._sequences:
+                if not seq[1]:
+                    continue
+                seq[0]._reset_output_positions()
+                seq[0].run(needed)
 
-            return 0
+            return needed * self._samplesms
         except cg.CrustyException as e:
             # catch crusty exceptions since they'll have already printed error
             # output, then pass it down along the stack so the main loop can
@@ -864,8 +841,3 @@ class AudioSystem():
         except cg.CrustyException as e:
             self._s.print_full_stats()
             raise e
-
-    def _reset_output_positions(self):
-        for seq in self._sequences:
-            if seq[1]:
-                seq[0]._reset_output_positions()
