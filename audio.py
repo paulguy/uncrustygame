@@ -24,7 +24,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(self, file, macros):
+    def __init__(self, file, macros, startLine=0):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -35,9 +35,18 @@ class MacroReader():
         self._file = file
         self._macros = macros
         self._line = None
+        self._lines = startLine
 
     def add_macros(self, macros):
         self._macros.extend(macros)
+
+    @property
+    def curline(self):
+        return self._lines
+
+    @property
+    def name(self):
+        return self._file.name
 
     def readline(self):
         """
@@ -47,6 +56,7 @@ class MacroReader():
             line = ""
             while True:
                 line += self._file.readline()
+                self._lines += 1
                 line = line.split(';', maxsplit=1)
                 line = line[0].strip()
                 if len(line) > 0 and line[-1] == '\\':
@@ -120,171 +130,175 @@ class AudioSequencer():
         """
         if infile.readline().strip() != "CrustyTracker":
             raise Exception("File isn't a CrustyTracker sequence.")
-        infile = MacroReader(infile, _BUILTIN_MACROS)
-        line = infile.readline().split()
-        self._version = int(line[0])
-        self._seqChannels = int(line[1])
-        if self._version != 1:
-            raise Exception("Unsupported version: {}".format(version))
-        macros = int(infile.readline())
-        macro = list()
-        # read a list of macros, macros are formatted:
-        # name arg0name arg1name ...=replacement
-        # macro names are found in the file and replaced with replacement
-        # and instances of argument names are replaced with the arguments
-        # provided when the macro is used like:
-        # name arg0 arg1 ...
-        for i in range(macros):
-            line = infile.readline().strip()
-            macroline = line.split('=', maxsplit=1)
-            lhs = macroline[0].split()
-            macroname = lhs[0]
-            macroargs = lhs[1:]
-            macro.append((macroname, macroargs, macroline[1]))
-        print(macro)
-        infile.add_macros(macro)
-        tags = int(infile.readline())
-        self._tag = dict()
-        for i in range(tags):
-            tagline = line.split('=', maxsplit=1)
-            self._tag[tagline[0]] = tagline[1]
-        self._tune()
-        line = infile.readline().split()
-        buffers = int(line[0])
-        inbufs = int(line[1])
-        self._buffer = list()
-        for i in range(buffers):
-            bufferline = infile.readline().split(maxsplit=1)
-            item = None
-            # single value means the buffer will be provided
-            try:
-                # add the time in milliseconds of an empty buffer
-                item = int(bufferline[0])
-            except ValueError:
-                # add the string to use as a filename later
-                item = bufferline[0].strip()
-            self._buffer.append([item, None, None])
-        for i in range(inbufs):
-            if not isinstance(buffer[i], cg.Buffer):
-                raise Exception("Buffers must be external Buffers.")
-            # import an external buffer
-            self._buffer.append([buffer[i], 0, None])
-        print(self._buffer)
-        channels = int(infile.readline())
-        self._channel = list()
-        for i in range(channels):
-            channel = infile.readline().strip().lower()
-            if channel == CHANNEL_TYPE_SILENCE:
-                self._channel.append(CHANNEL_TYPE_SILENCE)
-            elif channel == CHANNEL_TYPE_PLAYER:
-                self._channel.append(CHANNEL_TYPE_PLAYER)
-            elif channel == CHANNEL_TYPE_FILTER:
-                self._channel.append(CHANNEL_TYPE_FILTER)
-            else:
-                raise Exception("Invalid channel type: {}".format(channel))
-        print(self._channel)
-        seqDesc = seq.SequenceDescription()
-        silenceDesc = seqDesc.add_row_description()
-        # output buffer 0x4
-        seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-        # start         0x2
-        seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-        # length        0x1
-        seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-        playerDesc = seqDesc.add_row_description()
-        # input buffer                      0x200000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # input buffer pos                  0x100000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-        # output buffer                     0x080000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # output buffer pos                 0x040000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # output mode                       0x020000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # volume                            0x010000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-        # volume source                     0x008000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # volume mode                       0x004000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # speed (frequency, /speed, note)   0x002000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_STR)
-        # speed source                      0x001000
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # speed mode                        0x000800
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # phase source                      0x000400
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # loop start                        0x000200
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # loop end                          0x000100
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # player mode                       0x000080
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # run length                        0x000040
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-        # stopped requested                 0x000020
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped outbuffer                 0x000010
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped inbuffer                  0x000008
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped volbuffer                 0x000004
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped speedbuffer               0x000002
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        # stopped phasebuffer               0x000001
-        seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-        filterDesc = seqDesc.add_row_description()
-        # input buffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # input buffer pos
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # output buffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # output buffer pos
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # filter buffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # filter buffer start
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # filter buffer slices
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # slice
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # slice source
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # filter mode
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # output mode
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # volume
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
-        # volume source
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # volume mode
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # run length
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-        # stopped requested
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-        # stopped outbuffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-        # stopped inbuffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-        # stopped volbuffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-        # stopped slicebuffer
-        seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-        for channel in self._channel:
-            if channel == CHANNEL_TYPE_SILENCE:
-                seqDesc.add_column(silenceDesc)
-            elif channel == CHANNEL_TYPE_PLAYER:
-                seqDesc.add_column(playerDesc)
-            elif channel == CHANNEL_TYPE_FILTER:
-                seqDesc.add_column(filterDesc)
-        self._seq = seq.Sequencer(seqDesc, infile)
+        infile = MacroReader(infile, _BUILTIN_MACROS, startLine=1)
+        try:
+            line = infile.readline().split()
+            self._version = int(line[0])
+            self._seqChannels = int(line[1])
+            if self._version != 1:
+                raise Exception("Unsupported version: {}".format(version))
+            macros = int(infile.readline())
+            macro = list()
+            # read a list of macros, macros are formatted:
+            # name arg0name arg1name ...=replacement
+            # macro names are found in the file and replaced with replacement
+            # and instances of argument names are replaced with the arguments
+            # provided when the macro is used like:
+            # name arg0 arg1 ...
+            for i in range(macros):
+                line = infile.readline().strip()
+                macroline = line.split('=', maxsplit=1)
+                lhs = macroline[0].split()
+                macroname = lhs[0]
+                macroargs = lhs[1:]
+                macro.append((macroname, macroargs, macroline[1]))
+            print(macro)
+            infile.add_macros(macro)
+            tags = int(infile.readline())
+            self._tag = dict()
+            for i in range(tags):
+                tagline = line.split('=', maxsplit=1)
+                self._tag[tagline[0]] = tagline[1]
+            self._tune()
+            line = infile.readline().split()
+            buffers = int(line[0])
+            inbufs = int(line[1])
+            self._buffer = list()
+            for i in range(buffers):
+                bufferline = infile.readline().split(maxsplit=1)
+                item = None
+                # single value means the buffer will be provided
+                try:
+                    # add the time in milliseconds of an empty buffer
+                    item = int(bufferline[0])
+                except ValueError:
+                    # add the string to use as a filename later
+                    item = bufferline[0].strip()
+                self._buffer.append([item, None, None])
+            for i in range(inbufs):
+                if not isinstance(buffer[i], cg.Buffer):
+                    raise Exception("Buffers must be external Buffers.")
+                # import an external buffer
+                self._buffer.append([buffer[i], 0, None])
+            print(self._buffer)
+            channels = int(infile.readline())
+            self._channel = list()
+            for i in range(channels):
+                channel = infile.readline().strip().lower()
+                if channel == CHANNEL_TYPE_SILENCE:
+                    self._channel.append(CHANNEL_TYPE_SILENCE)
+                elif channel == CHANNEL_TYPE_PLAYER:
+                    self._channel.append(CHANNEL_TYPE_PLAYER)
+                elif channel == CHANNEL_TYPE_FILTER:
+                    self._channel.append(CHANNEL_TYPE_FILTER)
+                else:
+                    raise Exception("Invalid channel type: {}".format(channel))
+            print(self._channel)
+            seqDesc = seq.SequenceDescription()
+            silenceDesc = seqDesc.add_row_description()
+            # output buffer 0x4
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
+            # start         0x2
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
+            # length        0x1
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
+            playerDesc = seqDesc.add_row_description()
+            # input buffer                      0x200000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # input buffer pos                  0x100000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
+            # output buffer                     0x080000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # output buffer pos                 0x040000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # output mode                       0x020000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # volume                            0x010000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
+            # volume source                     0x008000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # volume mode                       0x004000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # speed (frequency, /speed, note)   0x002000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_STR)
+            # speed source                      0x001000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # speed mode                        0x000800
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # phase source                      0x000400
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # loop start                        0x000200
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # loop end                          0x000100
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # player mode                       0x000080
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # run length                        0x000040
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # stopped requested                 0x000020
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # stopped outbuffer                 0x000010
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # stopped inbuffer                  0x000008
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # stopped volbuffer                 0x000004
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # stopped speedbuffer               0x000002
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # stopped phasebuffer               0x000001
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            filterDesc = seqDesc.add_row_description()
+            # input buffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # input buffer pos
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # output buffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # output buffer pos
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # filter buffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # filter buffer start
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # filter buffer slices
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # slice
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # slice source
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # filter mode
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # output mode
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # volume
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
+            # volume source
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # volume mode
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # run length
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            # stopped requested
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+            # stopped outbuffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+            # stopped inbuffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+            # stopped volbuffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+            # stopped slicebuffer
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+            for channel in self._channel:
+                if channel == CHANNEL_TYPE_SILENCE:
+                    seqDesc.add_column(silenceDesc)
+                elif channel == CHANNEL_TYPE_PLAYER:
+                    seqDesc.add_column(playerDesc)
+                elif channel == CHANNEL_TYPE_FILTER:
+                    seqDesc.add_column(filterDesc)
+            self._seq = seq.Sequencer(seqDesc, infile)
+        except Exception as e:
+            print("Exception on line {} in {}.".format(infile.curline, infile.name))
+            raise e
         self._loaded = False
         self._ended = False
 
@@ -368,7 +382,13 @@ class AudioSequencer():
             player[8] = b
             p.input_buffer(b[2])
         if status[1] != None:
-            p.input_pos(status[1] * self._samplesms)
+            pos = status[1]
+            # make -1 be the real last sample
+            if pos < 0:
+                pos = (pos * self._samplesms) + (self._samplesms - 1)
+            else:
+                pos = pos * self._samplesms
+            p.input_pos(pos)
         if status[2] != None:
             buf = status[2]
             if buf >= self._seqChannels:
@@ -378,7 +398,12 @@ class AudioSequencer():
             player[9] = b
             p.output_buffer(b[2])
         if status[3] != None:
-            p.output_pos(status[3] * self._samplesms)
+            pos = status[3]
+            if pos < 0:
+                pos = (pos * self._samplesms) + (self._samplesms - 1)
+            else:
+                pos = pos * self._samplesms
+            p.output_pos(pos)
         if status[4] != None:
             p.output_mode(status[4])
         if status[5] != None:

@@ -47,7 +47,6 @@ class SequenceDescription():
 class Sequencer():
     def __init__(self, desc, file):
         self._desc = desc
-        self._lineRead = 1
         self._read_file(file)
         self.reset()
 
@@ -92,24 +91,30 @@ class Sequencer():
                     row.append(None)
                     continue
 
-            if desc[i] == FIELD_TYPE_INT:
-                row.append(int(struct[pos]))
-            elif desc[i] == FIELD_TYPE_HEX:
-                row.append(int(struct[pos], base=16))
-            elif desc[i] == FIELD_TYPE_FLOAT:
-                row.append(float(struct[pos]))
-            elif desc[i] == FIELD_TYPE_STR:
-                row.append(struct[pos])
-            elif isinstance(desc[i], tuple):
-                # callable
-                row.append(desc[i][1](desc[i][2], struct[pos]))
-            elif isinstance(desc[i], int):
-                rowDesc = self._desc._rowdesc[desc[i]]
-                # pass False because an initial row argument may be an empty
-                # row
-                newrow = self._read_row(struct[pos:], rowDesc, initial=False)
-                row.append(newrow)
-            pos += 1
+            try:
+                if desc[i] == FIELD_TYPE_INT:
+                    row.append(int(struct[pos]))
+                elif desc[i] == FIELD_TYPE_HEX:
+                    row.append(int(struct[pos], base=16))
+                elif desc[i] == FIELD_TYPE_FLOAT:
+                    row.append(float(struct[pos]))
+                elif desc[i] == FIELD_TYPE_STR:
+                    row.append(struct[pos])
+                elif isinstance(desc[i], tuple):
+                    # callable
+                    row.append(desc[i][1](desc[i][2], struct[pos]))
+                elif isinstance(desc[i], int):
+                    rowDesc = self._desc._rowdesc[desc[i]]
+                    # pass False because an initial row argument may be an empty
+                    # row
+                    newrow = self._read_row(struct[pos:], rowDesc, initial=False)
+                    row.append(newrow)
+                pos += 1
+            except IndexError as e:
+                print("Not enough values: {}".format(struct))
+                if not initial:
+                    print(" Change mask: {:X}".format(changeMask))
+                raise e
 
         return self._add_row(row)
 
@@ -125,36 +130,29 @@ class Sequencer():
             newrow = self._read_row(structs[i].split(), rowDesc, initial=initial)
             fullRow.append(newrow)
 
-        self._lineRead += 1
         return fullRow
 
     def _read_file(self, file):
-        try:
-            self._row = list()
-            self._pattern = list()
-            self._order = list()
-            self._initial = self._read_line(file, initial=True)
+        self._row = list()
+        self._pattern = list()
+        self._order = list()
+        self._initial = self._read_line(file, initial=True)
 
-            patterns = int(file.readline())
-            self._lineRead += 1
-            for i in range(patterns):
-                patlen = int(file.readline())
-                self._lineRead += 1
-                pattern = list()
-                for j in range(patlen):
-                    pattern.append(self._read_line(file))
-                self._pattern.append(pattern)
-            print(self._row)
+        patterns = int(file.readline())
+        for i in range(patterns):
+            patlen = int(file.readline())
+            pattern = list()
+            for j in range(patlen):
+                pattern.append(self._read_line(file))
+            self._pattern.append(pattern)
+        print(self._row)
 
-            ordersData = file.readline().split()
-            for item in ordersData:
-                order = int(item)
-                if order < 0 or order > len(self._pattern) - 1:
-                    raise IndexError("order refers to pattern out of range")
-                self._order.append(int(item))
-        except Exception as e:
-            print("Exception on line {}.".format(self._lineRead))
-            raise e
+        ordersData = file.readline().split()
+        for item in ordersData:
+            order = int(item)
+            if order < 0 or order > len(self._pattern) - 1:
+                raise IndexError("order refers to pattern out of range")
+            self._order.append(int(item))
 
     def _write_row(self, file, row, desc, initial):
         changeMask = 0

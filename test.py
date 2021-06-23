@@ -70,9 +70,15 @@ def main():
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
                           cg.create_float_array(create_linear_slope(0.0, 1.0, rate)),
                           rate)
+    benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
+                               cg.create_float_array(create_linear_slope(1.0, 0.0, rate)),
+                               rate)
+    bendupslope = aud.buffer(cg.SYNTH_TYPE_F32,
+                             cg.create_float_array(create_linear_slope(1.0, 2.0, rate)),
+                             rate)
     seq = None
     with open("testseq2.txt", "r") as seqfile:
-        seq = audio.AudioSequencer(seqfile, [envslope])
+        seq = audio.AudioSequencer(seqfile, [envslope, benddownslope, bendupslope])
     aud.add_sequence(seq)
     aud.enabled(True)
 
