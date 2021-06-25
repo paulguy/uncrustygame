@@ -73,15 +73,15 @@ class Sequencer():
         return len(self._row) - 1
 
     def _read_row(self, struct, desc, initial=False):
+        pos = 0
         changeMask = None
         if not initial:
             changeMask = int(struct[0], base=16)
             if changeMask == 0:
-                return None
-            struct = struct[1:]
+                return 1, None
+            pos += 1
 
         row = list()
-        pos = 0
         for i in range(len(desc)):
             if not initial:
                 # changeMask bits are left to right so logically reversed from
@@ -107,16 +107,23 @@ class Sequencer():
                     rowDesc = self._desc._rowdesc[desc[i]]
                     # pass False because an initial row argument may be an empty
                     # row
-                    newrow = self._read_row(struct[pos:], rowDesc, initial=False)
+                    adv, newrow = self._read_row(struct[pos:], rowDesc, initial=False)
                     row.append(newrow)
+                    pos += adv
+                    continue
                 pos += 1
             except IndexError as e:
                 print("Not enough values: {}".format(struct))
                 if not initial:
                     print(" Change mask: {:X}".format(changeMask))
                 raise e
+            except ValueError as e:
+                print("Wrong value type for item {}".format(pos))
+                print(" Values: {}".format(struct))
+                print(" Descriptor Item: {}".format(i))
+                raise e
 
-        return self._add_row(row)
+        return pos, self._add_row(row)
 
     def _read_line(self, file, initial=False):
         structs = file.readline().split('|')
@@ -127,7 +134,7 @@ class Sequencer():
         for i in range(self._desc.columns):
             columnDesc = self._desc._column[i]
             rowDesc = self._desc._rowdesc[columnDesc]
-            newrow = self._read_row(structs[i].split(), rowDesc, initial=initial)
+            _, newrow = self._read_row(structs[i].split(), rowDesc, initial=initial)
             fullRow.append(newrow)
 
         return fullRow

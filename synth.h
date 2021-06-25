@@ -598,7 +598,7 @@ int synth_set_filter_input_buffer(Synth *s,
  */
 int synth_set_filter_input_buffer_pos(Synth *s,
                                       unsigned int index,
-                                      unsigned int inPos);
+                                      int inPos);
 /*
  * Set the buffer containing the filter kernel(s) this filter should use.
  *
@@ -621,7 +621,7 @@ int synth_set_filter_buffer(Synth *s,
  */
 int synth_set_filter_buffer_start(Synth *s,
                                   unsigned int index,
-                                  unsigned int startPos);
+                                  int startPos);
 /*
  * Set the number of consecutive filter kernels starting from the start
  * position which are in the filter buffer.
@@ -657,7 +657,7 @@ int synth_set_filter_mode(Synth *s,
  */
 int synth_set_filter_slice(Synth *s,
                            unsigned int index,
-                           unsigned int slice);
+                           int slice);
 /*
  * Provide the source buffer for slices, valid values are 0.0 to 1.0,
  * everything else will just wrap between those values.  0.0 will be the filter
@@ -693,7 +693,7 @@ int synth_set_filter_output_buffer(Synth *s,
  */
 int synth_set_filter_output_buffer_pos(Synth *s,
                                        unsigned int index,
-                                       unsigned int outPos);
+                                       int outPos);
 /*
  * Set the filter's output mode.  Either overwrite values in the output buffer
  * (REPLACE) or add/mix them together (ADD).

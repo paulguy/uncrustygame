@@ -24,7 +24,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(self, file, macros, startLine=0):
+    def __init__(self, file, startLine=0):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -33,7 +33,7 @@ class MacroReader():
         string and arg names in the replacement replaced with args
         """
         self._file = file
-        self._macros = macros
+        self._macros = list()
         self._line = None
         self._lines = startLine
 
@@ -111,7 +111,7 @@ class MacroReader():
         return line
 
 
-_BUILTIN_MACROS = [
+_BUILTIN_MACROS = (
     ("SYNTH_OUTPUT_REPLACE", (), str(cg.SYNTH_OUTPUT_REPLACE)),
     ("SYNTH_OUTPUT_ADD", (), str(cg.SYNTH_OUTPUT_ADD)),
     ("SYNTH_AUTO_CONSTANT", (), str(cg.SYNTH_AUTO_CONSTANT)),
@@ -119,7 +119,7 @@ _BUILTIN_MACROS = [
     ("SYNTH_MODE_ONCE", (), str(cg.SYNTH_MODE_ONCE)),
     ("SYNTH_MODE_LOOP", (), str(cg.SYNTH_MODE_LOOP)),
     ("SYNTH_MODE_PHASE_SOURCE", (), str(cg.SYNTH_MODE_PHASE_SOURCE))
-]
+)
 
 class AudioSequencer():
     def __init__(self, infile, buffer=None):
@@ -128,10 +128,11 @@ class AudioSequencer():
 
         buffers is a list of external Buffer objects.
         """
-        if infile.readline().strip() != "CrustyTracker":
-            raise Exception("File isn't a CrustyTracker sequence.")
-        infile = MacroReader(infile, _BUILTIN_MACROS, startLine=1)
+        infile = MacroReader(infile)
+        infile.add_macros(_BUILTIN_MACROS)
         try:
+            if infile.readline().strip() != "CrustyTracker":
+                raise Exception("File isn't a CrustyTracker sequence.")
             line = infile.readline().split()
             self._version = int(line[0])
             self._seqChannels = int(line[1])
@@ -644,8 +645,14 @@ class AudioSequencer():
                         get = channel[1]
                     got = channel[0].run(get)
                     if got == 0:
-                        reason = channel[0].stop_reason()
                         changed = False
+                        reason = channel[0].stop_reason()
+                        if channel[1] == 0:
+                            if channel[2] != None:
+                                upd = channel[2]
+                                channel[2] = None
+                                self._update_player(channel, upd)
+                                changed = True
                         if reason | cg.SYNTH_STOPPED_OUTBUFFER:
                             if channel[3] != None:
                                 upd = channel[3]
@@ -677,13 +684,8 @@ class AudioSequencer():
                                 self._update_player(channel, upd)
                                 changed = True
                         if not changed:
-                            if channel[1] == 0 and channel[2] != None:
-                                upd = channel[2]
-                                channel[2] = None
-                                self._update_player(channel, upd)
-                            else:
-                                channel[1] = 0
-                                break
+                            channel[1] = 0
+                            break
                     time -= got
                     channel[1] -= got
             elif isinstance(channel[0], cg.Filter):
@@ -696,8 +698,14 @@ class AudioSequencer():
                         get = channel[1]
                     got = channel[0].run(get)
                     if got == 0:
-                        reason = channel[0].stop_reason()
                         changed = False
+                        reason = channel[0].stop_reason()
+                        if channel[1] == 0:
+                            if channel[2] != None:
+                                upd = channel[2]
+                                channel[2] = None
+                                self._update_filter(channel, upd)
+                                changed = True
                         if reason | cg.SYNTH_STOPPED_OUTBUFFER:
                             if channel[3] != None:
                                 upd = channel[3]
@@ -723,13 +731,8 @@ class AudioSequencer():
                                 self._update_filter(channel, upd)
                                 changed = True
                         if not changed:
-                            if channel[1] == 0 and channel[2] != None:
-                                upd = channel[2]
-                                channel[2] = None
-                                self._update_filter(channel, upd)
-                            else:
-                                channel[1] = 0
-                                break
+                            channel[1] = 0
+                            break
                     time -= got
                     channel[1] -= got
             else: # silence

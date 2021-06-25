@@ -2,6 +2,8 @@
 
 import time
 import array
+import random
+from math import sqrt
 from itertools import islice, count
 from ctypes import *
 from sdl2 import *
@@ -37,11 +39,58 @@ def string_to_ints(string):
 def create_linear_slope(start, end, num):
     step = (end - start) / (num - 1)
     slope = array.array('f', islice(count(start, step), num))
-
     return(slope)
-        
+
+class LogSlope():
+    def __init__(self, start, end, num):
+        self._num = num
+        self._start = start
+        self._range = end - start
+        self._val = 0
+        self._step = 1.0 / (num - 1)
+
+    def __len__(self):
+        return self._num
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        val = sqrt(self._val * self._step)
+        self._val += 1
+        if self._val == self._num:
+            raise StopIteration()
+        return self._start + (val * self._range)
+
+def create_sqrt_slope(start, end, num):
+    slope = array.array('f', LogSlope(start, end, num))
+    return(slope)
+
+class RandomNoise():
+    def __init__(self, low, high, num):
+        self._low = low
+        self._high = high
+        self._num = num
+        self._val = 0
+
+    def __len__(self):
+        return self._num
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self._val += 1
+        if self._val > self._num:
+            raise StopIteration()
+        return random.uniform(self._low, self._high)
+
+def create_random_noise(low, high, num):
+    noise = array.array('f', RandomNoise(low, high, num))
+    return(noise)
 
 def main():
+    random.seed()
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
     window, renderer, pixfmt = cg.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC)
     red = cg.tilemap_color(255, 0, 0, 255)
@@ -71,17 +120,17 @@ def main():
                           cg.create_float_array(create_linear_slope(0.0, 1.0, rate)),
                           rate)
     benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                               cg.create_float_array(create_linear_slope(1.0, 0.0, rate)),
+                               cg.create_float_array(create_sqrt_slope(1.0, 0.5, rate)),
                                rate)
     bendupslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                             cg.create_float_array(create_linear_slope(1.0, 2.0, rate)),
+                             cg.create_float_array(create_sqrt_slope(1.0, 2.0, rate)),
                              rate)
-    seq = None
-    with open("testseq2.txt", "r") as seqfile:
-        seq = audio.AudioSequencer(seqfile, [envslope, benddownslope, bendupslope])
-    aud.add_sequence(seq)
+    noise = aud.buffer(cg.SYNTH_TYPE_F32,
+                       cg.create_float_array(create_random_noise(-1.0, 1.0, rate)),
+                       rate)
     aud.enabled(True)
 
+    seq = None
     running = True
     playing = True
     lastTime = time.monotonic()
@@ -96,6 +145,13 @@ def main():
                 if event.key.keysym.sym == SDLK_q:
                     running = False
                 elif event.key.keysym.sym == SDLK_s:
+                    aud.enabled(False)
+                    if seq != None:
+                        aud.del_sequence(seq)
+                    with open("testseq2.txt", "r") as seqfile:
+                        seq = audio.AudioSequencer(seqfile, [envslope, benddownslope, bendupslope, noise])
+                    aud.add_sequence(seq)
+                    aud.enabled(True)
                     aud.sequence_enabled(seq, True)
 
         clear_frame(ll, 32, 128, 192)
@@ -103,15 +159,17 @@ def main():
         aud.frame()
 
         thisTime = time.monotonic()
-        if running and seq.ended:
+        if seq != None and seq.ended:
+            aud.del_sequence(seq)
+            seq = None
             print("Sequence ended")
-            running = False
 
         lastTime = thisTime
         SDL_RenderPresent(renderer)
 
     aud.enabled(False)
-    aud.del_sequence(seq)
+    if seq != None:
+        aud.del_sequence(seq)
     SDL_DestroyRenderer(renderer)
     SDL_DestroyWindow(window)
 
