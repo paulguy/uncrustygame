@@ -57,9 +57,9 @@ class LogSlope():
 
     def __next__(self):
         val = sqrt(self._val * self._step)
-        self._val += 1
         if self._val == self._num:
             raise StopIteration()
+        self._val += 1
         return self._start + (val * self._range)
 
 def create_sqrt_slope(start, end, num):
