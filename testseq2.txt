@@ -1,5 +1,5 @@
 CrustyTracker
-1 2
+1 2 ; version 1, stereo
 17 ; macros
 DIVTIME=250
 ENV_BUF=6
@@ -29,8 +29,8 @@ NOTE_BEND ENVB BENDB=49840 0 ENVB BENDB SYNTH_AUTO_SOURCE DIVTIME
 DO_RUN=100040 0.0 DIVTIME
 CLEAR=1 DIVTIME|1 DIVTIME
 0 ; tags
-4 4 ; 1 file, 3 internal, 4 external
-square.wav  ; 2
+4 5 ; 2 outputs, 1 file, 3 internal, 5 external
+sine.wav  ; 2
 DIVTIME   ; 3
 DIVTIME   ; 4
 DIVTIME   ; 5
@@ -38,12 +38,14 @@ DIVTIME   ; 5
 ; bend down 7
 ; bend up   8
 ; noise     9
+; filter    10
 7 ; channels
 silence
 silence
 player
 player
 player
+;filter
 player
 player
 DIVTIME|4 0 0|5 0 0| \

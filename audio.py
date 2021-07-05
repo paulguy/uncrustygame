@@ -538,6 +538,7 @@ class AudioSequencer():
         newbuffer.extend(self._buffer)
         self._buffer = newbuffer
         for buffer in self._buffer:
+            print(buffer)
             if buffer[0] == None:
                 # nothing to do for output buffers
                 pass

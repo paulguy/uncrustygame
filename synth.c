@@ -74,6 +74,9 @@ typedef struct {
     float *accum;
     unsigned int accumPos;
 
+    float *internal;
+    unsigned int filled;
+
     unsigned int inBuffer;
     unsigned int inPos;
 
@@ -1396,10 +1399,11 @@ int synth_set_player_speed_source(Synth *s,
  * loops tight and small and hopefully that'll help the compiler figure out
  * how to make them faster? */
 static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
-                                        float *i, float *o,
-                                        int outPos, int todo) {
+                                        float *o, int outPos,
+                                        int todo) {
     int samples = 0;
     float vol = pl->volume;
+    float *i = get_buffer_data(syn, pl->inBuffer);
 
     /* TODO actual player logic */
     if(pl->mode == SYNTH_MODE_ONCE &&
@@ -1706,7 +1710,6 @@ int synth_run_player(Synth *s,
         return(-1);
     }
 
-    float *i = get_buffer_data(s, p->inBuffer);
     float *o = get_buffer_data(s, p->outBuffer);
 
     unsigned int outPos = p->outPos;
@@ -1725,10 +1728,10 @@ int synth_run_player(Synth *s,
             o = get_buffer_data(s, p->outBuffer);
             s->writecursor = temp;
 
-            samples = do_synth_run_player(s, p, i, o, s->writecursor + outPos - s->buffersize, todo);
+            samples = do_synth_run_player(s, p, o, s->writecursor + outPos - s->buffersize, todo);
         } else if((unsigned int)s->writecursor + outPos + todo >= s->buffersize) {
             /* if it would go past the end, split it in to 2 calls */
-            samples = do_synth_run_player(s, p, i, o, outPos,
+            samples = do_synth_run_player(s, p, o, outPos,
                                           s->buffersize - s->writecursor - outPos);
             todo -= samples;
             /* if there's more to do, try updating the pointer and trying
@@ -1741,16 +1744,16 @@ int synth_run_player(Synth *s,
                 o = get_buffer_data(s, p->outBuffer);
                 s->writecursor = temp;
 
-                samples += do_synth_run_player(s, p, i, o, 0, todo);
+                samples += do_synth_run_player(s, p, o, 0, todo);
             }
         } else {
-            samples = do_synth_run_player(s, p, i, o, outPos, todo);
+            samples = do_synth_run_player(s, p, o, outPos, todo);
         }
     } else {
         todo = MIN((int)reqSamples,
                    get_buffer_size(s, p->outBuffer) - (int)outPos);
 
-        samples = do_synth_run_player(s, p, i, o, outPos, todo);
+        samples = do_synth_run_player(s, p, o, outPos, todo);
     }
     p->outPos = outPos + samples;
 
@@ -1829,6 +1832,12 @@ static int init_filter(Synth *s,
         LOG_PRINTF(s, "Failed to allocate filter accumulation buffer.\n");
         return(-1);
     }
+    f->internal = malloc(sizeof(float) * (size - 1));
+    if(f->internal == NULL) {
+        LOG_PRINTF(s, "Failed to allocate filter internal buffer.\n");
+        return(-1);
+    }
+    f->filled = 0;
     f->size = size;
     f->accumPos = 0;
     f->inBuffer = filterBuffer;
@@ -1941,6 +1950,7 @@ int synth_free_filter(Synth *s, unsigned int index) {
     free_buffer_ref(s, f->volBuffer);
     free(f->accum);
     f->accum = NULL;
+    free(f->internal);
 
     return(0);
 }
@@ -2232,12 +2242,13 @@ int synth_set_filter_volume_source(Synth *s,
 }
 
 static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
-                                        float *i, float *o,
-                                        int outPos, int todo) {
+                                        float *o, int outPos,
+                                        int todo) {
     unsigned int j;
     /* silence a warning */
     int samples = 0;
 
+    float *i = get_buffer_data(syn, flt->inBuffer);
     i = &(i[flt->inPos]);
     o = &(o[outPos]);
     /* find out how big the second half of the sliding accumulator is */
@@ -2426,7 +2437,6 @@ int synth_run_filter(Synth *s,
         return(-1);
     }
 
-    float *i = get_buffer_data(s, f->inBuffer);
     float *o = get_buffer_data(s, f->outBuffer);
 
     unsigned int outPos = f->outPos;
@@ -2445,10 +2455,10 @@ int synth_run_filter(Synth *s,
             o = get_buffer_data(s, f->outBuffer);
             s->writecursor = temp;
 
-            samples = do_synth_run_filter(s, f, i, o, s->writecursor + outPos - s->buffersize, todo);
+            samples = do_synth_run_filter(s, f, o, s->writecursor + outPos - s->buffersize, todo);
         } else if((unsigned int)s->writecursor + outPos + todo >= s->buffersize) {
             /* if it would go past the end, split it in to 2 calls */
-            samples = do_synth_run_filter(s, f, i, o, outPos,
+            samples = do_synth_run_filter(s, f, o, outPos,
                                           s->buffersize - s->writecursor - outPos);
             todo -= samples;
             /* if there's more to do, try updating the pointer and trying
@@ -2461,16 +2471,16 @@ int synth_run_filter(Synth *s,
                 o = get_buffer_data(s, f->outBuffer);
                 s->writecursor = temp;
 
-                samples += do_synth_run_filter(s, f, i, o, 0, todo);
+                samples += do_synth_run_filter(s, f, o, 0, todo);
             }
         } else {
-            samples = do_synth_run_filter(s, f, i, o, outPos, todo);
+            samples = do_synth_run_filter(s, f, o, outPos, todo);
         }
     } else {
         todo = MIN((int)reqSamples,
                    get_buffer_size(s, f->outBuffer) - (int)outPos);
 
-        samples = do_synth_run_filter(s, f, i, o, outPos, todo);
+        samples = do_synth_run_filter(s, f, o, outPos, todo);
     }
     f->outPos = outPos + samples;
 

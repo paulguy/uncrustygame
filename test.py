@@ -3,13 +3,15 @@
 import time
 import array
 import random
-from math import sqrt
+from math import sqrt, pi, cos, fabs
 from itertools import islice, count
 from ctypes import *
 from sdl2 import *
 import pycrustygame as cg
 import sequencer as seq
 import audio
+
+TWOPI = 2.0 * pi
 
 @cg.LOG_CB_RETURN_T
 def log_cb_return(priv: py_object, string :c_char_p):
@@ -47,7 +49,7 @@ class LogSlope():
         self._start = start
         self._range = end - start
         self._val = 0
-        self._step = 1.0 / (num - 1)
+        self._step = 1.0 / num
 
     def __len__(self):
         return self._num
@@ -89,6 +91,42 @@ def create_random_noise(low, high, num):
     noise = array.array('f', RandomNoise(low, high, num))
     return(noise)
 
+def create_filter(freqs, amps, cycles, rate):
+    maxval = (cycles - 0.25) * TWOPI
+    phase = list()
+    step = list()
+    length = 0
+    for f in freqs:
+        phase.append(0.0)
+        thislength = int(rate / f * (cycles - 0.25))
+        step.append(TWOPI / (rate / f))
+        if thislength > length:
+            length = thislength
+
+    filt = list()
+    for i in range(length):
+        filt.append(0.0)
+        for j in range(len(freqs)):
+            if phase[j] >= maxval:
+                continue
+            else:
+                filt[j] += cos(phase[j]) / \
+                           (phase[j] / TWOPI + 1.0) * \
+                           amps[j]
+                phase[j] += step[j]
+
+    filt = array.array('f', filt)
+
+    allvals = 0.0
+    for i in range(len(filt)):
+        allvals += fabs(filt[i])
+
+    for i in range(len(filt)):
+        filt[i] = filt[i] / allvals
+        print(filt[i])
+
+    return filt, length
+
 def main():
     random.seed()
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
@@ -128,6 +166,10 @@ def main():
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
                        cg.create_float_array(create_random_noise(-1.0, 1.0, rate)),
                        rate)
+    filt, filtlen = create_filter((2000.0,), (1.0,), 8, rate)
+    filt = aud.buffer(cg.SYNTH_TYPE_F32,
+                      cg.create_float_array(filt),
+                      filtlen)
     aud.enabled(True)
 
     seq = None
@@ -149,7 +191,7 @@ def main():
                     if seq != None:
                         aud.del_sequence(seq)
                     with open("testseq2.txt", "r") as seqfile:
-                        seq = audio.AudioSequencer(seqfile, [envslope, benddownslope, bendupslope, noise])
+                        seq = audio.AudioSequencer(seqfile, [envslope, benddownslope, bendupslope, noise, filt])
                     aud.add_sequence(seq)
                     aud.enabled(True)
                     aud.sequence_enabled(seq, True)
