@@ -76,6 +76,7 @@ typedef struct {
 
     float *internal;
     unsigned int filled;
+    unsigned int initialFill;
 
     unsigned int inBuffer;
     unsigned int inPos;
@@ -1838,6 +1839,7 @@ static int init_filter(Synth *s,
         return(-1);
     }
     f->filled = 0;
+    f->initialFill = 0;
     f->size = size;
     f->accumPos = 0;
     f->inBuffer = filterBuffer;
@@ -1962,6 +1964,10 @@ int synth_reset_filter(Synth *s, unsigned int index) {
     }
 
     memset(f->accum, 0, sizeof(float) * f->size);
+    memset(f->internal, 0, sizeof(float) * (f->size - 1));
+
+    f->filled = 0;
+    f->initialFill = 0;
 
     return(0);
 }
@@ -2248,12 +2254,52 @@ static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
     /* silence a warning */
     int samples = 0;
 
+    o = &(o[outPos]);
     float *i = get_buffer_data(syn, flt->inBuffer);
     i = &(i[flt->inPos]);
-    o = &(o[outPos]);
-    /* find out how big the second half of the sliding accumulator is */
-    unsigned int a2s = flt->size - flt->accumPos;
+
+    /* try to fill the internal buffer, this should only happen once, because
+     * the buffer will be consistently refilled, different behavior is
+     * necessary if the filter is reaching the end of audio */
+    /* A quirk of this is that the filter will have to have filled at least
+     * one whole filter length to start outputting audio, so the user will
+     * have to feed in some amount of silence to satisfy this if the filter is
+     * very long.  This isn't a big deal since a long filter will probably want
+     * to be sustained for some time to allow it to decay out. */
+    /* another quirk is this adds extra delay but i don't have any idea how one
+     * would work around the need for there having to be some amount of audio
+     * data available to start processing a filter and synchronously returning
+     * data */
     todo = MIN((unsigned int)todo, get_buffer_size(syn, flt->inBuffer) - flt->inPos);
+    if(flt->initialFill < flt->size - 1) {
+        unsigned int toFill;
+
+        if(flt->filled < flt->size - 1) {
+            toFill = MIN(todo, flt->filled - (flt->size - 1));
+            memcpy(&(flt->internal[flt->filled]), i, toFill * sizeof(float));
+            flt->inPos += toFill;
+            i = &(i[flt->inPos]);
+            memset(o, syn->silence, toFill * sizeof(float));
+            flt->filled += toFill;
+            flt->initialFill += toFill;
+        }
+
+        /* if there's still not enough data, for example, the buffer hasn't
+         * filled up initially yet, or it's for whatever reason starved for
+         * data, just return, because there's nothing to do yet */
+        if(flt->filled + (todo - toFill) < flt->size) {
+            return(todo);
+        }
+    }
+
+    /* start state:
+     * internal buffer and input buffer have some amount of data, less available
+     * data overall means likely reaching the end of audio.
+     * At this point, try to drain the internal buffer, then the input buffer
+     * then the rest if any would be silence.  The complication is that at an
+     * unrelated point, the accumulation buffer will have a wraparound point
+     * Finally, refill the internal buffer with whatever's left once what is
+     * to do has been satisfied. */
     if(flt->mode == SYNTH_AUTO_CONSTANT) {
         /* get pointer to the specifically selected filter slice */
         float *f = get_buffer_data(syn, flt->filterBuffer);
@@ -2421,6 +2467,21 @@ static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
         }
         flt->slicePos += samples;
     }
+
+    unsigned int rest;
+    if(flt->filled > 0) {
+        rest = (flt->size - 1) - flt->filled;
+        memmove(flt->internal, &(flt->internal[flt->filled]), rest);
+        flt->filled = rest;
+        rest = MIN(rest, get_buffer_size(syn, flt->inBuffer) - flt->inPos);
+        memcpy(&(flt->internal[flt->filled]), i, rest);
+        flt->filled += rest;
+    } else {
+        rest = MIN(flt->size - 1, get_buffer_size(syn, flt->inBuffer) - flt->inPos);
+        memcpy(flt->internal, i, rest);
+        flt->filled = rest;
+    }
+
     flt->inPos += samples;
 
     return(samples);
