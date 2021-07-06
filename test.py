@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from traceback import print_tb
+from sys import argv
 import time
 import array
 import random
@@ -10,6 +12,8 @@ from sdl2 import *
 import pycrustygame as cg
 import sequencer as seq
 import audio
+
+DEFAULT_SEQ = "testseq2.txt"
 
 TWOPI = 2.0 * pi
 
@@ -92,14 +96,15 @@ def create_random_noise(low, high, num):
     return(noise)
 
 def create_filter(freqs, amps, cycles, rate):
-    maxval = (cycles - 0.25) * TWOPI
     phase = list()
     step = list()
+    maxval = list()
     length = 0
-    for f in freqs:
+    for i in range(len(freqs)):
         phase.append(0.0)
-        thislength = int(rate / f * (cycles - 0.25))
-        step.append(TWOPI / (rate / f))
+        thislength = int(rate / freqs[i] * (cycles[i] - 0.25))
+        step.append(TWOPI / (rate / freqs[i]))
+        maxval.append((cycles[i] - 0.25) * TWOPI)
         if thislength > length:
             length = thislength
 
@@ -107,7 +112,7 @@ def create_filter(freqs, amps, cycles, rate):
     for i in range(length):
         filt.append(0.0)
         for j in range(len(freqs)):
-            if phase[j] >= maxval:
+            if phase[j] >= maxval[j]:
                 continue
             else:
                 filt[i] += cos(phase[j]) / \
@@ -125,9 +130,14 @@ def create_filter(freqs, amps, cycles, rate):
     for i in range(len(filt)):
         filt[i] = filt[i] / allvals
 
-    return filt, length
+    return filt, length, allvals / len(freqs)
 
 def main():
+    try:
+        seqname = argv[1]
+    except IndexError:
+        seqname = DEFAULT_SEQ
+
     random.seed()
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
     window, renderer, pixfmt = cg.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC)
@@ -166,10 +176,13 @@ def main():
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
                        cg.create_float_array(create_random_noise(-1.0, 1.0, rate)),
                        rate)
-    filt, filtlen = create_filter((2000.0, 1000.0), (1.0, 1.0), 8, rate)
+    filt, flen, fscale = \
+        create_filter((2000.0, 1500.0, 1000.0),
+                      (1.0, 1.0, 1.0),
+                      (32, 4, 32), rate)
     filt = aud.buffer(cg.SYNTH_TYPE_F32,
                       cg.create_float_array(filt),
-                      filtlen)
+                      flen)
     aud.enabled(True)
 
     seq = None
@@ -187,16 +200,24 @@ def main():
                 if event.key.keysym.sym == SDLK_q:
                     running = False
                 elif event.key.keysym.sym == SDLK_s:
-                    aud.enabled(False)
                     if seq != None:
                         aud.del_sequence(seq)
-                    with open("testseq2.txt", "r") as seqfile:
-                        seq = audio.AudioSequencer(seqfile,
-                            [envslope, benddownslope, bendupslope, noise, filt],
-                            (("FILTER_SIZE", (), str(filtlen)),))
-                    aud.add_sequence(seq)
-                    aud.enabled(True)
-                    aud.sequence_enabled(seq, True)
+                        seq = None
+                    with open(seqname, "r") as seqfile:
+                        try:
+                            seq = audio.AudioSequencer(seqfile,
+                                [envslope, benddownslope, bendupslope, noise, filt],
+                                (("FILTER_SIZE", (), str(flen)),
+                                 ("FILTER_SCALE", (), str(fscale))))
+                        except Exception as e:
+                            print_tb(e.__traceback__)
+                    if seq != None:
+                        try:
+                            aud.add_sequence(seq)
+                            aud.sequence_enabled(seq, True)
+                        except Exception as e:
+                            print_tb(e.__traceback__)
+                            seq = None
 
         clear_frame(ll, 32, 128, 192)
         l.draw()

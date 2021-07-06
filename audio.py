@@ -24,7 +24,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(self, file, startLine=0):
+    def __init__(self, file, startLine=1):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -334,32 +334,44 @@ class AudioSequencer():
             tune = float(speed)
         except ValueError:
             # note
-            note = _NOTES.index(speed[0].lower())
-            octave = 4
-            if len(speed) > 1:
-                try:
-                    octave = int(speed[1])
-                except ValueError:
-                    if len(speed) > 2:
-                        try:
-                            octave = int(speed[2])
-                        except ValueError:
-                            pass
-                if speed[1] == '#':
-                    note += 1;
+            char = 0
+
+            note = _NOTES.index(speed[char].lower())
+            octave = 0
+
+            if len(speed) > char + 1:
+                if speed[char+1] == '#':
+                    char += 1
+                    note += 1
                     if note == 12:
-                        octave += 1
+                        octave = 1
                         note = 0
-                elif speed[1] == 'b':
-                    note -= 1;
+                elif speed[char+1] == 'b':
+                    char += 1
+                    note -= 1
                     if note == -1:
-                        octave -= 1
+                        octave = -1
                         note = 11
+
+            if len(speed) > char + 1:
+                try:
+                    octave = int(speed[char+1]) + octave
+                    char += 1
+                except ValueError:
+                    octave = 4 + octave
+
             tune = self._tunes[note]
             if octave < 4:
                 tune /= 5 - octave
             elif octave > 4:
                 tune *= octave - 3
+
+            if len(speed) > char + 1:
+                try:
+                    detune = float(speed[char+1:])
+                    tune = tune * (2 ** (detune / 12))
+                except ValueError:
+                    pass
 
         return (outrate / inrate) * tune
 
