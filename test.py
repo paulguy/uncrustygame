@@ -199,25 +199,31 @@ def main():
             elif event.type == SDL_KEYDOWN:
                 if event.key.keysym.sym == SDLK_q:
                     running = False
-                elif event.key.keysym.sym == SDLK_s:
+                elif event.key.keysym.sym == SDLK_p:
                     if seq != None:
                         aud.del_sequence(seq)
                         seq = None
-                    with open(seqname, "r") as seqfile:
-                        try:
+                    try:
+                        with open(seqname, "r") as seqfile:
                             seq = audio.AudioSequencer(seqfile,
                                 [envslope, benddownslope, bendupslope, noise, filt],
                                 (("FILTER_SIZE", (), str(flen)),
                                  ("FILTER_SCALE", (), str(fscale))))
-                        except Exception as e:
-                            print_tb(e.__traceback__)
+                    except Exception as e:
+                        print_tb(e.__traceback__)
+                        print(e)
                     if seq != None:
                         try:
                             aud.add_sequence(seq)
                             aud.sequence_enabled(seq, True)
                         except Exception as e:
                             print_tb(e.__traceback__)
+                            print(e)
                             seq = None
+                elif event.key.keysym.sym == SDLK_s:
+                    if seq != None:
+                        aud.del_sequence(seq)
+                        seq = None
 
         clear_frame(ll, 32, 128, 192)
         l.draw()

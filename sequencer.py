@@ -127,14 +127,17 @@ class Sequencer():
 
     def _read_line(self, file, initial=False):
         structs = file.readline().split('|')
-        if len(structs) < self._desc.columns:
-            raise Exception("not enough columns in file")
+        if len(structs) != self._desc.columns:
+            raise Exception("wrong number of columns in file ({} != {})".format(len(structs), self._desc.columns))
 
         fullRow = list()
         for i in range(self._desc.columns):
             columnDesc = self._desc._column[i]
             rowDesc = self._desc._rowdesc[columnDesc]
-            _, newrow = self._read_row(structs[i].split(), rowDesc, initial=initial)
+            split = structs[i].split()
+            pos, newrow = self._read_row(split, rowDesc, initial=initial)
+            if pos < len(split):
+                raise Exception("too many values in column ({} < {})".format(pos, len(split)))
             fullRow.append(newrow)
 
         return fullRow
