@@ -110,11 +110,12 @@ def create_filter(freqs, amps, cycles, rate):
             if phase[j] >= maxval:
                 continue
             else:
-                filt[j] += cos(phase[j]) / \
+                filt[i] += cos(phase[j]) / \
                            (phase[j] / TWOPI + 1.0) * \
                            amps[j]
                 phase[j] += step[j]
 
+    print(filt)
     filt = array.array('f', filt)
 
     allvals = 0.0
@@ -123,7 +124,6 @@ def create_filter(freqs, amps, cycles, rate):
 
     for i in range(len(filt)):
         filt[i] = filt[i] / allvals
-        print(filt[i])
 
     return filt, length
 
@@ -166,7 +166,7 @@ def main():
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
                        cg.create_float_array(create_random_noise(-1.0, 1.0, rate)),
                        rate)
-    filt, filtlen = create_filter((2000.0,), (1.0,), 8, rate)
+    filt, filtlen = create_filter((2000.0, 1000.0), (1.0, 1.0), 8, rate)
     filt = aud.buffer(cg.SYNTH_TYPE_F32,
                       cg.create_float_array(filt),
                       filtlen)
@@ -191,7 +191,9 @@ def main():
                     if seq != None:
                         aud.del_sequence(seq)
                     with open("testseq2.txt", "r") as seqfile:
-                        seq = audio.AudioSequencer(seqfile, [envslope, benddownslope, bendupslope, noise, filt])
+                        seq = audio.AudioSequencer(seqfile,
+                            [envslope, benddownslope, bendupslope, noise, filt],
+                            (("FILTER_SIZE", (), str(filtlen)),))
                     aud.add_sequence(seq)
                     aud.enabled(True)
                     aud.sequence_enabled(seq, True)

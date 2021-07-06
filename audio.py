@@ -122,7 +122,7 @@ _BUILTIN_MACROS = (
 )
 
 class AudioSequencer():
-    def __init__(self, infile, buffer=None):
+    def __init__(self, infile, buffer=None, extMacros=None):
         """
         Create an audio sequence from a file.
 
@@ -130,6 +130,8 @@ class AudioSequencer():
         """
         infile = MacroReader(infile)
         infile.add_macros(_BUILTIN_MACROS)
+        if extMacros:
+            infile.add_macros(extMacros)
         try:
             if infile.readline().strip() != "CrustyTracker":
                 raise Exception("File isn't a CrustyTracker sequence.")
@@ -249,46 +251,48 @@ class AudioSequencer():
             # stopped phasebuffer               0x000001
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
             filterDesc = seqDesc.add_row_description()
-            # input buffer
+            # input buffer         0x100000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # input buffer pos
+            # input buffer pos     0x080000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # output buffer
+            # output buffer        0x040000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # output buffer pos
+            # output buffer pos    0x020000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter buffer
+            # filter buffer        0x010000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter buffer start
+            # filter buffer start  0x008000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter buffer slices
+            # filter buffer slices 0x004000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # slice
+            # slice                0x002000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # slice source
+            # slice source         0x001000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter mode
+            # filter mode          0x000800
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # output mode
+            # output mode          0x000400
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # volume
+            # volume               0x000200
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
-            # volume source
+            # volume source        0x000100
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # volume mode
+            # volume mode          0x000080
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # run length
+            # run length           0x000040
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # stopped requested
+            # stopped requested    0x000020
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped outbuffer
+            # stopped outbuffer    0x000010
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped inbuffer
+            # stopped inbuffer     0x000008
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped volbuffer
+            # stopped volbuffer    0x000004
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped slicebuffer
+            # stopped slicebuffer  0x000002
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
+            # initial size         0x000001 (only used for initialization)
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
             for channel in self._channel:
                 if channel == CHANNEL_TYPE_SILENCE:
                     seqDesc.add_column(silenceDesc)
@@ -467,7 +471,12 @@ class AudioSequencer():
             b = self._buffer[buf]
             f.input_buffer(b[2])
         if status[1] != None:
-            f.input_pos(status[1] * self._samplesms)
+            pos = status[1]
+            if pos < 0:
+                pos = (pos * self._samplesms) + (self._samplesms - 1)
+            else:
+                pos = pos * self._samplesms
+            f.input_pos(pos)
         if status[2] != None:
             buf = status[2]
             if buf >= self._seqChannels:
@@ -477,7 +486,12 @@ class AudioSequencer():
             flt[7] = b
             f.output_buffer(b[2])
         if status[3] != None:
-            f.output_pos(statis[3] * self._samplesms)
+            pos = status[3]
+            if pos < 0:
+                pos = (pos * self._samplesms) + (self._samplesms - 1)
+            else:
+                pos = pos * self._samplesms
+            f.output_pos(pos)
         if status[4] != None:
             buf = status[4]
             if buf >= self._seqChannels:
@@ -519,11 +533,11 @@ class AudioSequencer():
             flt[2] = status[15]
         if status[16] != None:
             flt[3] = status[16]
-        if status[16] != None:
+        if status[17] != None:
             flt[4] = status[17]
-        if status[16] != None:
+        if status[18] != None:
             flt[5] = status[18]
-        if status[16] != None:
+        if status[19] != None:
             flt[6] = status[19]
 
     def _load(self, s):
@@ -584,7 +598,7 @@ class AudioSequencer():
                 filterbuf -= self._seqChannels
                 filterbuf += self._channels
                 b = self._buffer[filterbuf][2]
-                flt = [s.filter(b, b.size), 0, None, None, None, None, None, None, 0]
+                flt = [s.filter(b, initial[channel[0]][20]), 0, None, None, None, None, None, None, 0]
                 self._update_filter(flt, initial[channel[0]])
                 flt[1] = 0
                 self._localChannels.append(flt)
@@ -782,7 +796,7 @@ class AudioSequencer():
                     channel[0].output_pos(0)
             elif isinstance(channel[0], cg.Filter):
                 # reset output channel positions to 0
-                if channel[9][0] == None:
+                if channel[7][0] == None:
                     channel[0].output_pos(0)
 
 

@@ -758,7 +758,7 @@ class Filter():
             raise CrustyException()
 
     def output_pos(self, pos :int):
-        if _cg.synth_set_filter_output_pos(self._s._s, self, pos) < 0:
+        if _cg.synth_set_filter_output_buffer_pos(self._s._s, self, pos) < 0:
             raise CrustyException()
 
     def output_mode(self, mode :int):
