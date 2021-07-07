@@ -13,6 +13,28 @@
           --   --   -- --   --  -----  --   -- ------- --   --
 CrustyTracker sequencer format
 
+General File Format
+File Format Fields
+ Basic Header
+ Macro Block
+  Default Macros
+ Tags Block
+ Buffers Block
+ Channels Block
+ Sequence Block
+Specific Format Types
+ Line Format
+ Parameter Lists
+Channel Parameters
+ Silence
+  Parameters
+ Player
+  Parameters
+   Parameter Changes
+ Filter
+  Parameters
+
+
 --- General File Format ---
 ===========================
 
