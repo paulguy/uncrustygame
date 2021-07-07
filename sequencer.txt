@@ -1,0 +1,300 @@
+CrustyTracker sequencer format
+
+--- General File Format ---
+===========================
+
+CrustyTracker has a very line-oriented format (mostly because it's very easy
+to parse files in to lines and fields in python), so most items are one per
+line, or split by spaces, and in some cases groups of things are split by '|'
+(pipe) characters.
+
+Comments can appear at the end of any line, after a ';' (semicolon).  Nothing
+sees these comments as they are thrown away immediately.  Lines can be spanned
+across newlines in a file by ending the line in the \ character, and the rest
+of the system will just see it as one contiguous line with no extra newlines
+or anything in between.
+
+--- File Format Fields ---
+==========================
+
+=== Basic Header ===
+
+The first line contains only the text 'CrustyTracker', this is basically just
+used for it to determine that it is a CrustyTracker format sequence.
+
+The second line contains the version and the number of output channels the
+file will want.  The current version is version 1 and this version may not be
+stable either.  The need to specify the channel count for the file is there
+might be more or less output channels than the file wants.  If there's fewer
+available, playing the file will fail as there will be no attempt to reduce
+the number of channels.  If there's more channels, it'll play out of the first
+N channels that the file declares it needs.
+
+The rest of the file is mostly in blocks of some number of items which begin
+with the number of those items.
+
+=== Macro Block ===
+
+The first block is the macro block.  It starts with the number of macros in
+the file on the first line, followed by that number of macros following.
+Macros are of the format:
+name argname1 argname2 argname3=string of text
+Using it in the file just involves having the name followed by all the
+arguments (Do note that due to a quirk, macros with arguments must have a
+space at the end of the last argument so it knows that that is the end of the
+argument)
+The string of text may contain the argument names within it and while the file
+is read, when the macro is used, those arguments will be replaced with the
+arguments provided with the macro invocation.
+
+--- Default Macros ---
+
+There are some default macros that define useful parameter values:
+SYNTH_OUTPUT_REPLACE - If a channel has an output mode, this will tell it to
+replace the data in the buffer it's writing to with its output.
+SYNTH_OUTPUT_ADD     - Like above, but will add its output to the data already
+in the buffer, mixing the values together.
+
+SYNTH_AUTO_CONSTANT - For parameters in a channel which may be automated by
+other buffers, this will define that the parameter will just be a constant
+value
+SYNTH_AUTO_SOURCE   - Like above, but this will indicate that the parameter
+should be read from a buffer.  In this case, each output sample from the
+channel will consume 1 input sample from the buffer which is declared as the
+source for this parameter.
+
+SYNTH_MODE_ONCE         - Indicate that the channel should play its input
+buffer once then stop at the end, possibly applying a parameter change for the
+case of input buffer exhaustion, if any.
+SYNTH_MODE_LOOP         - Continue to play the input buffer in a loop, and
+don't stop and don't apply any parameter changes.  Playback may start before
+(or after) the loop start (or end).  In this case it'll play the part before
+(or after) the start (or end) before it starts looping.  If it does reach the
+end (or beginning) of the buffer and the loop end (or start) isn't there, it
+will exhaust the buffer and apply parameter changes.
+SYNTH_MODE_PHASE_SOURCE - This mode will allow the position fetched from the
+input buffer to be based on another buffer.  The way this works is that the
+loop start and loop end will correspond to 0.0 and 1.0 from the phase source
+buffer.
+
+=== Tags Block ===
+
+The next block is the list of tags.  These can be basically anything.  The
+only one used by the system right now is tuning, where either 1 detuning value
+can be provided which will detune all the notes by some amount (1.0 is in
+tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be
+given to detune every note.  Notes start at A.
+
+=== Buffers Block ===
+
+The next block is the list of buffers.  The number of output buffers specified
+at the top of the file are the first buffers, so if there's 2 channels
+(stereo), those will be buffers 0 and 1.  The first line contains the number
+of buffers declared in the file, followed by the number of buffers the
+sequence wants from the player calling it which may be generated at runtime.
+This is followed by the buffer declarations.  Buffers provided by the player
+aren't declared.  Buffer declarations are either a literal filename (only WAV
+files are supported) or an integer number which will create a silent buffer
+that number of milliseconds long to be used for example as something to
+generate a signal in to for further processing or some other effects.  These
+will be the next buffers following the output buffers, so if you have 5 of
+these for example, continuing from the previous count, that will be buffers,
+2, 3, 4, 5 and 6.  Then if you have another 5 buffers coming from the player,
+those will continue as 7, 8, 9, 10 and 11.
+
+=== Channels Block ===
+
+The next block is the channel definitions.  This starts with some number of
+channels which the file will have.  This is separate from buffers as these are
+the units which actually process audio buffers.  A channel can be one of 3
+values:
+silence - Simply silences a block of data in a buffer.
+player  - Plays a buffer in to a buffer with various parameters.
+filter  - Applies a convolution filter to a buffer and outputs to a buffer
+There's always 1 necessary channel which will always exist for the global
+parameters.  For now, this channel only contains the step length in
+milliseconds.
+
+=== Sequence Block ===
+
+The sequence block starts with a line defining the entire initial state of
+parameters for every channel.  This is followed by the number of patterns
+which will be in the file, then each pattern will start with the number of
+lines in that pattern followed by that number of lines.  Finally, will be the
+orders list which is just a list of what order patterns will be played in one
+after another.
+
+--- Specific Format Types ---
+=============================
+
+=== Line Format ===
+
+Each line must contain all columns, separated by '|' (pipe), so if a sequence
+has 4 channels, it'll be like:
+channel 1|channel 2|channel 3|channel 4
+Extra space between fields and around the '|'s doesn't matter, except a macro
+must have a space after the last argument, if it takes arguments.
+
+There are 2 formats of line in a sequence:
+The initial state line.  This appears once and is the first line in the
+sequence block.  it must have every parameter defined.
+A sequence line.  These can specify any number of parameters, or none at all.
+The parameters list must start with a bitfield describing which parameters
+follow after, even if it's 0, for none.
+
+=== Parameter Lists ===
+
+Parameters must be provided in a certain order, which depends on the type of
+channel what order this is and what each parameter does.  Each parameter also
+has a bitfield value used for sequence lines.  The way those will basically
+work is that you can simply add the values together, except if in any one
+field it goes past 9, you continue on with a, b, c, d, e, f.  It'll never be
+more than f.  This is hexadecimal countinug.
+If a parameter list is to contain another parameter list, it must also start
+with a bitfield, even if it's 0, for an empty parameter list.
+
+--- Channel Parameters ---
+==========================
+
+Parameters will be given in order with their bitfield value, a name, and the
+description of what it does.  All positional values are in milliseconds unless
+otherwise specified.  All values are integer, unless otherwise specified.
+
+=== Silence ===
+
+This kind of channel will silence some amount of data, starting from some
+point in some buffer.
+
+--- Parameters ---
+
+0x4  Output Buffer  - The buffer which will have silence applied to it.
+0x2  Start Position - The position where silence will start.
+0x1  Length         - The length of the silence.  This will trigger the
+channel to actually process anything.  It has no affect as an initial value
+and will be reset to 0 on completion.
+
+=== Player ===
+
+This kind of channel will take in data from an input buffer, and optionally
+other buffers and use that data to process the input buffer and output it to
+an output buffer.
+
+--- Parameters ---
+
+0x200000  Input Buffer           - The buffer which shall be used as the primary
+source of input for this channel.
+0x100000  Input Buffer Position  - The position to start reading the input
+buffer from.  This is a value in float because the buffer can be played at any
+arbitrary rate and the position is kept track of in float.
+0x080000  Output Buffer          - The buffer which will receive the output
+from this player.
+0x040000  Output Buffer Position - The position to start writing to the output
+buffer.
+0x020000  Output Mode            - Either SYNTH_OUTPUT_REPLACE or
+SYNTH_OUTPUT_ADD.
+0x010000  Volume                 - The base volume level for this player.  1.0
+is no change in volume from the input buffer, lesser values will attenuate,
+greater values will amplify.
+0x008000  Volume Source          - A buffer to read volume values from if the
+volume mode is SYNTH_AUTO_SOURCE.  The base volume level is also applied.
+0x004000  Volume Mode            - Either SYNTH_AUTO_CONSTANT or
+SYNTH_AUTO_SOURCE.
+0x002000  Speed                  - This affects the interval at which values
+are fetched from the input buffer.  This is a complex value which can take
+many format.  It can be most simply a float value, where 1.0 will play the
+input buffer with no change in rate, lower values will play slower (by
+mutiplying up input samples, without interpolation) or faster (also, no
+antialiasing, so skipped samples are totally not represented).  This value may
+also be negative, for reverse playback.  This value may also be a note, A-G.
+Followed optionally by a b or a # to flatten or sharpen it a semitone, then
+followed optionally by a number denoting the octave.  The default octave is 4,
+and A4 is 1.0 rate.  Additionally to the note, a detune value may be provided
+directly after (no spaces) as a float value.  This will detune the note by some
+number of semitones, or anywhere in between.  This is in addition to any other
+provided global detuning.
+0x001000  Speed Source           - A buffer to read rate values from to change
+the speed over time.  This is applied along with the base speed value.
+0x000800  Speed Mode             - Either SYNTH_AUTO_CONSTANT or
+SYNTH_AUTO_SOURCE.
+0x000400  Phase Source           - The buffer to read phase values from in the
+case that the Player Mode is SYNTH_MODE_PHASE_SOURCE.
+0x000200  Loop Start             - The start position of a loop.  Also the 0.0
+position of the phase in the case a buffer is used as the phase source.
+0x000100  Loop End               - The end position of a loop.  Also the 1.0
+position of the phase in the case a buffer is used as the phase source.
+0x000080  Player Mode            - Either SYNTH_MODE_ONCE, SYNTH_MODE_LOOP or
+SYNTH_MODE_PHASE_SOURCE.
+0x000040  Run Length             - The amount of output time the player should
+generate in to an output buffer.
+
+-- Parameter Changes --
+
+The following values are parameter changes.  They are just another full set of
+parameter which are applied upon various events.  They may recursively contain
+any number of additional parameter changes, and they will all be applied in
+order if processing is stopped for any reason.  If there is no change to be
+made, this field must be 0, as a bitfield indicating no parameters.
+
+0x000020  Requested Time Met      - A parameter list applied when the amount of
+output time requested by Run Length has been completed.
+0x000010  Output Buffer Filled    - Applied when the output buffer has reached
+its and and has been filled.
+0x000008  Input Buffer Exhausted  - Applied when the input buffer has reached
+an end.
+0x000004  Volume Buffer Exhausted - Applied When the volume source buffer has
+ended.
+0x000002  Speed Buffer Exhausted  - Applied when the speed source buffer has
+ended.
+0x000001  Phase Buffer Exhausted  - Applied when the phase source buffer has
+ended.
+
+=== Filter ===
+
+This kind of channel will take an input buffer, apply a convolution filter
+provided as a buffer then output it to a buffer.
+
+--- Parameters ---
+
+0x100000  Input Buffer           - The buffer which is to have a filter
+applied to it.
+0x080000  Input Buffer Position  - The position which the input buffer will
+start from.  This is an int in this case since this kind of channel can't do
+time based operations.
+0x040000  Output Buffer          - The buffer which this channel will output
+to.
+0x020000  Output Buffer Position - The position of the output buffer where
+output will begin.
+0x010000  Filter Buffer          - The buffer which will contain the filter
+kernel or kernels for the convolution.
+0x008000  Filter Buffer Start    - The start position within the buffer where
+filters are to be found.  This value is, unlike all other offset values, in
+samples.
+0x004000  Filter Buffer Slices   - The number of same-size filter kernels
+which follow from the start.
+0x002000  Selected Slice         - The filter slice which is to be selected
+starting from the filter start.  Starting from 0
+0x001000  Slice Source           - A buffer which will be used to select
+slices.  0.0 is the first slice and 1.0 is the last slice, and the nearest
+slice in between will be selected.
+0x000800  Filter Mode            - Either SYNTH_AUTO_CONSTANT or
+SYNTH_AUTO_SOURCE.
+0x000400  Output Mode            - Either SYNTH_OUTPUT_REPLACE or
+SYNTH_OUTPUT_ADD.
+0x000200  Volume                 - The base output volume for this filter.
+0x000100  Volume Source          - A source buffer for volume, like the player
+Volume Source.
+0x000080  Volume Mode            - Either SYNTH_AUTO_CONSTANT or
+SYNTH_AUTO_SOURCE.
+0x000040  Run Length              - How much time to try to output.
+0x000020  Requested Time Met      - Applied when the Run Length has been met.
+0x000010  Output Buffer Filled    - Applied when the output buffer has been
+filled.
+0x000008  Input Buffer Exhausted  - Applied when the input source buffer has
+run out.
+0x000004  Volume Buffer Exhausted - Applied when the volume source buffer has
+run out.
+0x000002  Slice Buffer Exhausted  - Applied when the slice source buffer has
+run out.
+0x000001  Filter Size             - This specifies the size of the filter for
+the initial state.  This can't be changed once it's set and will be ignored if
+provided on a sequence line.
