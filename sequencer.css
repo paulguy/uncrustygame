@@ -1,0 +1,36 @@
+body {
+    background-image: url("marble2.png");
+    background-color: #484744;
+    color: white;
+}
+
+table {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+td {
+    background-color: rgb(8, 16, 32);
+    color: rgb(192, 224, 255);
+    padding: 2px 4px;
+}
+
+h1, h2, h3, h4 {
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.75);
+    padding: 4px;
+    font-variant: small-caps;
+}
+
+td:first-of-type {
+    font-weight: bold;
+    color: yellow;
+}
+
+table.parameters td:nth-of-type(2) {
+    color: rgb(32, 255, 32);
+}
+
+a:link, a:visited, a:active, a:hover {
+    color: rgb(64, 255, 255);
+    text-decoration: unset;
+}

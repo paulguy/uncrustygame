@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>CrustyTracker sequencer format</title>
+        <link href="sequencer.css" rel="stylesheet">
+    </head>
+    <body>
+        <h1>CrustyTracker sequencer format</h1>
+        <ul>
+            <li>General File Format</li>
+            <li>File Format Fields</li>
+            <ul>
+                <li>Basic Header</li>
+                <li>Macro Block</li>
+                <ul>
+                    <li>Default Macros</li>
+                    <ul>
+                        <li>Output Modes</li>
+                        <li>Automation Modes</li>
+                        <li>Player Modes</li>
+                    </ul>
+                </ul>
+                <li>Tags Block</li>
+                <li>Buffers Block</li>
+                <li>Channels Block</li>
+                <li>Sequence Block</li>
+            </ul>
+            <li>Specific Format Types</li>
+            <ul>
+                <li>Line Format</li>
+                <li>Parameter Lists</li>
+            </ul>
+            <li>Channel Parameters</li>
+            <ul>
+                <li>Silence</li>
+                <ul>
+                    <li>Parameters</li>
+                </ul>
+                <li>Player</li>
+                <ul>
+                    <li>Parameters</li>
+                    <ul>
+                        <li>Parameter Changes</li>
+                    </ul>
+                </ul>
+                <li>Filter</li>
+                <ul>
+                    <li>Parameters</li>
+                </ul>
+            </ul>
+        </ul>
+        <h2>General File Format</h2>
+        <p>CrustyTracker has a very line-oriented format (mostly because it's very easy to parse files in to lines and fields in python), so most items are one per line, or split by spaces, and in some cases groups of things are split by '|' (pipe) characters.</p>
+        <p>Comments can appear at the end of any line, after a ';' (semicolon).  Nothing sees these comments as they are thrown away immediately.  Lines can be spanned across newlines in a file by ending the line in the \ character, and the rest of the system will just see it as one contiguous line with no extra newlines or anything in between.</p>
+        <h2>File Format Fields</h2>
+        <h3>Basic Header</h3>
+        <p>The first line contains only the text 'CrustyTracker', this is basically just used for it to determine that it is a CrustyTracker format sequence.</p>
+        <p>The second line contains the version and the number of output channels the file will want.  The current version is version 1 and this version may not be stable either.  The need to specify the channel count for the file is there might be more or less output channels than the file wants.  If there's fewer available, playing the file will fail as there will be no attempt to reduce the number of channels.  If there's more channels, it'll play out of the first N channels that the file declares it needs.</p>
+        <p>The rest of the file is mostly in blocks of some number of items which begin with the number of those items.</p>
+        <h3>Macro Block</h3>
+        <p>The first block is the macro block.  It starts with the number of macros in the file on the first line, followed by that number of macros following.</p>
+        <p>Macros are of the format:</p>
+        <code>name argname1 argname2 argname3=string of text</code>
+        <p>Using it in the file just involves having the name followed by all the arguments (Do note that due to a quirk, macros with arguments must have a space at the end of the last argument so it knows that that is the end of the argument)</p>
+        <p>The string of text may contain the argument names within it and while the file is read, when the macro is used, those arguments will be replaced with the arguments provided with the macro invocation.</p>
+        <h4>Default Macros</h4>
+        <p>There are some default macros that define useful parameter values:</p>
+        <table id="output-modes">
+            <caption>Output Modes</caption>
+            <thead>
+                <tr>
+                    <th>Macro Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>SYNTH_OUTPUT_REPLACE</td>
+                    <td>If a channel has an output mode, this will tell it to replace the data in the buffer it's writing to with its output.</td>
+                </tr>
+                <tr>
+                    <td>SYNTH_OUTPUT_ADD</td>
+                    <td>Like above, but will add its output to the data already in the buffer, mixing the values together.</td>
+                </tr>
+            </tbody>
+        </table>
+        <table id="automation-modes">
+            <caption>Automation Modes</caption>
+            <thead>
+                <tr>
+                    <th>Macro Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>SYNTH_AUTO_CONSTANT</td>
+                    <td>For parameters in a channel which may be automated by other buffers, this will define that the parameter will just be a constant value.</td>
+                </tr>
+                <tr>
+                    <td>SYNTH_AUTO_SOURCE</td>
+                    <td>Like above, but this will indicate that the parameter should be read from a buffer.  In this case, each output sample from the channel will consume 1 input sample from the buffer which is declared as the source for this parameter.</td>
+                </tr>
+            </tbody>
+        </table>
+        <table id="player-modes">
+            <caption>Player Modes</caption>
+            <thead>
+                <tr>
+                    <th>Macro Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>SYNTH_MODE_ONCE</td>
+                    <td>Indicate that the channel should play its input buffer once then stop at the end, possibly applying a parameter change for the case of input buffer exhaustion, if any.</td>
+                </tr>
+                <tr>
+                    <td>SYNTH_MODE_LOOP</td>
+                    <td>Continue to play the input buffer in a loop, and don't stop and don't apply any parameter changes.  Playback may start before (or after) the loop start (or end).  In this case it'll play the part before (or after) the start (or end) before it starts looping.  If it does reach the end (or beginning) of the buffer and the loop end (or start) isn't there, it will exhaust the buffer and apply parameter changes.</td>
+                </tr>
+                <tr>
+                    <td>SYNTH_MODE_PHASE_SOURCE</td>
+                    <td>This mode will allow the position fetched from the input buffer to be based on another buffer.  The way this works is that the loop start and loop end will correspond to 0.0 and 1.0 from the phase source buffer.</td>
+            </tbody>
+        </table>
+        <h3>Tags Block</h3>
+        <p>The next block is the list of tags.  These can be basically anything.  The only one used by the system right now is tuning, where either 1 detuning value can be provided which will detune all the notes by some amount (1.0 is in tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be given to detune every note.  Notes start at A.</p>
+        <h3>Buffers Block</h3>
+        <p>The next block is the list of buffers.  The number of output buffers specified at the top of the file are the first buffers, so if there's 2 channels (stereo), those will be buffers 0 and 1.  The first line contains the number of buffers declared in the file, followed by the number of buffers the sequence wants from the player calling it which may be generated at runtime.</p>
+        <p>This is followed by the buffer declarations.  Buffers provided by the player aren't declared.  Buffer declarations are either a literal filename (only WAV files are supported) or an integer number which will create a silent buffer that number of milliseconds long to be used for example as something to generate a signal in to for further processing or some other effects.  These will be the next buffers following the output buffers, so if you have 5 of these for example, continuing from the previous count, that will be buffers, 2, 3, 4, 5 and 6.  Then if you have another 5 buffers coming from the player, those will continue as 7, 8, 9, 10 and 11.</p>
+        <h3>Channels Block</h3>
+        <p>The next block is the channel definitions.  This starts with some number of channels which the file will have.  This is separate from buffers as these are the units which actually process audio buffers.</p>
+        <p>A channel can be one of 3 values:</p>
+        <table>
+            <caption>Channel Types</caption>
+            <thead>
+                <tr>
+                    <th>Type Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>silence</td>
+                    <td>Simply silences a block of data in a buffer.</td>
+                </tr>
+                <tr>
+                    <td>player</td>
+                    <td>Plays a buffer in to a buffer with various parameters.</td>
+                </tr>
+                <tr>
+                    <td>filter</td>
+                    <td>Applies a convolution filter to a buffer and outputs to a buffer.</td>
+                </tr>
+            </tbody>
+        </table>
+        <p>There's always 1 necessary channel which will always exist for the global parameters.  For now, this channel only contains the step length in milliseconds.</p>
+        <h3>Sequence Block</h3>
+        <p>The sequence block starts with a line defining the entire initial state of parameters for every channel.  This is followed by the number of patterns which will be in the file, then each pattern will start with the number of lines in that pattern followed by that number of lines.  Finally, will be the orders list which is just a list of what order patterns will be played in one after another.</p>
+        <h2>Specific Format Types</h2>
+        <h3>Line Format</h3>
+        <p>Each line must contain all columns, separated by '|' (pipe), so if a sequence has 4 channels, it'll be like:</p>
+        <code>channel 1|channel 2|channel 3|channel 4</code>
+        <p>Extra space between fields and around the '|'s doesn't matter, except a macro must have a space after the last argument, if it takes arguments.</p>
+        <p>There are 2 formats of line in a sequence.  The initial state line.  This appears once and is the first line in the sequence block.  it must have every parameter defined.  A sequence line.  These can specify any number of parameters, or none at all.  The parameters list must start with a bitfield describing which parameters follow after, even if it's 0, for none.</p>
+        <h3>Parameter Lists</h3>
+        <p>Parameters must be provided in a certain order, which depends on the type of channel what order this is and what each parameter does.  Each parameter also has a bitfield value used for sequence lines.  The way those will basically work is that you can simply add the values together, except if in any one field it goes past 9, you continue on with a, b, c, d, e, f.  It'll never be more than f.  This is hexadecimal countinug.</p>
+        <p>If a parameter list is to contain another parameter list, it must also start with a bitfield, even if it's 0, for an empty parameter list.</p>
+        <h2>Channel Parameters</h2>
+        <p>Parameters will be given in order with their bitfield value, a name, and the description of what it does.  All positional values are in milliseconds unless otherwise specified.  All values are integer, unless otherwise specified.</p>
+        <p>Anything that takes a buffer parameter as an input buffer must not be an output buffer.  This will fail.  Buffer parameters as output buffers can take any buffers.</p>
+        <h3>Silence</h3>
+        <p>This kind of channel will silence some amount of data, starting from some point in some buffer.</p>
+        <table class="parameters">
+            <caption>Parameters</caption>
+            <thead>
+                <tr>
+                    <th>Mask Bit</th>
+                    <th>Parameter Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>4</td>
+                    <td>Output Buffer</td>
+                    <td>The buffer which will have silence applied to it.</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>Start Position</td>
+                    <td>The position where silence will start.</td>
+                </tr>
+                <tr>
+                    <td>1</td>
+                    <td>Length</td>
+                    <td>The length of the silence.  This will trigger the channel to actually process anything.  It has no affect as an initial value and will be reset to 0 on completion.</td>
+                </tr>
+            </tbody>
+        </table>
+        <h3>Player</h3>
+        <p>This kind of channel will take in data from an input buffer, and optionally other buffers and use that data to process the input buffer and output it to an output buffer.</p>
+        <table class="parameters">
+            <caption>Parameters</caption>
+            <thead>
+                <tr>
+                    <th>Mask Bit</th>
+                    <th>Parameter Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>200000</td>
+                    <td>Input Buffer</td>
+                    <td>The buffer which shall be used as the primary source of input for this channel.</td>
+                </tr>
+                <tr>
+                    <td>100000</td>
+                    <td>Input Buffer Position</td>
+                    <td>The position to start reading the input buffer from.  This is a value in float because the buffer can be played at any arbitrary rate and the position is kept track of in float.</td>
+                </tr>
+                <tr>
+                    <td>080000</td>
+                    <td>Output Buffer</td>
+                    <td>The buffer which will receive the output from this player.</td>
+                </tr>
+                <tr>
+                    <td>040000</td>
+                    <td>Output Buffer Position</td>
+                    <td>The position to start writing to the output buffer.</td>
+                </tr>
+                <tr>
+                    <td>020000</td>
+                    <td>Output Mode</td>
+                    <td><a href="#output-modes">Either SYNTH_OUTPUT_REPLACE or SYNTH_OUTPUT_ADD.</a></td>
+                </tr>
+                <tr>
+                    <td>010000</td>
+                    <td>Volume</td>
+                    <td>The base volume level for this player.  1.0 is no change in volume from the input buffer, lesser values will attenuate, greater values will amplify.</td>
+                </tr>
+                <tr>
+                    <td>008000</td>
+                    <td>Volume Source</td>
+                    <td>A buffer to read volume values from if the volume mode is SYNTH_AUTO_SOURCE.  The base volume level is also applied.</td>
+                </tr>
+                <tr>
+                    <td>004000</td>
+                    <td>Volume Mode</td>
+                    <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>002000</td>
+                    <td>Speed</td>
+                    <td>This affects the interval at which values are fetched from the input buffer.  This is a complex value which can take many format.  It can be most simply a float value, where 1.0 will play the input buffer with no change in rate, lower values will play slower (by mutiplying up input samples, without interpolation) or faster (also, no antialiasing, so skipped samples are totally not represented).  This value may also be negative, for reverse playback.  This value may also be a note, A-G.  Followed optionally by a b or a # to flatten or sharpen it a semitone, then followed optionally by a number denoting the octave.  The default octave is 4, and A4 is 1.0 rate.  Additionally to the note, a detune value may be provided directly after (no spaces) as a float value.  This will detune the note by some number of semitones, or anywhere in between.  This is in addition to any other provided global detuning.</td>
+                </tr>
+                <tr>
+                    <td>001000</td>
+                    <td>Speed Source</td>
+                    <td>A buffer to read rate values from to change the speed over time.  This is applied along with the base speed value.</td>
+                </tr>
+                <tr>
+                    <td>000800</td>
+                    <td>Speed Mode</td>
+                    <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>000400</td>
+                    <td>Phase Source</td>
+                    <td>The buffer to read phase values from in the case that the Player Mode is SYNTH_MODE_PHASE_SOURCE.</td>
+                </tr>
+                <tr>
+                    <td>000200</td>
+                    <td>Loop Start</td>
+                    <td>The start position of a loop.  Also the 0.0 position of the phase in the case a buffer is used as the phase source.</td>
+                </tr>
+                <tr>
+                    <td>000100</td>
+                    <td>Loop End</td>
+                    <td>The end position of a loop.  Also the 1.0 position of the phase in the case a buffer is used as the phase source.</td>
+                </tr>
+                <tr>
+                    <td>000080</td>
+                    <td>Player Mode</td>
+                    <td><a href="#player-modes">Either SYNTH_MODE_ONCE, SYNTH_MODE_LOOP or SYNTH_MODE_PHASE_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>000040</td>
+                    <td>Run Length</td>
+                    <td>The amount of output time the player should generate in to an output buffer.</td>
+                </tr>
+            </tbody>
+        </table>
+        <h4>Parameter Changes</h4>
+        <p>The following values are parameter changes.  They are just another full set of parameter which are applied upon various events.  They may recursively contain any number of additional parameter changes, and they will all be applied in order if processing is stopped for any reason.  If there is no change to be made, this field must be 0, as a bitfield indicating no parameters.</p>
+        <table class="parameters">
+            <thead>
+                <tr>
+                    <th>Mask Bit</th>
+                    <th>Parameter Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>000020</td>
+                    <td>Requested Time Met</td>
+                    <td>A parameter list applied when the amount of output time requested by Run Length has been completed.</td>
+                </tr>
+                <tr>
+                    <td>000010</td>
+                    <td>Output Buffer Filled</td>
+                    <td>Applied when the output buffer has reached its and and has been filled.</td>
+                </tr>
+                <tr>
+                    <td>000008</td>
+                    <td>Input Buffer Exhausted</td>
+                    <td>Applied when the input buffer has reached an end.</td>
+                </tr>
+                <tr>
+                    <td>000004</td>
+                    <td>Volume Buffer Exhausted</td>
+                    <td>Applied When the volume source buffer has ended.</td>
+                </tr>
+                <tr>
+                    <td>000002</td>
+                    <td>Speed Buffer Exhausted</td>
+                    <td>Applied when the speed source buffer has ended.</td>
+                </tr>
+                <tr>
+                    <td>000001</td>
+                    <td>Phase Buffer Exhausted</td>
+                    <td>Applied when the phase source buffer has ended.</td>
+                </tr>
+            </tbody>
+        </table>
+        <h3>Filter</h3>
+        <p>This kind of channel will take an input buffer, apply a convolution filter provided as a buffer then output it to a buffer.</p>
+        <table class="parameters">
+            <caption>Parameters</caption>
+            <thead>
+                <tr>
+                    <th>Mask Bit</th>
+                    <th>Parameter Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>100000</td>
+                    <td>Input Buffer</td>
+                    <td>The buffer which is to have a filter applied to it.</td>
+                </tr>
+                <tr>
+                    <td>080000</td>
+                    <td>Input Buffer Position</td>
+                    <td>The position which the input buffer will start from.  This is an int in this case since this kind of channel can't do time based operations.</td>
+                </tr>
+                <tr>
+                    <td>040000</td>
+                    <td>Output Buffer</td>
+                    <td>The buffer which this channel will output to.</td>
+                </tr>
+                <tr>
+                    <td>020000</td>
+                    <td>Output Buffer Position</td>
+                    <td>The position of the output buffer where output will begin.</td>
+                </tr>
+                <tr>
+                    <td>010000</td>
+                    <td>Filter Buffer</td>
+                    <td>The buffer which will contain the filter kernel or kernels for the convolution.</td>
+                </tr>
+                <tr>
+                    <td>008000</td>
+                    <td>Filter Buffer Start</td>
+                    <td>The start position within the buffer where filters are to be found.  This value is, unlike all other offset values, in samples.</td>
+                </tr>
+                <tr>
+                    <td>004000</td>
+                    <td>Filter Buffer Slices</td>
+                    <td>The number of same-size filter kernels which follow from the start.</td>
+                </tr>
+                <tr>
+                    <td>002000</td>
+                    <td>Selected Slice</td>
+                    <td>The filter slice which is to be selected starting from the filter start.  Starting from 0.</td>
+                </tr>
+                <tr>
+                    <td>001000</td>
+                    <td>Slice Source</td>
+                    <td>A buffer which will be used to select slices.  0.0 is the first slice and 1.0 is the last slice, and the nearest slice in between will be selected.</td>
+                </tr>
+                <tr>
+                    <td>000800</td>
+                    <td>Filter Mode</td>
+                    <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>000400</td>
+                    <td>Output Mode</td>
+                    <td><a href="#output-modes">Either SYNTH_OUTPUT_REPLACE or SYNTH_OUTPUT_ADD.</a></td>
+                </tr>
+                <tr>
+                    <td>000200</td>
+                    <td>Volume</td>
+                    <td>The base output volume for this filter.</td>
+                </tr>
+                <tr>
+                    <td>000100</td>
+                    <td>Volume Source</td>
+                    <td>A source buffer for volume, like the player Volume Source.</td>
+                </tr>
+                <tr>
+                    <td>000080</td>
+                    <td>Volume Mode</td>
+                    <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>000040</td>
+                    <td>Run Length</td>
+                    <td>How much time to try to output.</td>
+                </tr>
+                <tr>
+                    <td>000020</td>
+                    <td>Requested Time Met</td>
+                    <td>Applied when the Run Length has been met.</td>
+                </tr>
+                <tr>
+                    <td>000010</td>
+                    <td>Output Buffer Filled</td>
+                    <td>Applied when the output buffer has been filled.</td>
+                </tr>
+                <tr>
+                    <td>000008</td>
+                    <td>Input Buffer Exhausted</td>
+                    <td>Applied when the input source buffer has run out.</td>
+                </tr>
+                <tr>
+                    <td>000004</td>
+                    <td>Volume Buffer Exhausted</td>
+                    <td>Applied when the volume source buffer has run out.</td>
+                </tr>
+                <tr>
+                    <td>000002</td>
+                    <td>Slice Buffer Exhausted</td>
+                    <td>Applied when the slice source buffer has run out.</td>
+                </tr>
+                <tr>
+                    <td>000001</td>
+                    <td>Filter Size</td>
+                    <td>This specifies the size of the filter for the initial state.  This can't be changed once it's set and will be ignored if provided on a sequence line.</td>
+                </tr>
+            </tbody>
+        </table>
+    </body>
+</html>
