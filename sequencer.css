@@ -21,6 +21,10 @@ h1, h2, h3, h4 {
     font-variant: small-caps;
 }
 
+th {
+    font-variant: small-caps;
+}
+
 td:first-of-type {
     font-weight: bold;
     color: yellow;
@@ -33,4 +37,11 @@ table.parameters td:nth-of-type(2) {
 a:link, a:visited, a:active, a:hover {
     color: rgb(64, 255, 255);
     text-decoration: unset;
+}
+
+hr {
+    height: 16px;
+    border: 0px;
+    background-color: #d7b97b;
+    background-image: url("HR.png");
 }

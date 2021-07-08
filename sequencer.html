@@ -6,6 +6,7 @@
     </head>
     <body>
         <h1>CrustyTracker sequencer format</h1>
+        <hr>
         <ul>
             <li>General File Format</li>
             <li>File Format Fields</li>
@@ -49,6 +50,7 @@
                 </ul>
             </ul>
         </ul>
+        <hr>
         <h2>General File Format</h2>
         <p>CrustyTracker has a very line-oriented format (mostly because it's very easy to parse files in to lines and fields in python), so most items are one per line, or split by spaces, and in some cases groups of things are split by '|' (pipe) characters.</p>
         <p>Comments can appear at the end of any line, after a ';' (semicolon).  Nothing sees these comments as they are thrown away immediately.  Lines can be spanned across newlines in a file by ending the line in the \ character, and the rest of the system will just see it as one contiguous line with no extra newlines or anything in between.</p>
