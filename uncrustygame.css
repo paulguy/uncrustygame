@@ -52,3 +52,12 @@ hr {
     background-image: url("HR.png");
     box-shadow: 2px 2px rgba(0, 0, 0, 0.5);
 }
+
+code {
+    display: inline-block;
+    margin-left: auto;
+    margin-right: auto;
+    border: 32px solid #bab493;
+    border-image: url("monitor9.png") 32 32 32 32 fill;
+    color: rgb(0, 255, 0);
+}
