@@ -9,64 +9,64 @@
         <h1>CrustyTracker sequencer format</h1>
         <hr>
         <ul>
-            <li>General File Format</li>
-            <li>File Format Fields</li>
+            <li><a href="#file-format">General File Format</a></li>
+            <li><a href="#format-fields">File Format Fields</a></li>
             <ul>
-                <li>Basic Header</li>
-                <li>Macro Block</li>
+                <li><a href="#basic-header">Basic Header</a></li>
+                <li><a href="#macro">Macro Block</a></li>
                 <ul>
-                    <li>Default Macros</li>
+                    <li><a href="#default-macros">Default Macros</a></li>
                     <ul>
-                        <li>Output Modes</li>
-                        <li>Automation Modes</li>
-                        <li>Player Modes</li>
+                        <li><a href="#output-modes">Output Modes</a></li>
+                        <li><a href="#automation-modes">Automation Modes</a></li>
+                        <li><a href="#player-modes">Player Modes</a></li>
                     </ul>
                 </ul>
-                <li>Tags Block</li>
-                <li>Buffers Block</li>
-                <li>Channels Block</li>
-                <li>Sequence Block</li>
+                <li><a href="#tags">Tags Block</a></li>
+                <li><a href="#buffers">Buffers Block</a></li>
+                <li><a href="#channels">Channels Block</a></li>
+                <li><a href="#sequence">Sequence Block</a></li>
             </ul>
-            <li>Specific Format Types</li>
+            <li><a href="#format-types">Specific Format Types</a></li>
             <ul>
-                <li>Line Format</li>
-                <li>Parameter Lists</li>
+                <li><a href="#line-format">Line Format</a></li>
+                <li><a href="#parameter-lists">Parameter Lists</a></li>
             </ul>
-            <li>Channel Parameters</li>
+            <li><a href="#channel-parameters">Channel Parameters</a></li>
             <ul>
-                <li>Silence</li>
+                <li><a href="#silence">Silence</a></li>
                 <ul>
-                    <li>Parameters</li>
+                    <li><a href="#silence-parameters">Parameters</a></li>
                 </ul>
-                <li>Player</li>
+                <li><a href="#player">Player</a></li>
                 <ul>
-                    <li>Parameters</li>
+                    <li><a href="#player-parameters">Parameters</a></li>
                     <ul>
-                        <li>Parameter Changes</li>
+                        <li><a href="#parameter-changes">Parameter Changes</a></li>
                     </ul>
                 </ul>
-                <li>Filter</li>
+                <li><a href="#filter">Filter</a></li>
                 <ul>
-                    <li>Parameters</li>
+                    <li><a href="#filter-parameters">Parameters</a></li>
                 </ul>
             </ul>
         </ul>
         <hr>
-        <h2>General File Format</h2>
+        <h2 id="file-format">General File Format</h2>
         <p>CrustyTracker has a very line-oriented format (mostly because it's very easy to parse files in to lines and fields in python), so most items are one per line, or split by spaces, and in some cases groups of things are split by '|' (pipe) characters.</p>
         <p>Comments can appear at the end of any line, after a ';' (semicolon).  Nothing sees these comments as they are thrown away immediately.  Lines can be spanned across newlines in a file by ending the line in the \ character, and the rest of the system will just see it as one contiguous line with no extra newlines or anything in between.</p>
-        <h2>File Format Fields</h2>
-        <h3>Basic Header</h3>
+        <h2 id="format-fields">File Format Fields</h2>
+        <h3 id="basic-header">Basic Header</h3>
         <p>The first line contains only the text 'CrustyTracker', this is basically just used for it to determine that it is a CrustyTracker format sequence.</p>
         <p>The second line contains the version and the number of output channels the file will want.  The current version is version 1 and this version may not be stable either.  The need to specify the channel count for the file is there might be more or less output channels than the file wants.  If there's fewer available, playing the file will fail as there will be no attempt to reduce the number of channels.  If there's more channels, it'll play out of the first N channels that the file declares it needs.</p>
         <p>The rest of the file is mostly in blocks of some number of items which begin with the number of those items.</p>
-        <h3>Macro Block</h3>
+        <h3 id="macro">Macro Block</h3>
         <p>The first block is the macro block.  It starts with the number of macros in the file on the first line, followed by that number of macros following.</p>
         <p>Macros are of the format:</p>
         <code>name argname1 argname2 argname3=string of text</code>
         <p>Using it in the file just involves having the name followed by all the arguments (Do note that due to a quirk, macros with arguments must have a space at the end of the last argument so it knows that that is the end of the argument)</p>
         <p>The string of text may contain the argument names within it and while the file is read, when the macro is used, those arguments will be replaced with the arguments provided with the macro invocation.</p>
-        <h4>Default Macros</h4>
+        <h4 id="default-macros">Default Macros</h4>
         <p>There are some default macros that define useful parameter values:</p>
         <table id="output-modes">
             <caption>Output Modes</caption>
@@ -128,15 +128,15 @@
                     <td>This mode will allow the position fetched from the input buffer to be based on another buffer.  The way this works is that the loop start and loop end will correspond to 0.0 and 1.0 from the phase source buffer.</td>
             </tbody>
         </table>
-        <h3>Tags Block</h3>
+        <h3 id="tags">Tags Block</h3>
         <p>The next block is the list of tags.  These can be basically anything.  The only one used by the system right now is tuning, where either 1 detuning value can be provided which will detune all the notes by some amount (1.0 is in tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be given to detune every note.  Notes start at A.</p>
-        <h3>Buffers Block</h3>
+        <h3 id="buffers">Buffers Block</h3>
         <p>The next block is the list of buffers.  The number of output buffers specified at the top of the file are the first buffers, so if there's 2 channels (stereo), those will be buffers 0 and 1.  The first line contains the number of buffers declared in the file, followed by the number of buffers the sequence wants from the player calling it which may be generated at runtime.</p>
         <p>This is followed by the buffer declarations.  Buffers provided by the player aren't declared.  Buffer declarations are either a literal filename (only WAV files are supported) or an integer number which will create a silent buffer that number of milliseconds long to be used for example as something to generate a signal in to for further processing or some other effects.  These will be the next buffers following the output buffers, so if you have 5 of these for example, continuing from the previous count, that will be buffers, 2, 3, 4, 5 and 6.  Then if you have another 5 buffers coming from the player, those will continue as 7, 8, 9, 10 and 11.</p>
-        <h3>Channels Block</h3>
+        <h3 id="channels">Channels Block</h3>
         <p>The next block is the channel definitions.  This starts with some number of channels which the file will have.  This is separate from buffers as these are the units which actually process audio buffers.</p>
         <p>A channel can be one of 3 values:</p>
-        <table>
+        <table id="channel-types">
             <caption>Channel Types</caption>
             <thead>
                 <tr>
@@ -160,23 +160,23 @@
             </tbody>
         </table>
         <p>There's always 1 necessary channel which will always exist for the global parameters.  For now, this channel only contains the step length in milliseconds.</p>
-        <h3>Sequence Block</h3>
+        <h3 id="sequence">Sequence Block</h3>
         <p>The sequence block starts with a line defining the entire initial state of parameters for every channel.  This is followed by the number of patterns which will be in the file, then each pattern will start with the number of lines in that pattern followed by that number of lines.  Finally, will be the orders list which is just a list of what order patterns will be played in one after another.</p>
-        <h2>Specific Format Types</h2>
-        <h3>Line Format</h3>
+        <h2 id="format-types">Specific Format Types</h2>
+        <h3 id="line-format">Line Format</h3>
         <p>Each line must contain all columns, separated by '|' (pipe), so if a sequence has 4 channels, it'll be like:</p>
         <code>channel 1|channel 2|channel 3|channel 4</code>
         <p>Extra space between fields and around the '|'s doesn't matter, except a macro must have a space after the last argument, if it takes arguments.</p>
         <p>There are 2 formats of line in a sequence.  The initial state line.  This appears once and is the first line in the sequence block.  it must have every parameter defined.  A sequence line.  These can specify any number of parameters, or none at all.  The parameters list must start with a bitfield describing which parameters follow after, even if it's 0, for none.</p>
-        <h3>Parameter Lists</h3>
+        <h3 id="parameter-lists">Parameter Lists</h3>
         <p>Parameters must be provided in a certain order, which depends on the type of channel what order this is and what each parameter does.  Each parameter also has a bitfield value used for sequence lines.  The way those will basically work is that you can simply add the values together, except if in any one field it goes past 9, you continue on with a, b, c, d, e, f.  It'll never be more than f.  This is hexadecimal countinug.</p>
         <p>If a parameter list is to contain another parameter list, it must also start with a bitfield, even if it's 0, for an empty parameter list.</p>
-        <h2>Channel Parameters</h2>
+        <h2 id="channel-parameters">Channel Parameters</h2>
         <p>Parameters will be given in order with their bitfield value, a name, and the description of what it does.  All positional values are in milliseconds unless otherwise specified.  All values are integer, unless otherwise specified.</p>
         <p>Anything that takes a buffer parameter as an input buffer must not be an output buffer.  This will fail.  Buffer parameters as output buffers can take any buffers.</p>
-        <h3>Silence</h3>
+        <h3 id="silence">Silence</h3>
         <p>This kind of channel will silence some amount of data, starting from some point in some buffer.</p>
-        <table class="parameters">
+        <table class="parameters" id="silence-parameters">
             <caption>Parameters</caption>
             <thead>
                 <tr>
@@ -203,9 +203,9 @@
                 </tr>
             </tbody>
         </table>
-        <h3>Player</h3>
+        <h3 id="player">Player</h3>
         <p>This kind of channel will take in data from an input buffer, and optionally other buffers and use that data to process the input buffer and output it to an output buffer.</p>
-        <table class="parameters">
+        <table class="parameters" id="player-parameters">
             <caption>Parameters</caption>
             <thead>
                 <tr>
@@ -297,7 +297,7 @@
                 </tr>
             </tbody>
         </table>
-        <h4>Parameter Changes</h4>
+        <h4 id="parameter-changes">Parameter Changes</h4>
         <p>The following values are parameter changes.  They are just another full set of parameter which are applied upon various events.  They may recursively contain any number of additional parameter changes, and they will all be applied in order if processing is stopped for any reason.  If there is no change to be made, this field must be 0, as a bitfield indicating no parameters.</p>
         <table class="parameters">
             <thead>
@@ -340,9 +340,9 @@
                 </tr>
             </tbody>
         </table>
-        <h3>Filter</h3>
+        <h3 id="filter">Filter</h3>
         <p>This kind of channel will take an input buffer, apply a convolution filter provided as a buffer then output it to a buffer.</p>
-        <table class="parameters">
+        <table class="parameters" id="filter-parameters">
             <caption>Parameters</caption>
             <thead>
                 <tr>

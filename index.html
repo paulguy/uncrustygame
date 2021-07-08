@@ -9,13 +9,28 @@
         <h1>UnCrustyGame Home</h1>
         <p>This project came out of my previous <a href="https://github.com/paulguy/crustygame">CrustyGame</a> project, which used a programming language which I developed, but I ended up hating it so I wanted something more generic and well-supported, so I made this which aims to make its useful graphics and audio components useful through C and Python, and maybe others in the future, but don't get too hopeful for that.</p>
         <p>This is the home page and main documentation for uncristygame.  As documentation is written, it'll be available here, and since this is just part of the project repository itself, it'll just be available with the project, too.</p>
-        <h2>Obtaining the Source</h2>
+        <hr>
+        <ul>
+            <li><a href="#obtaining">Obtaining the Source</a></li>
+            <li><a href="#building">Building the Main Library</a></li>
+            <li><a href="#ctest">Building and Running the C Test Program</a></li>
+            <ul>
+                <li><a href="#ctest-controls">Controls</a></li>
+            </ul>
+            <li><a href="#pytest">Running the Python Demo</a></li>
+            <ul>
+                <li><a href="#pytest-controls">Controls</a></li>
+            </ul>
+            <li><a href="#links">Links to Other Documentation Pages</a></li>
+        </ul>
+        <hr>
+        <h2 id="obtaining">Obtaining the Source</h2>
         <p>Just go to <a href="https://github.com/paulguy/uncrustygame">https://github.com/paulguy/uncrustygame</a> and follow the instructions to download it or clone it through git.</p>
-        <h2>Building the Main Library</h2>
+        <h2 id="building">Building the Main Library</h2>
         <p>In the project directory, execute:</p>
         <code>make</code>
         <p>This will generate the uncrustygame.so file.</p>
-        <h2>Building and Running the C Test Program</h2>
+        <h2 id="ctest">Building and Running the C Test Program</h2>
         <p>In the project directory, execute:</p>
         <code><pre> cd cdemo
 make
@@ -24,7 +39,7 @@ make
         <code>./test.sh</code>
         <p>within the cdemo/ subdirectory.</p>
         <p>The demo is a simple cat chasing the mouse cursor game with some spawning fodder for the cat to hunt.  Lead the cat to its prey and earn score.  There's no time limit or anything since it's just a simple demo.</p>
-        <h3>Controls</h3>
+        <h3 id="ctest-controls">Controls</h3>
         <ul>
             <li>mouse position - lead the ccat</li>
             <li>left click - toggle cat mode</li>
@@ -32,17 +47,17 @@ make
             <li>e - error quit (for development)</li>
             <li>f - toggle fullscreen (borderless)</li>
         </ul>
-        <h2>Running the Python Demo</h2>
+        <h2 id="pytest">Running the Python Demo</h2>
         <p>Within the project directory, execute:</p>
         <code>./test.py [sequence name]</code>
         <p>This will just display a simple graphic showing the functions of the graphics engine working.</p>
-        <h3>Controls</h3>
+        <h3 id="pytest-controls">Controls</h3>
         <ul>
             <li>q - quit</li>
             <li>p - play sequence (default testseq2.txt)</li>
             <li>s - stop sequence</li>
         </ul>
-        <h2>Links to other documentation pages</h2>
+        <h2 id="links">Links to Other Documentation Pages</h2>
         <a href="sequencer.html">CrustyTracker sequencer format</a>
     </body>
 </html>
