@@ -246,14 +246,14 @@ def initialize_video(title :str,
     for i in range(drivers):
         d = SDL_RendererInfo()
         if SDL_GetRenderDriverInfo(i, d) < 0:
-            raise CrustyException()
+            raise CrustyException("Couldn't get video renderer info for {}".format(i))
         driver.append((i, d))
 
     driver = sorted(driver, key=_driver_key)
 
     window = SDL_CreateWindow(title.encode("utf-8"), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, winflags)
     if window == None:
-        raise CrustyException()
+        raise CrustyException("Couldn't create SDL window.")
 
     renderer = None
     for d in driver:
@@ -283,7 +283,7 @@ def initialize_video(title :str,
 
     if renderer == None:
         SDL_DestroyWindow(window)
-        raise CrustyException()
+        raise CrustyException("Couldn't initialze any SDL video device.")
 
     return window, renderer, pixfmt
 
@@ -323,7 +323,7 @@ class Layerlist():
                                      printfunc,
                                      py_object(printpriv))
         if self._ll == None:
-            raise CrustyException()
+            raise CrustyException("Couldn't initialize LayerList.")
 
     def __del__(self):
         _cg.layerlist_free(self._ll)
@@ -358,7 +358,7 @@ class Layerlist():
 
     def target_tileset(self, tileset :int):
         if _cg.tilemap_set_target_tileset(self._ll, tileset) < 0:
-            raise CrustyException()
+            raise CrustyException("Couldn't set target tileset.")
 
 
 class Tileset():
@@ -376,7 +376,7 @@ class Tileset():
         else:
             raise TypeError()
         if self._ts < 0:
-            raise CrustyException()
+            raise CrustyException("Couldn't create a tileset.")
 
     def __del__(self):
         if _cg.tilemap_free_tileset(self._ll._ll, self) < 0:
@@ -505,7 +505,7 @@ class Synth():
                                 printfunc, py_object(printpriv),
                                 rate, channels)
         if self._s == None:
-            raise CrustyException()
+            raise CrustyException("Couldn't initialize synthesizer.")
         self._outputBuffers = [Buffer(self, i) for i in range(self.channels)]
 
     def __del__(self):
@@ -587,7 +587,7 @@ class Buffer():
             raise TypeError()
 
         if self._b < 0:
-            raise CrustyException()
+            raise CrustyException("Couldn't create buffer.")
 
     def __del__(self):
         if not self._output:

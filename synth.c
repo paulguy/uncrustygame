@@ -893,7 +893,7 @@ int synth_add_buffer(Synth *s,
 
     /* so loop start and loop end can have valid values. */
     if(size < 2) {
-        LOG_PRINTF(s, "Buffer size too small.\n");
+        LOG_PRINTF(s, "Buffer size too small, must be at least 2 samples long.\n");
         return(-1);
     }
 

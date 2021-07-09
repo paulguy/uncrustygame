@@ -32,6 +32,7 @@ th {
 }
 
 td:first-of-type {
+    font-family: monospace;
     font-weight: bold;
     color: yellow;
 }
@@ -60,4 +61,9 @@ code {
     border: 32px solid #bab493;
     border-image: url("monitor9.png") 32 32 32 32 fill;
     color: rgb(0, 255, 0);
+    white-space: pre;
+}
+
+table.funcdef tr:last-of-type td:first-of-type {
+    color: rgb(255, 128, 0);
 }

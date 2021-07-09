@@ -99,14 +99,18 @@ def create_filter(freqs, amps, cycles, rate):
     phase = list()
     step = list()
     maxval = list()
-    length = 0
+    length = 0.0
     for i in range(len(freqs)):
         phase.append(0.0)
-        thislength = int(rate / freqs[i] * (cycles[i] - 0.25))
+        thislength = rate / freqs[i] * (cycles[i] - 0.25)
         step.append(TWOPI / (rate / freqs[i]))
-        maxval.append((cycles[i] - 0.25) * TWOPI)
+        maxval.append(cycles[i] * TWOPI)
         if thislength > length:
             length = thislength
+    length = int(length)
+    print(length)
+    print(step)
+    print(maxval)
 
     filt = list()
     for i in range(length):
@@ -120,7 +124,6 @@ def create_filter(freqs, amps, cycles, rate):
                            amps[j]
                 phase[j] += step[j]
 
-    print(filt)
     filt = array.array('f', filt)
 
     allvals = 0.0
@@ -177,9 +180,12 @@ def main():
                        cg.create_float_array(create_random_noise(-1.0, 1.0, rate)),
                        rate)
     filt, flen, fscale = \
-        create_filter((2000.0, 1500.0, 1000.0),
+        create_filter((50.0, 500.0, 5000.0),
                       (1.0, 1.0, 1.0),
-                      (32, 4, 32), rate)
+                      (4, 8, 8), rate)
+    #filt = array.array('f', (1.0, 0.0))
+    #flen = 2
+    #fscale = 1.0
     filt = aud.buffer(cg.SYNTH_TYPE_F32,
                       cg.create_float_array(filt),
                       flen)
