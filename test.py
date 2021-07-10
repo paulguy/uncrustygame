@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
+import copy
 from traceback import print_tb
 from sys import argv
 import time
 import array
 import random
 from math import sqrt, pi, cos, fabs
-from itertools import islice, count
+from itertools import islice, count, repeat
 from ctypes import *
 from sdl2 import *
 import pycrustygame as cg
@@ -14,6 +15,8 @@ import sequencer as seq
 import audio
 
 DEFAULT_SEQ = "testseq2.txt"
+START = 40
+SLICES = 2000
 
 TWOPI = 2.0 * pi
 
@@ -95,7 +98,7 @@ def create_random_noise(low, high, num):
     noise = array.array('f', RandomNoise(low, high, num))
     return(noise)
 
-def create_filter(freqs, amps, cycles, rate):
+def create_filter(freqs, amps, cycles, rate, filt=None):
     phase = list()
     step = list()
     maxval = list()
@@ -108,13 +111,14 @@ def create_filter(freqs, amps, cycles, rate):
         if thislength > length:
             length = thislength
     length = int(length)
-    print(length)
-    print(step)
-    print(maxval)
 
-    filt = list()
+    if filt != None:
+        if len(filt) < length:
+            raise ValueError("Filter length less than length needed.")
+    else:
+        filt = array.array('f', repeat(0.0, length))
+
     for i in range(length):
-        filt.append(0.0)
         for j in range(len(freqs)):
             if phase[j] >= maxval[j]:
                 continue
@@ -124,16 +128,15 @@ def create_filter(freqs, amps, cycles, rate):
                            amps[j]
                 phase[j] += step[j]
 
-    filt = array.array('f', filt)
+    return filt, length
 
+def scale_filter(filt, start, count):
     allvals = 0.0
-    for i in range(len(filt)):
+    for i in range(start, start + count):
         allvals += fabs(filt[i])
 
-    for i in range(len(filt)):
-        filt[i] = filt[i] / allvals
-
-    return filt, length, allvals / len(freqs)
+    for i in range(start, start + count):
+        filt[i] /= allvals
 
 def main():
     try:
@@ -179,16 +182,24 @@ def main():
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
                        cg.create_float_array(create_random_noise(-1.0, 1.0, rate)),
                        rate)
-    filt, flen, fscale = \
-        create_filter((50.0, 500.0, 5000.0),
-                      (1.0, 1.0, 1.0),
-                      (4, 8, 8), rate)
+    filt, flen = \
+        create_filter((float(START),), (1.0,), (4,), rate)
+    for i in range(1, SLICES - START):
+        thisfilt = array.array('f', filt[(i-1)*flen:])
+        create_filter((float(START + i),), (1.0,), (4,), rate, thisfilt)
+        filt.extend(thisfilt)
+
+    print(filt[(SLICES - START - 1)*flen])
+    for i in range(SLICES - START):
+        scale_filter(filt, i*flen, flen)
+    print(filt[(SLICES - START - 1)*flen])
+
     #filt = array.array('f', (1.0, 0.0))
     #flen = 2
     #fscale = 1.0
     filt = aud.buffer(cg.SYNTH_TYPE_F32,
                       cg.create_float_array(filt),
-                      flen)
+                      flen * (SLICES - START))
     aud.enabled(True)
 
     seq = None
@@ -214,7 +225,7 @@ def main():
                             seq = audio.AudioSequencer(seqfile,
                                 [envslope, benddownslope, bendupslope, noise, filt],
                                 (("FILTER_SIZE", (), str(flen)),
-                                 ("FILTER_SCALE", (), str(fscale))))
+                                 ("FILTER_SLICES", (), str(SLICES - START))))
                     except Exception as e:
                         print_tb(e.__traceback__)
                         print(e)

@@ -2100,9 +2100,11 @@ int synth_set_filter_slices(Synth *s,
     if(f == NULL) {
         return(-1);
     }
-    if(f->startPos + (f->size * slices) >
-       (unsigned int)get_buffer_size(s, f->filterBuffer)) {
-        LOG_PRINTF(s, "Slices count would exceed buffer size.\n");
+    unsigned int bufsize = get_buffer_size(s, f->filterBuffer);
+    unsigned int neededsize = f->startPos + (f->size * slices);
+    if(neededsize > bufsize) {
+        LOG_PRINTF(s, "Slices count would exceed buffer size (%u + (%u * %u) = %u > %u.\n",
+                   f->startPos, f->size, slices, neededsize, bufsize);
         return(-1);
     }
     f->slices = slices;

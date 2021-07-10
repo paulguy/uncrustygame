@@ -519,7 +519,7 @@ class Synth():
 
     def buffer(self, dataType :int, data :c_void_p, size :int):
         if data != None and size > len(data):
-            raise CrustyException("Buffer size larger than data buffer.")
+            raise CrustyException("Buffer size larger than data buffer ({} > {}).".format(size, len(data)))
         return Buffer(self, dataType, data, size)
 
     def buffer_from_wav(self, filename :str):
