@@ -91,8 +91,9 @@ typedef struct Synth_s Synth;
  *
  * priv     A pointer you provided to synth_new
  * s        The relevant Synth structure which needs updating
- * return   0 if there were no issues, negative to indicate to the engine there
- *          was some problem to indicate back to the synth_frame call.
+ * return   number of samples written to output, negative to indicate to the
+ *          engine there was some problem to indicate back to the synth_frame
+ *          call.
  */
 typedef int (*synth_frame_cb_t)(void *priv, Synth *s);
 

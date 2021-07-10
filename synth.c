@@ -1154,7 +1154,6 @@ int synth_set_player_output_buffer(Synth *s,
     }
     p->outPos = 0;
 
-    LOG_PRINTF(s, "outbuf %u\n", p->outBuffer);
     return(0);
 }
 

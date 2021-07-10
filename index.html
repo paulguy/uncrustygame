@@ -31,10 +31,11 @@
         <code>make</code>
         <p>This will generate the uncrustygame.so file.</p>
         <h2 id="ctest">Building and Running the C Test Program</h2>
+        <p>You will need a C compiler, and the SDL2 development headers.</p>
         <p>In the project directory, execute:</p>
-        <code><pre> cd cdemo
+        <code>cd cdemo
 make
-./test.sh</pre></code>
+./test.sh</code>
         <p>After it's been made once, you can just run it whenever with</p>
         <code>./test.sh</code>
         <p>within the cdemo/ subdirectory.</p>
@@ -48,6 +49,7 @@ make
             <li>f - toggle fullscreen (borderless)</li>
         </ul>
         <h2 id="pytest">Running the Python Demo</h2>
+        <p>This has been tested on python 3.9, but it probably works/will work on any reasonably modern python 3.</p>
         <p>Within the project directory, execute:</p>
         <code>./test.py [sequence name]</code>
         <p>This will just display a simple graphic showing the functions of the graphics engine working.</p>

@@ -122,18 +122,13 @@ int audio_frame_cb(void *priv, Synth *s) {
         if(as->player[i].player >= 0) {
             /* clear mix buffer */
             if(synth_silence_buffer(s, as->mixBuffer, 0, needed) < 0) {
-                fprintf(stderr, "Failed to silence left buffer.\n");
+                fprintf(stderr, "Failed to silence mix buffer.\n");
                 return(-1);
             }
 
-            /* point active player to mix buffer */
+            /* point active player to mix buffer, resets output pos to 0 */
             if(synth_set_player_output_buffer(s, as->player[i].player, as->mixBuffer) < 0) {
                 fprintf(stderr, "failed to set active player to mix buffer.\n");
-                return(-1);
-            }
-            /* reset the buffer output pos to 0 */
-            if(synth_set_player_output_buffer_pos(s, as->player[i].player, 0) < 0) {
-                fprintf(stderr, "Failed to set output buffer pos.\n");
                 return(-1);
             }
             playerRet = synth_run_player(s, as->player[i].player, needed);
@@ -167,7 +162,7 @@ int audio_frame_cb(void *priv, Synth *s) {
                     fprintf(stderr, "Failed to set mix player left volume.\n");
                     return(-1);
                 }
-                if(synth_run_player(s, as->mixPlayer, needed) < 0) {
+                if(synth_run_player(s, as->mixPlayer, playerRet) < 0) {
                     fprintf(stderr, "Failed to run mix player for left channel.\n");
                     return(-1);
                 }
@@ -189,7 +184,7 @@ int audio_frame_cb(void *priv, Synth *s) {
                     fprintf(stderr, "Failed to set mix player right volume.\n");
                     return(-1);
                 }
-                if(synth_run_player(s, as->mixPlayer, needed) < 0) {
+                if(synth_run_player(s, as->mixPlayer, playerRet) < 0) {
                     fprintf(stderr, "Failed to run mix player for right channel.\n");
                     return(-1);
                 }
@@ -223,7 +218,7 @@ int audio_frame_cb(void *priv, Synth *s) {
         return(-1);
     }
 
-    return(0);
+    return(needed);
 }
 
 AudioState *init_audio_state(unsigned int rate) {
