@@ -171,7 +171,7 @@ def main():
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2)
     rate = aud.rate
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                          cg.create_float_array(create_linear_slope(0.0, 1.0, rate)),
+                          cg.create_float_array(create_sqrt_slope(0.0, 1.0, rate)),
                           rate)
     benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
                                cg.create_float_array(create_sqrt_slope(1.0, 0.5, rate)),
@@ -186,7 +186,7 @@ def main():
         create_filter((float(START),), (1.0,), (4,), rate)
     for i in range(1, SLICES - START):
         thisfilt = array.array('f', filt[(i-1)*flen:])
-        create_filter((float(START + i),), (1.0,), (4,), rate, thisfilt)
+        create_filter((float(START + i) * 8.0,), (1.0,), (4,), rate, thisfilt)
         filt.extend(thisfilt)
 
     print(filt[(SLICES - START - 1)*flen])
@@ -220,31 +220,51 @@ def main():
                     if seq != None:
                         aud.del_sequence(seq)
                         seq = None
+                    aud.enabled(False)
                     try:
                         with open(seqname, "r") as seqfile:
                             seq = audio.AudioSequencer(seqfile,
                                 [envslope, benddownslope, bendupslope, noise, filt],
                                 (("FILTER_SIZE", (), str(flen)),
-                                 ("FILTER_SLICES", (), str(SLICES - START))))
+                                 ("FILTER_SLICES", (), str(SLICES - START))),
+                                trace=True)
                     except Exception as e:
+                        aud.print_full_stats()
                         print_tb(e.__traceback__)
                         print(e)
                     if seq != None:
                         try:
-                            aud.add_sequence(seq)
-                            aud.sequence_enabled(seq, True)
+                            aud.add_sequence(seq, enabled=True)
                         except Exception as e:
+                            aud.print_full_stats()
                             print_tb(e.__traceback__)
                             print(e)
                             seq = None
+                    aud.enabled(True)
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         aud.del_sequence(seq)
                         seq = None
+                elif event.key.keysym.sym == SDLK_r:
+                    aud.enabled(True)
+                elif event.key.keysym.sym == SDLK_n:
+                    aud.enabled(False)
+                elif event.key.keysym.sym == SDLK_i:
+                    aud.print_full_stats()
 
         clear_frame(ll, 32, 128, 192)
         l.draw()
-        aud.frame()
+        try:
+            aud.frame()
+        except Exception as e:
+            print("Sequence raised error")
+            aud.print_full_stats()
+            aud.del_sequence(seq)
+            seq = None
+            _, exc = aud.error
+            print_tb(exc.__traceback__)
+            print(exc)
+            aud.enabled(True)
 
         thisTime = time.monotonic()
         if seq != None and seq.ended:

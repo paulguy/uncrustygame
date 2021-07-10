@@ -122,12 +122,13 @@ _BUILTIN_MACROS = (
 )
 
 class AudioSequencer():
-    def __init__(self, infile, buffer=None, extMacros=None):
+    def __init__(self, infile, buffer=None, extMacros=None, trace=False):
         """
         Create an audio sequence from a file.
 
         buffers is a list of external Buffer objects.
         """
+        self._trace = trace
         infile = MacroReader(infile)
         infile.add_macros(_BUILTIN_MACROS)
         if extMacros:
@@ -628,6 +629,9 @@ class AudioSequencer():
     def _unload(self):
         if not self._loaded:
             raise Exception("Already not loaded")
+        for chan in self._localChannels:
+            if not isinstance(chan[0], list):
+                chan[0] = None
         del self._localChannels
         self._buffer = self._buffer[self._channels:]
         for buffer in self._buffer:
@@ -654,6 +658,8 @@ class AudioSequencer():
         self._ended = False
 
     def _run_channels(self, reqtime, line):
+        if self._trace:
+            print("=== run_channels === {}".format(reqtime))
         # for performance and simplicity reasons, this is evaluating whole
         # channels at a time.  Alternatively, it would look to each channel
         # for the next event then run all channels up to that event in repeat
@@ -665,48 +671,69 @@ class AudioSequencer():
             if isinstance(channel[0], cg.Player):
                 time = reqtime
                 if line != None and line[i] != None:
+                    if self._trace:
+                        print(i, end=' ')
+                        print(line[i])
                     self._update_player(channel, line[i])
                 while time > 0:
                     get = time
                     if channel[1] < get:
                         get = channel[1]
                     got = channel[0].run(get)
+                    if self._trace:
+                        print("{} +{}".format(i, got))
                     if got == 0:
                         changed = False
                         reason = channel[0].stop_reason()
+                        if self._trace:
+                            print("{} {} {}".format(i, channel[1], hex(reason)))
+                            if channel[1] != 0 and reason == 0:
+                                raise Exception("Synth returned no samples for no reason.")
                         if channel[1] == 0:
                             if channel[2] != None:
                                 upd = channel[2]
+                                if self._trace:
+                                    print(upd)
                                 channel[2] = None
                                 self._update_player(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                        if reason & cg.SYNTH_STOPPED_OUTBUFFER:
                             if channel[3] != None:
                                 upd = channel[3]
+                                if self._trace:
+                                    print(upd)
                                 channel[3] = None
                                 self._update_player(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_INBUFFER:
+                        if reason & cg.SYNTH_STOPPED_INBUFFER:
                             if channel[4] != None:
                                 upd = channel[4]
+                                if self._trace:
+                                    print(upd)
                                 channel[4] = None
                                 self._update_player(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                        if reason & cg.SYNTH_STOPPED_VOLBUFFER:
                             if channel[5] != None:
                                 upd = channel[5]
+                                if self._trace:
+                                    print(upd)
                                 channel[5] = None
                                 self._update_player(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_SPEEDBUFFER:
+                        if reason & cg.SYNTH_STOPPED_SPEEDBUFFER:
                             if channel[6] != None:
                                 upd = channel[6]
+                                if self._trace:
+                                    print(upd)
                                 channel[6] = None
                                 self._update_player(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_PHASEBUFFER:
+                        if reason & cg.SYNTH_STOPPED_PHASEBUFFER:
                             if channel[7] != None:
                                 upd = channel[7]
+                                if self._trace:
+                                    print(upd)
                                 channel[7] = None
                                 self._update_player(channel, upd)
                                 changed = True
@@ -718,42 +745,61 @@ class AudioSequencer():
             elif isinstance(channel[0], cg.Filter):
                 time = reqtime
                 if line != None and line[i] != None:
+                    if self._trace:
+                        print(i, end=' ')
+                        print(line[i])
                     self._update_filter(channel, line[i])
                 while time > 0:
                     get = time
                     if channel[1] < get:
                         get = channel[1]
                     got = channel[0].run(get)
+                    if self._trace:
+                        print("{} +{}".format(i, got))
                     if got == 0:
                         changed = False
                         reason = channel[0].stop_reason()
+                        if self._trace:
+                            print("{} {} {}".format(i, channel[1], hex(reason)))
+                            if channel[1] != 0 and reason == 0:
+                                raise Exception("Synth returned no samples for no reason.")
                         if channel[1] == 0:
                             if channel[2] != None:
                                 upd = channel[2]
+                                if self._trace:
+                                    print(upd)
                                 channel[2] = None
                                 self._update_filter(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_OUTBUFFER:
+                        if reason & cg.SYNTH_STOPPED_OUTBUFFER:
                             if channel[3] != None:
                                 upd = channel[3]
+                                if self._trace:
+                                    print(upd)
                                 channel[3] = None
                                 self._update_filter(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_INBUFFER:
+                        if reason & cg.SYNTH_STOPPED_INBUFFER:
                             if channel[4] != None:
                                 upd = channel[4]
+                                if self._trace:
+                                    print(upd)
                                 channel[4] = None
                                 self._update_filter(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_VOLBUFFER:
+                        if reason & cg.SYNTH_STOPPED_VOLBUFFER:
                             if channel[5] != None:
                                 upd = channel[5]
+                                if self._trace:
+                                    print(upd)
                                 channel[5] = None
                                 self._update_filter(channel, upd)
                                 changed = True
-                        if reason | cg.SYNTH_STOPPED_SLICEBUFFER:
+                        if reason & cg.SYNTH_STOPPED_SLICEBUFFER:
                             if channel[6] != None:
                                 upd = channel[6]
+                                if self._trace:
+                                    print(upd)
                                 channel[6] = None
                                 self._update_filter(channel, upd)
                                 changed = True
@@ -764,6 +810,9 @@ class AudioSequencer():
                     channel[1] -= got
             else: # silence
                 if line != None and line[i] != None:
+                    if self._trace:
+                        print(i, end=' ')
+                        print(line[i])
                     self._update_silence(channel, line[i])
                     if channel[2] > 0:
                         channel[0][2].silence(channel[1], channel[2])
@@ -771,6 +820,9 @@ class AudioSequencer():
             i += 1
 
     def run(self, needed):
+        if self._trace:
+            print("=== run === {}".format(needed))
+
         if self._ended:
             return
 
@@ -826,6 +878,18 @@ class AudioSystem():
         self._fragment_size = self._s.fragment_size
         self._fragments = 0
         self._inc_fragments()
+        self._error = None
+
+    def print_full_stats(self):
+        self._s.print_full_stats()
+
+    @property
+    def error(self):
+        error = self._error
+        self._error = None
+        e = self._exception
+        self._e = None
+        return error, e
 
     @property
     def rate(self):
@@ -853,19 +917,20 @@ class AudioSystem():
                 return 0
 
             needed = int(self._s.needed / self._samplesms)
-            for seq in self._sequences:
-                if not seq[1]:
-                    continue
-                seq[0]._reset_output_positions()
-                seq[0].run(needed)
+            if needed > 0:
+                for seq in self._sequences:
+                    self._error = seq[0]
+                    if not seq[1]:
+                        continue
+                    seq[0]._reset_output_positions()
+                    seq[0].run(needed)
+                self._error = None
 
             return needed * self._samplesms
-        except cg.CrustyException as e:
-            # catch crusty exceptions since they'll have already printed error
-            # output, then pass it down along the stack so the main loop can
-            # try to do the right thing.
-            # Let all other python errors fall through so their meaningful
-            # messages can be properly displayed
+        except Exception as e:
+            # save it, otherwise raising it now confuses it.
+            self._exception = e
+            # make sure the error falls through.
             return -1
 
     def add_sequence(self, seq, enabled=False):
@@ -893,6 +958,6 @@ class AudioSystem():
     def frame(self):
         try:
             self._s.frame()
-        except cg.CrustyException as e:
-            self._s.print_full_stats()
+        except Exception as e:
+            self._s.enabled(False)
             raise e

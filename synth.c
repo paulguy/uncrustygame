@@ -299,13 +299,17 @@ void synth_print_full_stats(Synth *s) {
     }
     LOG_PRINTF(s, "Buffers Memory: %u\n", s->buffersmem);
     for(i = 0; i < s->buffersmem; i++) {
-        LOG_PRINTF(s, "Buffer %u (%u):\n", i, i + s->channels);
-        PRINT_BUFFER_STATS(s->buffer[i]);
+        if(s->buffer[i].data != NULL) {
+            LOG_PRINTF(s, "Buffer %u (%u):\n", i, i + s->channels);
+            PRINT_BUFFER_STATS(s->buffer[i]);
+        }
     }
     LOG_PRINTF(s, "Players Memory: %u\n", s->playersmem);
     for(i = 0; i < s->playersmem; i++) {
-        LOG_PRINTF(s, "Player %u:\n", i);
-        PRINT_PLAYER_STATS(s->player[i]);
+        if(s->player[i].inUse != 0) {
+            LOG_PRINTF(s, "Player %u:\n", i);
+            PRINT_PLAYER_STATS(s->player[i]);
+        }
     }
 }
 
@@ -704,6 +708,7 @@ int synth_frame(Synth *s) {
             SDL_LockAudioDevice(s->audiodev);
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
+                SDL_UnlockAudioDevice(s->audiodev);
                 return(-1);
             }
             add_samples(s, got);
@@ -1803,7 +1808,8 @@ int synth_player_stopped_reason(Synth *syn,
 
     if(pl->mode == SYNTH_MODE_ONCE &&
        pl->speedMode == SYNTH_AUTO_CONSTANT) {
-        if(pl->inPos < 0.0 || pl->inPos >= get_buffer_size(syn, pl->inBuffer)) {
+        if((pl->speed < 0.0 && pl->inPos + pl->speed < 0.0) ||
+           (pl->speed > 0.0 && pl->inPos + pl->speed >= get_buffer_size(syn, pl->inBuffer))) {
             reason |= SYNTH_STOPPED_INBUFFER;
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
@@ -1826,7 +1832,8 @@ int synth_player_stopped_reason(Synth *syn,
         }
     } else if(pl->mode == SYNTH_MODE_LOOP &&
               pl->speedMode == SYNTH_AUTO_CONSTANT) {
-        if(pl->inPos < 0.0 || pl->inPos >= get_buffer_size(syn, pl->inBuffer)) {
+        if((pl->speed < 0.0 && pl->inPos + pl->speed < 0.0) ||
+           (pl->speed > 0.0 && pl->inPos + pl->speed >= get_buffer_size(syn, pl->inBuffer))) {
             reason |= SYNTH_STOPPED_INBUFFER;
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
