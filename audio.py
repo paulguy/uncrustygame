@@ -24,7 +24,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(self, file, startLine=1):
+    def __init__(self, file, startLine=0, trace=False):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -32,6 +32,7 @@ class MacroReader():
         Replaces all instances of name arg0 arg1 arg2 ... with the replacement
         string and arg names in the replacement replaced with args
         """
+        self._trace = trace
         self._file = file
         self._macros = list()
         self._line = None
@@ -55,10 +56,13 @@ class MacroReader():
         if self._line == None:
             line = ""
             while True:
-                line += self._file.readline()
+                newline = self._file.readline()
                 self._lines += 1
-                line = line.split(';', maxsplit=1)
-                line = line[0].strip()
+                if self._trace:
+                    print("{}: {}".format(self._lines, newline), end='')
+                newline = newline.split(';', maxsplit=1)
+                newline = newline[0].strip()
+                line += newline
                 if len(line) > 0 and line[-1] == '\\':
                     line = line[:-1]
                     continue
@@ -108,6 +112,8 @@ class MacroReader():
             self._line = None
         else:
             self._line = self._line[1:]
+        if self._trace:
+            print("-> {}".format(line))
         return line
 
 
@@ -129,7 +135,7 @@ class AudioSequencer():
         buffers is a list of external Buffer objects.
         """
         self._trace = trace
-        infile = MacroReader(infile)
+        infile = MacroReader(infile, trace=trace)
         infile.add_macros(_BUILTIN_MACROS)
         if extMacros:
             infile.add_macros(extMacros)
@@ -156,7 +162,8 @@ class AudioSequencer():
                 macroname = lhs[0]
                 macroargs = lhs[1:]
                 macro.append((macroname, macroargs, macroline[1]))
-            print(macro)
+            if self._trace:
+                print(macro)
             infile.add_macros(macro)
             tags = int(infile.readline())
             self._tag = dict()
@@ -184,7 +191,8 @@ class AudioSequencer():
                     raise Exception("Buffers must be external Buffers.")
                 # import an external buffer
                 self._buffer.append([buffer[i], 0, None])
-            print(self._buffer)
+            if self._trace:
+                print(self._buffer)
             channels = int(infile.readline())
             self._channel = list()
             for i in range(channels):
@@ -197,7 +205,8 @@ class AudioSequencer():
                     self._channel.append(CHANNEL_TYPE_FILTER)
                 else:
                     raise Exception("Invalid channel type: {}".format(channel))
-            print(self._channel)
+            if self._trace:
+                print(self._channel)
             seqDesc = seq.SequenceDescription()
             silenceDesc = seqDesc.add_row_description()
             # output buffer 0x4
@@ -565,7 +574,6 @@ class AudioSequencer():
         newbuffer.extend(self._buffer)
         self._buffer = newbuffer
         for buffer in self._buffer:
-            print(buffer)
             if buffer[0] == None:
                 # nothing to do for output buffers
                 pass
@@ -587,7 +595,6 @@ class AudioSequencer():
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
         for channel in enumerate(self._channel):
-            print(channel)
             if channel[1] == CHANNEL_TYPE_SILENCE:
                 buf = initial[channel[0]][0]
                 buf -= self._seqChannels
@@ -615,6 +622,8 @@ class AudioSequencer():
                 self._update_filter(flt, initial[channel[0]])
                 flt[1] = 0
                 self._localChannels.append(flt)
+        if self._trace:
+            print(self._localChannels)
         init = None
         try:
             init = self._tag['init']
@@ -624,7 +633,8 @@ class AudioSequencer():
             self._seq.set_pattern(init)
             self.run(-1)
         self._loaded = True
-        s.print_full_stats()
+        if self._trace:
+            s.print_full_stats()
 
     def _unload(self):
         if not self._loaded:
@@ -820,9 +830,6 @@ class AudioSequencer():
             i += 1
 
     def run(self, needed):
-        if self._trace:
-            print("=== run === {}".format(needed))
-
         if self._ended:
             return
 

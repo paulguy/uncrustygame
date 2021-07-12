@@ -722,6 +722,7 @@ class Filter():
         return self._f
 
     def input_buffer(self, buffer :Buffer):
+        print(int(self))
         if _cg.synth_set_filter_input_buffer(self._s._s, self, buffer) < 0:
             raise CrustyException()
 

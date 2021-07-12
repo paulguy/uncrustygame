@@ -74,10 +74,6 @@ typedef struct {
     float *accum;
     unsigned int accumPos;
 
-    float *internal;
-    unsigned int filled;
-    unsigned int initialFill;
-
     unsigned int inBuffer;
     unsigned int inPos;
 
@@ -191,6 +187,31 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     LOG_PRINTF(s, " Size: %u\n", (BUF).size); \
     LOG_PRINTF(s, " Refcount: %u\n", (BUF).ref);
 
+#define PRINT_OUTPUT_OPERATION(OUTOP) \
+    LOG_PRINTF(s, " Output Operation: "); \
+    switch((OUTOP)) { \
+        case SYNTH_OUTPUT_REPLACE: \
+            LOG_PRINTF(s, "Replace\n"); \
+            break; \
+        case SYNTH_OUTPUT_ADD: \
+            LOG_PRINTF(s, "Add/Mix\n"); \
+            break; \
+        default: \
+            LOG_PRINTF(s, "Invalid\n");\
+    }
+
+#define PRINT_AUTO_MODE(AUTOMODE) \
+    switch((AUTOMODE)) { \
+        case SYNTH_AUTO_CONSTANT: \
+            LOG_PRINTF(s, "Constant\n"); \
+            break; \
+        case SYNTH_AUTO_SOURCE: \
+            LOG_PRINTF(s, "Source/Modulate\n"); \
+            break; \
+        default: \
+            LOG_PRINTF(s, "Invalid\n"); \
+    }
+
 #define PRINT_PLAYER_STATS(PLR) \
     LOG_PRINTF(s, " In Use: "); \
     if((PLR).inUse) { \
@@ -202,28 +223,9 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     LOG_PRINTF(s, " Output Buffer: %u\n", (PLR).outBuffer); \
     LOG_PRINTF(s, " Input Buffer Pos: %f\n", (PLR).inPos); \
     LOG_PRINTF(s, " Output Buffer Pos: %u\n", (PLR).outPos); \
-    LOG_PRINTF(s, " Output Operation: "); \
-    switch((PLR).outOp) { \
-        case SYNTH_OUTPUT_REPLACE: \
-            LOG_PRINTF(s, "Replace\n"); \
-            break; \
-        case SYNTH_OUTPUT_ADD: \
-            LOG_PRINTF(s, "Add/Mix\n"); \
-            break; \
-        default: \
-            LOG_PRINTF(s, "Invalid\n");\
-    } \
+    PRINT_OUTPUT_OPERATION((PLR).outOp) \
     LOG_PRINTF(s, " Volume Mode: "); \
-    switch((PLR).volMode) { \
-        case SYNTH_AUTO_CONSTANT: \
-            LOG_PRINTF(s, "Constant\n"); \
-            break; \
-        case SYNTH_AUTO_SOURCE: \
-            LOG_PRINTF(s, "Source/Modulate\n"); \
-            break; \
-        default: \
-            LOG_PRINTF(s, "Invalid\n"); \
-    } \
+    PRINT_AUTO_MODE((PLR).volMode) \
     LOG_PRINTF(s, " Volume: %f\n", (PLR).volume); \
     LOG_PRINTF(s, " Volume Source Buffer: %u\n", (PLR).volBuffer); \
     LOG_PRINTF(s, " Volume Source Buffer Pos: %u\n", (PLR).volPos); \
@@ -246,19 +248,32 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     LOG_PRINTF(s, " Phase Source Buffer: %u\n", (PLR).phaseBuffer); \
     LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR).phasePos); \
     LOG_PRINTF(s, " Speed Mode: "); \
-    switch((PLR).speedMode) { \
-        case SYNTH_AUTO_CONSTANT: \
-            LOG_PRINTF(s, "Constant\n"); \
-            break; \
-        case SYNTH_AUTO_SOURCE: \
-            LOG_PRINTF(s, "Source/Modulate\n"); \
-            break; \
-        default: \
-            LOG_PRINTF(s, "Invalid\n"); \
-    } \
+    PRINT_AUTO_MODE((PLR).speedMode) \
     LOG_PRINTF(s, " Speed: %f\n", (PLR).speed); \
     LOG_PRINTF(s, " Speed Source Buffer: %u\n", (PLR).speedBuffer); \
     LOG_PRINTF(s, " Speed Source Buffer Pos: %u\n", (PLR).speedPos);
+
+#define PRINT_FILTER_STATS(FLT) \
+    LOG_PRINTF(s, " Size: %u\n", (FLT).size); \
+    LOG_PRINTF(s, " Accumulator Position: %u\n", (FLT).accumPos); \
+    LOG_PRINTF(s, " Input Buffer: %u\n", (FLT).inBuffer); \
+    LOG_PRINTF(s, " Input Buffer Position: %u\n", (FLT).inPos); \
+    LOG_PRINTF(s, " Filter Buffer: %u\n", (FLT).filterBuffer); \
+    LOG_PRINTF(s, " Filter Start Position: %u\n", (FLT).startPos); \
+    LOG_PRINTF(s, " Filter Slices: %u\n", (FLT).slices); \
+    LOG_PRINTF(s, " Filter Mode: "); \
+    PRINT_AUTO_MODE((FLT).mode) \
+    LOG_PRINTF(s, " Slice Buffer: %u\n", (FLT).sliceBuffer); \
+    LOG_PRINTF(s, " Slice: %u\n", (FLT).slice); \
+    LOG_PRINTF(s, " Slice Buffer Position: %u\n", (FLT).slicePos); \
+    LOG_PRINTF(s, " Output Buffer: %u\n", (FLT).outBuffer); \
+    LOG_PRINTF(s, " Output Buffer Position: %u\n", (FLT).outPos); \
+    PRINT_OUTPUT_OPERATION((FLT).outOp) \
+    LOG_PRINTF(s, " Volume Mode: "); \
+    PRINT_AUTO_MODE((FLT).volMode) \
+    LOG_PRINTF(s, " Volume: %f\n", (FLT).vol); \
+    LOG_PRINTF(s, " Volume Buffer: %u\n", (FLT).volBuffer); \
+    LOG_PRINTF(s, " Volume Buffer Position: %u\n", (FLT).volPos);
 
 void synth_print_full_stats(Synth *s) {
     unsigned int i;
@@ -311,9 +326,19 @@ void synth_print_full_stats(Synth *s) {
             PRINT_PLAYER_STATS(s->player[i]);
         }
     }
+    LOG_PRINTF(s, "Filters Memory: %u\n", s->filtersmem);
+    for(i = 0; i < s->filtersmem; i++) {
+        if(s->filter[i].accum != NULL) {
+            LOG_PRINTF(s, "Filter %u:\n", i);
+            PRINT_FILTER_STATS(s->filter[i]);
+        }
+    }
 }
 
+#undef PRINT_FILTER_STATS
 #undef PRINT_PLAYER_STATS
+#undef PRINT_AUTO_MODE
+#undef PRINT_OUTPUT_OPERATION
 #undef PRINT_BUFFER_STATS
 
 unsigned int synth_get_samples_needed(Synth *s) {
@@ -955,7 +980,7 @@ int synth_free_buffer(Synth *s, unsigned int index) {
         return(-1);
     }
     if(get_buffer_ref(s, index) != 0) {
-        LOG_PRINTF(s, "Buffer is still referenced.\n");
+        LOG_PRINTF(s, "Buffer %u is still referenced.\n", index);
         return(-1);
     }
     free(s->buffer[index - s->channels].data);
@@ -1031,7 +1056,7 @@ static void init_player(Synth *s,
 static SynthPlayer *get_player(Synth *s, unsigned int index) {
     if(index > s->playersmem ||
        s->player[index].inUse == 0) {
-        LOG_PRINTF(s, "Invalid player index.\n");
+        LOG_PRINTF(s, "Invalid player index %u.\n", index);
         return(NULL);
     }
 
@@ -1877,13 +1902,6 @@ static int init_filter(Synth *s,
         LOG_PRINTF(s, "Failed to allocate filter accumulation buffer.\n");
         return(-1);
     }
-    f->internal = malloc(sizeof(float) * (size - 1));
-    if(f->internal == NULL) {
-        LOG_PRINTF(s, "Failed to allocate filter internal buffer.\n");
-        return(-1);
-    }
-    f->filled = 0;
-    f->initialFill = 0;
     f->size = size;
     f->accumPos = 0;
     f->inBuffer = filterBuffer;
@@ -1913,7 +1931,7 @@ static int init_filter(Synth *s,
 static SynthFilter *get_filter(Synth *s, unsigned int index) {
     if(index > s->filtersmem ||
        s->filter[index].accum == NULL) {
-        LOG_PRINTF(s, "Invalid filter index.\n");
+        LOG_PRINTF(s, "Invalid filter index %u.\n", index);
         return(NULL);
     }
 
@@ -1954,7 +1972,7 @@ int synth_add_filter(Synth *s,
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->filtersmem; i++) {
         if(s->filter[i].accum == NULL) {
-            if(init_filter(s, &(s->filter[0]), filterBuffer, size) < 0) {
+            if(init_filter(s, &(s->filter[i]), filterBuffer, size) < 0) {
                 return(-1);
             }
             synth_reset_filter(s, i);
@@ -1996,7 +2014,6 @@ int synth_free_filter(Synth *s, unsigned int index) {
     free_buffer_ref(s, f->volBuffer);
     free(f->accum);
     f->accum = NULL;
-    free(f->internal);
 
     return(0);
 }
@@ -2008,10 +2025,6 @@ int synth_reset_filter(Synth *s, unsigned int index) {
     }
 
     memset(f->accum, 0, sizeof(float) * f->size);
-    memset(f->internal, 0, sizeof(float) * (f->size - 1));
-
-    f->filled = 0;
-    f->initialFill = 0;
 
     return(0);
 }
@@ -2150,7 +2163,7 @@ int synth_set_filter_slice(Synth *s,
     if(slice < 0) {
         slice = f->slices + slice;
     }
-    if(slice < 0 || (unsigned int)slice > f->slices) {
+    if(slice < 0 || (unsigned int)slice >= f->slices) {
         LOG_PRINTF(s, "Slice is greater than configured slices.\n");
         return(-1);
     }
