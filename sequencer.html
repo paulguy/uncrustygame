@@ -23,6 +23,9 @@
                     </ul>
                 </ul>
                 <li><a href="#tags">Tags Block</a></li>
+                <ul>
+                    <li><a href="#meaningful-tags">Meaningful Tags</a></li>
+                </ul>
                 <li><a href="#buffers">Buffers Block</a></li>
                 <li><a href="#channels">Channels Block</a></li>
                 <li><a href="#sequence">Sequence Block</a></li>
@@ -129,7 +132,26 @@
             </tbody>
         </table>
         <h3 id="tags">Tags Block</h3>
-        <p>The next block is the list of tags.  These can be basically anything.  The only one used by the system right now is tuning, where either 1 detuning value can be provided which will detune all the notes by some amount (1.0 is in tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be given to detune every note.  Notes start at A.</p>
+        <p>The next block is the list of tags.  These can be basically anything.</p>
+        <table id="meaningful-tags">
+            <caption>Meaningful Tags</caption>
+            <thead>
+                <tr>
+                    <th>Tag Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>tuning</td>
+                    <td>Either 1 detuning value can be provided which will detune all the notes by some amount (1.0 is in tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be given to detune every note.  Notes start at A.</td>
+                </tr>
+                <tr>
+                    <td>init</td>
+                    <td>Pattern executed once on load for maybe generating samples and other things.  Won't output to any sort of time base so don't have this write to any output buffers.</td>
+                </tr>
+            </tbody>
+        </table>
         <h3 id="buffers">Buffers Block</h3>
         <p>The next block is the list of buffers.  The number of output buffers specified at the top of the file are the first buffers, so if there's 2 channels (stereo), those will be buffers 0 and 1.  The first line contains the number of buffers declared in the file, followed by the number of buffers the sequence wants from the player calling it which may be generated at runtime.</p>
         <p>This is followed by the buffer declarations.  Buffers provided by the player aren't declared.  Buffer declarations are either a literal filename (only WAV files are supported) or an integer number which will create a silent buffer that number of milliseconds long to be used for example as something to generate a signal in to for further processing or some other effects.  These will be the next buffers following the output buffers, so if you have 5 of these for example, continuing from the previous count, that will be buffers, 2, 3, 4, 5 and 6.  Then if you have another 5 buffers coming from the player, those will continue as 7, 8, 9, 10 and 11.</p>
