@@ -17,6 +17,18 @@ def _create_float_array(iterable):
 
 _NOTES = "a bc d ef g "
 
+class _EndOfFile(Exception):
+    pass
+
+class _MacroReaderIterator():
+    def __init__(self, reader):
+        self._reader = reader
+
+    def __next__(self):
+        try:
+            return self._reader.readline()
+        except _EndOfFile:
+            raise StopIteration()
 
 class MacroReader():
     """
@@ -38,8 +50,14 @@ class MacroReader():
         self._line = None
         self._lines = startLine
 
+    def print_macros(self):
+        print(self._macros)
+
     def add_macros(self, macros):
-        self._macros.extend(macros)
+        if isinstance(macros[0], tuple):
+            self._macros.extend(macros)
+        else:
+            self._macros.append(macros)
 
     @property
     def curline(self):
@@ -57,11 +75,13 @@ class MacroReader():
             line = ""
             while True:
                 newline = self._file.readline()
+                if newline == "":
+                    raise _EndOfFile()
                 self._lines += 1
                 if self._trace:
                     print("{}: {}".format(self._lines, newline), end='')
-                newline = newline.split(';', maxsplit=1)
-                newline = newline[0].strip()
+                newline = newline.split(';', maxsplit=1)[0]
+                newline = newline.strip()
                 line += newline
                 if len(line) > 0 and line[-1] == '\\':
                     line = line[:-1]
@@ -116,8 +136,18 @@ class MacroReader():
             print("-> {}".format(line))
         return line
 
+    def __iter__(self):
+        return _MacroReaderIterator(self)
+
+def read_macro(line):
+    macroline = line.split('=', maxsplit=1)
+    lhs = macroline[0].split()
+    macroname = lhs[0]
+    macroargs = lhs[1:]
+
+    return macroname, macroargs, macroline[1]
+
 def read_macros(infile):
-    macros = int(infile.readline())
     macro = list()
     # read a list of macros, macros are formatted:
     # name arg0name arg1name ...=replacement
@@ -125,13 +155,8 @@ def read_macros(infile):
     # and instances of argument names are replaced with the arguments
     # provided when the macro is used like:
     # name arg0 arg1 ...
-    for i in range(macros):
-        line = infile.readline().strip()
-        macroline = line.split('=', maxsplit=1)
-        lhs = macroline[0].split()
-        macroname = lhs[0]
-        macroargs = lhs[1:]
-        macro.append((macroname, macroargs, macroline[1]))
+    for line in infile:
+        macro.append(read_macro(line.strip()))
 
     return macro
 
@@ -154,62 +179,69 @@ class AudioSequencer():
         """
         self._trace = trace
         infile = MacroReader(infile, trace=trace)
+        if infile.readline().strip() != "CrustyTracker":
+            raise Exception("File isn't a CrustyTracker sequence.")
+        line = infile.readline().split()
+        self._version = int(line[0])
+        if self._version != 2:
+            raise Exception("Unsupported version: {}".format(self._version))
+        self._seqChannels = int(line[1])
+
         infile.add_macros(_BUILTIN_MACROS)
+
         if extMacros:
             infile.add_macros(extMacros)
+
+        self._tag = dict()
+        self._buffer = list()
+        self._channel = list()
+        extBuf = 0
         try:
-            if infile.readline().strip() != "CrustyTracker":
-                raise Exception("File isn't a CrustyTracker sequence.")
-            line = infile.readline().split()
-            self._version = int(line[0])
-            self._seqChannels = int(line[1])
-            if self._version != 1:
-                raise Exception("Unsupported version: {}".format(version))
-            macro = read_macros(infile)
-            if self._trace:
-                print(macro)
-            infile.add_macros(macro)
-            tags = int(infile.readline())
-            self._tag = dict()
-            for i in range(tags):
-                tagline = line.split('=', maxsplit=1)
-                self._tag[tagline[0]] = tagline[1]
-            self._tune()
-            line = infile.readline().split()
-            buffers = int(line[0])
-            inbufs = int(line[1])
-            self._buffer = list()
-            for i in range(buffers):
-                bufferline = infile.readline().split(maxsplit=1)
-                item = None
-                # single value means the buffer will be provided
-                try:
-                    # add the time in milliseconds of an empty buffer
-                    item = int(bufferline[0])
-                except ValueError:
-                    # add the string to use as a filename later
-                    item = bufferline[0].strip()
-                self._buffer.append([item, None, None])
-            for i in range(inbufs):
-                if not isinstance(buffer[i], cg.Buffer):
-                    raise Exception("Buffers must be external Buffers.")
-                # import an external buffer
-                self._buffer.append([buffer[i], 0, None])
-            if self._trace:
-                print(self._buffer)
-            channels = int(infile.readline())
-            self._channel = list()
-            for i in range(channels):
-                channel = infile.readline().strip().lower()
-                if channel == CHANNEL_TYPE_SILENCE:
-                    self._channel.append(CHANNEL_TYPE_SILENCE)
-                elif channel == CHANNEL_TYPE_PLAYER:
-                    self._channel.append(CHANNEL_TYPE_PLAYER)
-                elif channel == CHANNEL_TYPE_FILTER:
-                    self._channel.append(CHANNEL_TYPE_FILTER)
+            while True:
+                line = infile.readline()
+                if line.lower() == 'sequence':
+                    break
+                linetype, line = line.split(maxsplit=1)
+                linetype = linetype.lower()
+                if linetype == 'macro':
+                    infile.add_macros(read_macro(line))
+                elif linetype == 'tag':
+                    tagline = line.split('=', maxsplit=1)
+                    self._tag[tagline[0]] = tagline[1]
+                elif linetype == 'buffer':
+                    if line.lower() == 'external':
+                        if not isinstance(buffer[extBuf], cg.Buffer):
+                            raise Exception("Buffers must be external Buffers.")
+                        # import an external buffer
+                        self._buffer.append([buffer[extBuf], 0, None])
+                        extBuf += 1
+                    else:
+                        bufferline = line.split(maxsplit=1)
+                        item = None
+                        # single value means the buffer will be provided
+                        try:
+                            # add the time in milliseconds of an empty buffer
+                            item = int(bufferline[0])
+                        except ValueError:
+                            # add the string to use as a filename later
+                            item = bufferline[0].strip()
+                        self._buffer.append([item, None, None])
+                elif linetype == 'channel':
+                    line = line.strip().lower()
+                    if line == CHANNEL_TYPE_SILENCE:
+                        self._channel.append(CHANNEL_TYPE_SILENCE)
+                    elif line == CHANNEL_TYPE_PLAYER:
+                        self._channel.append(CHANNEL_TYPE_PLAYER)
+                    elif line == CHANNEL_TYPE_FILTER:
+                        self._channel.append(CHANNEL_TYPE_FILTER)
+                    else:
+                        raise Exception("Invalid channel type: {}".format(channel))
                 else:
-                    raise Exception("Invalid channel type: {}".format(channel))
+                    raise Exception("Invalid line type {}".format(linetype))
             if self._trace:
+                infile.print_macros()
+                print(self._tag)
+                print(self._buffer)
                 print(self._channel)
             seqDesc = seq.SequenceDescription()
             silenceDesc = seqDesc.add_row_description()
@@ -318,6 +350,7 @@ class AudioSequencer():
         except Exception as e:
             print("Exception on line {} in {}.".format(infile.curline, infile.name))
             raise e
+        self._tune()
         self._loaded = False
         self._ended = False
 

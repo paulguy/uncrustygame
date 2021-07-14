@@ -1,83 +1,83 @@
 CrustyTracker
-1 2 ; version 1, stereo
-15 ; macros
-MAXDIVTIME=250
-; input buffers
-TONE_BUF=2
-SLOPE_BUF=11
-BDN_BUF=12
-BUP_BUF=13
-NOISE_BUF=14
-FILTER_BUF=15
-; internal buffers
-ENV1=3
-BEND1=4
-TONE1=5
-ENV2=6
-BEND2=7
-TONE2=8
-ENV3=9
-HIHAT3=10
-0 ; tags
-9 5 ; 2 outputs, 1 file, 8 internal, 5 external
-square.wav  ; 2
-MAXDIVTIME   ; 3 envelope 1
-MAXDIVTIME   ; 4 pitch bend 1
-MAXDIVTIME   ; 5 tone 1
-MAXDIVTIME   ; 6 envelope 1
-MAXDIVTIME   ; 7 pitch bend 1
-MAXDIVTIME   ; 8 tone 1
-MAXDIVTIME   ; 9 envelope 2
-MAXDIVTIME   ; 10 hihat 2
-; envelope  11
-; bend down 12
-; bend up   13
-; noise     14
-; filter    15
-17 ; channels
-; 1 tone metachannel
-player
-player
-player
-filter
-player
-player
+2 2 ; version 2, stereo
+macro MAXDIVTIME=250
+; left 0
+; right 1
+; 1 bass metachannel
+buffer MAXDIVTIME
+macro ENV1=2
+buffer MAXDIVTIME
+macro BASS1=3
+channel player
+channel player
+channel filter
+channel player
+channel player
 ; 2 tone metachannel
-player
-player
-player
-filter
-player
-player
+buffer MAXDIVTIME
+macro ENV2=4
+buffer MAXDIVTIME
+macro BEND2=5
+buffer MAXDIVTIME
+macro TONE2=6
+channel player
+channel player
+channel player
+channel filter
+channel player
+channel player
 ; 3 hihat metachannel
-player
-player
-filter
-player
-player
+buffer MAXDIVTIME
+macro ENV3=7
+buffer MAXDIVTIME
+macro HIHAT3=8
+channel player
+channel player
+channel filter
+channel player
+channel player
+; files
+buffer square.wav
+macro SQR_BUF=9
+buffer triangle.wav
+macro TRI_BUF=10
+buffer saw.wav
+macro SAW_BUF=11
+; externals
+buffer external ; envelope
+macro SLOPE_BUF=12
+buffer external ; bend down
+macro BDN_BUF=13
+buffer external ; bend up
+macro BUP_BUF=14
+buffer external ; noise
+macro NOISE_BUF=15
+buffer external ; filter
+macro FILTER_BUF=16
+sequence
 MAXDIVTIME | \
-BEND_METACHANNEL TONE_BUF ENV1 BEND1 TONE1 0.1 0.1 | \
-BEND_METACHANNEL TONE_BUF ENV2 BEND2 TONE2 0.1 0.1 | \
+NOBEND_METACHANNEL SAW_BUF ENV1 BASS1 0.1 0.1 | \
+BEND_METACHANNEL SQR_BUF ENV2 BEND2 TONE2 0.1 0.1 | \
 NOBEND_METACHANNEL NOISE_BUF ENV3 HIHAT3 0.1 0.1
 1 ; one pattern
 4 ; rows in this pattern
 0 | \
-NORMAL_NOTE 5.0 1.0 0.5 500 ENV1 g0 MAXDIVTIME | \
+NOBEND_NOTE 50.0 1.0 10.0 500 ENV1 g0 MAXDIVTIME | \
 NORMAL_NOTE 20.0 1.0 2.0 200 ENV2 a MAXDIVTIME | \
-NOBEND_NOTE 50.0 1.0 10.0 1000 ENV3 1.0 MAXDIVTIME
+NOBEND_REST
 ; ---
 0 | \
-NORMAL_CONT ENV1 MAXDIVTIME | \
+NOBEND_NOTE 50.0 1.0 10.0 500 ENV1 g0 MAXDIVTIME | \
 NORMAL_REL 5.0 ENV2 MAXDIVTIME | \
 NOBEND_NOTE 50.0 1.0 10.0 1000 ENV3 1.0 MAXDIVTIME
 ; ---
 0 | \
-NORMAL_CONT ENV1 MAXDIVTIME | \
+NOBEND_CONT ENV1 MAXDIVTIME | \
 NORMAL_NOTE 20.0 1.0 2.0 200 ENV2 d MAXDIVTIME | \
 NOBEND_NOTE 50.0 1.0 10.0 1000 ENV3 1.0 MAXDIVTIME
 ; ---
 0 | \
-NORMAL_REL 5.0 ENV1 MAXDIVTIME | \
+NOBEND_REL 5.0 ENV1 MAXDIVTIME | \
 NORMAL_REL 5.0 ENV2 MAXDIVTIME | \
 NOBEND_NOTE 50.0 1.0 10.0 1000 ENV3 1.0 MAXDIVTIME
 ; ---

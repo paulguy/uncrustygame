@@ -223,7 +223,7 @@ def main():
                         seq = None
                     macros = None
                     with open("macros.txt", 'r') as macrofile:
-                        macrofile = audio.MacroReader(macrofile)
+                        macrofile = audio.MacroReader(macrofile, trace=True)
                         try:
                             macros = audio.read_macros(macrofile)
                         except Exception as e:
