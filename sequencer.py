@@ -7,6 +7,8 @@ FIELD_TYPE_FLOAT = "float"
 FIELD_TYPE_STR = "str"
 FIELD_TYPE_ROW = "row"
 
+EMPTY_ROW = "empty-row"
+
 class SequenceEnded(Exception):
     pass
 
@@ -78,7 +80,7 @@ class Sequencer():
         if not initial:
             changeMask = int(struct[0], base=16)
             if changeMask == 0:
-                return 1, None
+                return 1, EMPTY_ROW
             pos += 1
 
         row = list()
@@ -100,9 +102,6 @@ class Sequencer():
                     row.append(float(struct[pos]))
                 elif desc[i] == FIELD_TYPE_STR:
                     row.append(struct[pos])
-                elif isinstance(desc[i], tuple):
-                    # callable
-                    row.append(desc[i][1](desc[i][2], struct[pos]))
                 elif isinstance(desc[i], int):
                     rowDesc = self._desc._rowdesc[desc[i]]
                     # pass False because an initial row argument may be an empty
@@ -184,14 +183,6 @@ class Sequencer():
                     print("{:f} ".format(row[item]), end='', file=file)
                 elif desc[item] == FIELD_TYPE_STR:
                     print(row[item], end=' ', file=file)
-                elif isinstance(desc[item], tuple):
-                    # callable, but conversion is already done
-                    if desc[item][0] == FIELD_TYPE_INT:
-                        print("{:d} ".format(row[item]), end='', file=file)
-                    elif desc[item][0] == FIELD_TYPE_FLOAT:
-                        print("{:f} ".format(row[item]), end='', file=file)
-                    elif desc[item][0] == FIELD_TYPE_STR:
-                        print(row[item], end=' ', file=file)
                 elif isinstance(desc[item], int):
                     # SEQ_FIELD_TYPE_ROW
                     rowDesc = self._desc._rowdesc[desc[item]]
@@ -230,10 +221,14 @@ class Sequencer():
 
     def _get_row(self, desc, row):
         newRow = list()
+        print(desc)
+        print(row)
         for i in range(len(desc)):
-            if isinstance(desc[i], (int, tuple)):
+            if isinstance(desc[i], int):
                 if row[i] == None:
                     newRow.append(None)
+                elif row[i] == EMPTY_ROW:
+                    newRow.append(EMPTY_ROW)
                 else:
                     newRow.append(self._get_row(self._desc._rowdesc[desc[i]], self._row[row[i]]))
             else:
@@ -244,7 +239,7 @@ class Sequencer():
         newLine = list()
         for i in range(len(line)):
             desc = self._desc._rowdesc[self._desc._column[i]]
-            if line[i] == None:
+            if line[i] == EMPTY_ROW:
                 newLine.append(None)
             else:
                 newLine.append(self._get_row(desc, self._row[line[i]]))

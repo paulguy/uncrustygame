@@ -200,6 +200,7 @@ def main():
     filt = aud.buffer(cg.SYNTH_TYPE_F32,
                       cg.create_float_array(filt),
                       flen * (SLICES - START))
+
     aud.enabled(True)
 
     seq = None
@@ -220,27 +221,38 @@ def main():
                     if seq != None:
                         aud.del_sequence(seq)
                         seq = None
-                    aud.enabled(False)
-                    try:
-                        with open(seqname, "r") as seqfile:
-                            seq = audio.AudioSequencer(seqfile,
-                                [envslope, benddownslope, bendupslope, noise, filt],
-                                (("FILTER_SIZE", (), str(flen)),
-                                 ("FILTER_SLICES", (), str(SLICES - START))),
-                                trace=True)
-                    except Exception as e:
-                        aud.print_full_stats()
-                        print_tb(e.__traceback__)
-                        print(e)
-                    if seq != None:
+                    macros = None
+                    with open("macros.txt", 'r') as macrofile:
+                        macrofile = audio.MacroReader(macrofile)
                         try:
-                            aud.add_sequence(seq, enabled=True)
+                            macros = audio.read_macros(macrofile)
+                        except Exception as e:
+                            print("Error reading macros from {} on line {}.".format(macrofile.name, macrofile.curline))
+                            print_tb(e.__traceback__)
+                            print(e)
+                    if macros != None:
+                        macros.extend((("FILTER_SIZE", (), str(flen)),
+                                       ("FILTER_SLICES", (), str(SLICES - START))))
+                        print(macros)
+                        aud.enabled(False)
+                        try:
+                            with open(seqname, "r") as seqfile:
+                                seq = audio.AudioSequencer(seqfile,
+                                    [envslope, benddownslope, bendupslope, noise, filt],
+                                    macros, trace=True)
                         except Exception as e:
                             aud.print_full_stats()
                             print_tb(e.__traceback__)
                             print(e)
-                            seq = None
-                    aud.enabled(True)
+                        if seq != None:
+                            try:
+                                aud.add_sequence(seq, enabled=True)
+                            except Exception as e:
+                                aud.print_full_stats()
+                                print_tb(e.__traceback__)
+                                print(e)
+                                seq = None
+                        aud.enabled(True)
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         aud.del_sequence(seq)

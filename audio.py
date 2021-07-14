@@ -116,6 +116,24 @@ class MacroReader():
             print("-> {}".format(line))
         return line
 
+def read_macros(infile):
+    macros = int(infile.readline())
+    macro = list()
+    # read a list of macros, macros are formatted:
+    # name arg0name arg1name ...=replacement
+    # macro names are found in the file and replaced with replacement
+    # and instances of argument names are replaced with the arguments
+    # provided when the macro is used like:
+    # name arg0 arg1 ...
+    for i in range(macros):
+        line = infile.readline().strip()
+        macroline = line.split('=', maxsplit=1)
+        lhs = macroline[0].split()
+        macroname = lhs[0]
+        macroargs = lhs[1:]
+        macro.append((macroname, macroargs, macroline[1]))
+
+    return macro
 
 _BUILTIN_MACROS = (
     ("SYNTH_OUTPUT_REPLACE", (), str(cg.SYNTH_OUTPUT_REPLACE)),
@@ -147,21 +165,7 @@ class AudioSequencer():
             self._seqChannels = int(line[1])
             if self._version != 1:
                 raise Exception("Unsupported version: {}".format(version))
-            macros = int(infile.readline())
-            macro = list()
-            # read a list of macros, macros are formatted:
-            # name arg0name arg1name ...=replacement
-            # macro names are found in the file and replaced with replacement
-            # and instances of argument names are replaced with the arguments
-            # provided when the macro is used like:
-            # name arg0 arg1 ...
-            for i in range(macros):
-                line = infile.readline().strip()
-                macroline = line.split('=', maxsplit=1)
-                lhs = macroline[0].split()
-                macroname = lhs[0]
-                macroargs = lhs[1:]
-                macro.append((macroname, macroargs, macroline[1]))
+            macro = read_macros(infile)
             if self._trace:
                 print(macro)
             infile.add_macros(macro)
@@ -471,17 +475,35 @@ class AudioSequencer():
         if status[15] != None:
             player[1] = status[15] * self._samplesms
         if status[16] != None:
-            player[2] = status[16]
+            if status[16] == seq.EMPTY_ROW:
+                player[2] = None
+            else:
+                player[2] = status[16]
         if status[17] != None:
-            player[3] = status[17]
+            if status[17] == seq.EMPTY_ROW:
+                player[3] = None
+            else:
+                player[3] = status[17]
         if status[18] != None:
-            player[4] = status[18]
+            if status[18] == seq.EMPTY_ROW:
+                player[4] = None
+            else:
+                player[4] = status[18]
         if status[19] != None:
-            player[5] = status[19]
+            if status[19] == seq.EMPTY_ROW:
+                player[5] = None
+            else:
+                player[5] = status[19]
         if status[20] != None:
-            player[6] = status[20]
+            if status[20] == seq.EMPTY_ROW:
+                player[6] = None
+            else:
+                player[6] = status[20]
         if status[21] != None:
-            player[7] = status[21]
+            if status[21] == seq.EMPTY_ROW:
+                player[7] = None
+            else:
+                player[7] = status[21]
 
     def _update_filter(self, flt, status):
         f = flt[0]
@@ -552,15 +574,30 @@ class AudioSequencer():
         if status[14] != None:
             flt[1] = status[14] * self._samplesms
         if status[15] != None:
-            flt[2] = status[15]
+            if status[15] == seq.EMPTY_ROW:
+                flt[2] = None
+            else:
+                flt[2] = status[15]
         if status[16] != None:
-            flt[3] = status[16]
+            if status[16] == seq.EMPTY_ROW:
+                flt[3] = None
+            else:
+                flt[3] = status[16]
         if status[17] != None:
-            flt[4] = status[17]
+            if status[17] == seq.EMPTY_ROW:
+                flt[4] = None
+            else:
+                flt[4] = status[17]
         if status[18] != None:
-            flt[5] = status[18]
+            if status[18] == seq.EMPTY_ROW:
+                flt[5] = None
+            else:
+                flt[5] = status[18]
         if status[19] != None:
-            flt[6] = status[19]
+            if status[18] == seq.EMPTY_ROW:
+                flt[6] = None
+            else:
+                flt[6] = status[19]
 
     def _load(self, s):
         if self._loaded:
