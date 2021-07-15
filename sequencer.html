@@ -13,6 +13,9 @@
             <li><a href="#format-fields">File Format Fields</a></li>
             <ul>
                 <li><a href="#basic-header">Basic Header</a></li>
+                <ul>
+                    <li><a href="#header-statements">Header Statement Types</a></li>
+                </ul>
                 <li><a href="#macro">Macro Block</a></li>
                 <ul>
                     <li><a href="#default-macros">Default Macros</a></li>
@@ -27,7 +30,13 @@
                     <li><a href="#meaningful-tags">Meaningful Tags</a></li>
                 </ul>
                 <li><a href="#buffers">Buffers Block</a></li>
+                <ul>
+                    <li><a href="#buffer-types">Buffer Types</a></li>
+                </ul>
                 <li><a href="#channels">Channels Block</a></li>
+                <ul>
+                    <li><a href="#channel-types">Channel Types</a></li>
+                </ul>
                 <li><a href="#sequence">Sequence Block</a></li>
             </ul>
             <li><a href="#format-types">Specific Format Types</a></li>
@@ -74,19 +83,19 @@
             <tbody>
                 <tr>
                     <td>macro</td>
-                    <td>Declares a macro which defines a string to replace another string with optional arguments.</td>
+                    <td>Declares a <a href="#macro">macro</a> which defines a string to replace another string with optional arguments.</td>
                 </tr>
                 <tr>
                     <td>tag</td>
-                    <td>Declares a tag.  Can be used for whatever but some are meaningful to the sequencer.</td>
+                    <td>Declares a <a href="#tags">tag</a>.  Can be used for whatever but some are meaningful to the sequencer.</td>
                 </tr>
                 <tr>
                     <td>buffer</td>
-                    <td>Declares a buffer.  This is a piece of memory where audio data is contained or can be output to or input from.</td>
+                    <td>Declares a <a href="#buffers">buffer</a>.  This is a piece of memory where audio data is contained or can be output to or input from.</td>
                 </tr>
                 <tr>
                     <td>channel</td>
-                    <td>Declares a channel which is a basic operational unit, there are a few types of channels</td>
+                    <td>Declares a <a href="#channels">channel</a> which is a basic operational unit, there are a few types of channels</td>
                 </tr>
             </tbody>
         </table>
