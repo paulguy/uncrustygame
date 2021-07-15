@@ -61,10 +61,37 @@
         <h2 id="format-fields">File Format Fields</h2>
         <h3 id="basic-header">Basic Header</h3>
         <p>The first line contains only the text 'CrustyTracker', this is basically just used for it to determine that it is a CrustyTracker format sequence.</p>
-        <p>The second line contains the version and the number of output channels the file will want.  The current version is version 1 and this version may not be stable either.  The need to specify the channel count for the file is there might be more or less output channels than the file wants.  If there's fewer available, playing the file will fail as there will be no attempt to reduce the number of channels.  If there's more channels, it'll play out of the first N channels that the file declares it needs.</p>
-        <p>The rest of the file is mostly in blocks of some number of items which begin with the number of those items.</p>
+        <p>The second line contains the version and the number of output channels the file will want.  The current version is version 2 and this version may not be stable.  Version 1 support isn't likely since it was bad and nothing meaningful was written in it that I know of.  The need to specify the channel count for the file is there might be more or less output channels than the file wants.  If there's fewer available, playing the file will fail as there will be no attempt to reduce the number of channels.  If there's more channels, it'll play out of the first N channels that the file declares it needs.</p>
+        <p>The rest of the header is a bunch of one-line declarations that begin with the type.  There are currently 4 types then the header is terminated by a line reading 'sequence'.</p>
+        <table id="header-statements">
+            <caption>Header Statement Types</caption>
+            <thead>
+                <tr>
+                    <th>Statement Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>macro</td>
+                    <td>Declares a macro which defines a string to replace another string with optional arguments.</td>
+                </tr>
+                <tr>
+                    <td>tag</td>
+                    <td>Declares a tag.  Can be used for whatever but some are meaningful to the sequencer.</td>
+                </tr>
+                <tr>
+                    <td>buffer</td>
+                    <td>Declares a buffer.  This is a piece of memory where audio data is contained or can be output to or input from.</td>
+                </tr>
+                <tr>
+                    <td>channel</td>
+                    <td>Declares a channel which is a basic operational unit, there are a few types of channels</td>
+                </tr>
+            </tbody>
+        </table>
         <h3 id="macro">Macro Block</h3>
-        <p>The first block is the macro block.  It starts with the number of macros in the file on the first line, followed by that number of macros following.</p>
+        <p>Macros replace a string of text with another string of text, and arguments to the macro may be declared which when provided, replace strings of text within the resulting string.</p>
         <p>Macros are of the format:</p>
         <code>name argname1 argname2 argname3=string of text</code>
         <p>Using it in the file just involves having the name followed by all the arguments (Do note that due to a quirk, macros with arguments must have a space at the end of the last argument so it knows that that is the end of the argument)</p>
@@ -153,10 +180,32 @@
             </tbody>
         </table>
         <h3 id="buffers">Buffers Block</h3>
-        <p>The next block is the list of buffers.  The number of output buffers specified at the top of the file are the first buffers, so if there's 2 channels (stereo), those will be buffers 0 and 1.  The first line contains the number of buffers declared in the file, followed by the number of buffers the sequence wants from the player calling it which may be generated at runtime.</p>
-        <p>This is followed by the buffer declarations.  Buffers provided by the player aren't declared.  Buffer declarations are either a literal filename (only WAV files are supported) or an integer number which will create a silent buffer that number of milliseconds long to be used for example as something to generate a signal in to for further processing or some other effects.  These will be the next buffers following the output buffers, so if you have 5 of these for example, continuing from the previous count, that will be buffers, 2, 3, 4, 5 and 6.  Then if you have another 5 buffers coming from the player, those will continue as 7, 8, 9, 10 and 11.</p>
+        <p>A buffer is a space where audio data can be provided but also can act as intermediate buffers as input and output for channels for processing.  The number of output buffers specified at the top of the file are the first buffers, so if there's 2 channels (stereo), those will be buffers 0 and 1, the rest of the buffers will be in order as declared in the header.</p>
+        <table id="buffer-types">
+            <caption>Buffer Types</caption>
+            <thead>
+                <tr>
+                    <th>Type Name</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>filename</td>
+                    <td>A path to a WAV file to be provided.  It should be tuned to A but it can be tuned however you want, note values are just a rate offset from A4.</td>
+                </tr>
+                <tr>
+                    <td>integer</td>
+                    <td>A number of milliseconds to make of a blank (silent) buffer.  Mostly useful for intermediate processing buffers.</td>
+                </tr>
+                <tr>
+                    <td>external</td>
+                    <td>This buffer will be an external buffer provided along with creating the sequence.  May be useful for preventing having to reload audio files between song changes or if many sound effects share base samples or if something needs to be generated at runtime based on the sampling rate.</td>
+                </tr>
+            </tbody>
+        </table>
         <h3 id="channels">Channels Block</h3>
-        <p>The next block is the channel definitions.  This starts with some number of channels which the file will have.  This is separate from buffers as these are the units which actually process audio buffers.</p>
+        <p>Channels are base units which can perform operations on buffers.  They are individually limited, but may be chained to perform more complex effects.</p>
         <p>A channel can be one of 3 values:</p>
         <table id="channel-types">
             <caption>Channel Types</caption>
@@ -181,7 +230,7 @@
                 </tr>
             </tbody>
         </table>
-        <p>There's always 1 necessary channel which will always exist for the global parameters.  For now, this channel only contains the step length in milliseconds.</p>
+        <p>There's always 1 necessary channel which will always exist for the global parameters.  For now, this channel only contains the step length in milliseconds.  This is always the first column.</p>
         <h3 id="sequence">Sequence Block</h3>
         <p>The sequence block starts with a line defining the entire initial state of parameters for every channel.  This is followed by the number of patterns which will be in the file, then each pattern will start with the number of lines in that pattern followed by that number of lines.  Finally, will be the orders list which is just a list of what order patterns will be played in one after another.</p>
         <h2 id="format-types">Specific Format Types</h2>
@@ -190,6 +239,7 @@
         <code>channel 1|channel 2|channel 3|channel 4</code>
         <p>Extra space between fields and around the '|'s doesn't matter, except a macro must have a space after the last argument, if it takes arguments.</p>
         <p>There are 2 formats of line in a sequence.  The initial state line.  This appears once and is the first line in the sequence block.  it must have every parameter defined.  A sequence line.  These can specify any number of parameters, or none at all.  The parameters list must start with a bitfield describing which parameters follow after, even if it's 0, for none.</p>
+        <p>Each column is processed in full for the amount of time or until that column can produce no more data.  Columns are processed from left to right.</p>
         <h3 id="parameter-lists">Parameter Lists</h3>
         <p>Parameters must be provided in a certain order, which depends on the type of channel what order this is and what each parameter does.  Each parameter also has a bitfield value used for sequence lines.  The way those will basically work is that you can simply add the values together, except if in any one field it goes past 9, you continue on with a, b, c, d, e, f.  It'll never be more than f.  This is hexadecimal countinug.</p>
         <p>If a parameter list is to contain another parameter list, it must also start with a bitfield, even if it's 0, for an empty parameter list.</p>
