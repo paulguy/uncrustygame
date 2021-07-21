@@ -221,8 +221,6 @@ class Sequencer():
 
     def _get_row(self, desc, row):
         newRow = list()
-        print(desc)
-        print(row)
         for i in range(len(desc)):
             if isinstance(desc[i], int):
                 if row[i] == None:

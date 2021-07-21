@@ -2405,11 +2405,13 @@ static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
         todo = MIN((unsigned int)todo, get_buffer_size(syn, flt->sliceBuffer) - flt->slicePos);
         float *f = get_buffer_data(syn, flt->filterBuffer);
         float *fs;
+        unsigned int slices = flt->slices - flt->slice;
+        unsigned int startPos = flt->startPos + (flt->slice * flt->size);
         if(flt->volMode == SYNTH_AUTO_CONSTANT) {
             if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
-                    fs = &(f[flt->startPos +
-                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    fs = &(f[startPos +
+                             (((int)(s[samples] * slices)) % slices * flt->size)]);
                     unsigned int pos = 0;
                     for(j = flt->accumPos; j < flt->size; j++) {
                         flt->accum[j] += i[samples] * fs[pos];
@@ -2425,8 +2427,8 @@ static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
                 }
             } else if(flt->outOp == SYNTH_OUTPUT_ADD) {
                 for(samples = 0; samples < todo; samples++) {
-                    fs = &(f[flt->startPos +
-                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    fs = &(f[startPos +
+                             (((int)(s[samples] * slices)) % slices * flt->size)]);
                     unsigned int pos = 0;
                     for(j = flt->accumPos; j < flt->size; j++) {
                         flt->accum[j] += i[samples] * fs[pos];
@@ -2447,8 +2449,8 @@ static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
             todo = MIN((unsigned int)todo, get_buffer_size(syn, flt->volBuffer) - flt->volPos);
             if(flt->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
-                    fs = &(f[flt->startPos +
-                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    fs = &(f[startPos +
+                             (((int)(s[samples] * slices)) % slices * flt->size)]);
                     unsigned int pos = 0;
                     for(j = flt->accumPos; j < flt->size; j++) {
                         flt->accum[j] += i[samples] * fs[pos];
@@ -2465,8 +2467,8 @@ static unsigned int do_synth_run_filter(Synth *syn, SynthFilter *flt,
                 }
             } else if(flt->outOp == SYNTH_OUTPUT_ADD) {
                 for(samples = 0; samples < todo; samples++) {
-                    fs = &(f[flt->startPos +
-                             (((int)(s[samples] * flt->slices)) % flt->slices * flt->size)]);
+                    fs = &(f[startPos +
+                             (((int)(s[samples] * slices)) % slices * flt->size)]);
                     unsigned int pos = 0;
                     for(j = flt->accumPos; j < flt->size; j++) {
                         flt->accum[j] += i[samples] * fs[pos];

@@ -401,24 +401,45 @@ class AudioSequencer():
                         note = 11
 
             if len(speed) > char + 1:
-                try:
-                    octave = int(speed[char+1]) + octave
-                    char += 1
-                except ValueError:
-                    octave = 4 + octave
+                if speed[char+1].isdigit() or \
+                   speed[char+1] == '-' or \
+                   speed[char+1] == '+':
+                    curchar = char
+                    numlen = 0
+                    if speed[curchar+1].isdigit():
+                        numlen += 1
+                    curchar += 1
+                    while len(speed) > curchar + 1:
+                        if speed[curchar+1].isdigit():
+                            numlen += 1;
+                        else:
+                            break
+                        curchar += 1
+                    if numlen > 0:
+                        octave = int(speed[char+1:curchar+1]) - 4 + octave
+                        char = curchar
+                    else:
+                        raise ValueError("Sign with no number.")
 
             tune = self._tunes[note]
-            if octave < 4:
-                tune /= 5 - octave
-            elif octave > 4:
-                tune *= octave - 3
+            if octave < 0:
+                tune /= (-octave + 1) ** 2
+            elif octave > 0:
+                tune *= (octave + 1) ** 2
 
             if len(speed) > char + 1:
-                try:
-                    detune = float(speed[char+1:])
-                    tune = tune * (2 ** (detune / 12))
-                except ValueError:
-                    pass
+                if speed[char+1] == '*':
+                    char += 1
+                    if len(speed) > char + 1:
+                        try:
+                            detune = float(speed[char+1:])
+                            tune = tune * (2 ** (detune / 12))
+                        except ValueError:
+                            pass
+                    else:
+                        raise ValueError("'*' with no detune.")
+                else:
+                    raise ValueError("Junk after speed/note value.")
 
         return (outrate / inrate) * tune
 

@@ -649,7 +649,8 @@ int synth_set_filter_mode(Synth *s,
                           unsigned int index,
                           SynthAutoMode mode);
 /*
- * Set the constant filter slice value to use.
+ * Set the filter slice value to use either in constant mode or the first slice
+ * in slice buffer source mode.
  *
  * s        the Synth structure
  * index    the filter to update
@@ -661,9 +662,11 @@ int synth_set_filter_slice(Synth *s,
                            int slice);
 /*
  * Provide the source buffer for slices, valid values are 0.0 to 1.0,
- * everything else will just wrap between those values.  0.0 will be the filter
- * at startPos and 1.0 will be the last numbered filter slice, and values in
- * between will be which is linearly nearest.
+ * everything else will just wrap between those values.  0.0 will be the Nth
+ * filter past startPos and 1.0 will be the last numbered filter slice, and
+ * values in between will be which is linearly nearest.  Where N is the first
+ * slice value.
+ * See: synth_set_filter_slice
  *
  * s            the Synth structure
  * indxx        the filter to update
