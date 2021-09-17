@@ -55,8 +55,21 @@ class MacroReader():
 
     def add_macros(self, macros):
         if isinstance(macros[0], tuple):
+            # try to find each macro arg in the macro body
+            for macro in macros:
+                for arg in macro[1]:
+                    try:
+                        macro[2].index(arg)
+                    except ValueError:
+                        raise ValueError("Macro {} has arg {} not found in body.".format(macro[0], arg))
             self._macros.extend(macros)
         else:
+            # try to find each macro arg in the macro body
+            for arg in macros[1]:
+                try:
+                    macros[2].index(arg)
+                except ValueError:
+                    raise ValueError("Macro {} has arg {} not found in body.".format(macros[0], arg))
             self._macros.append(macros)
 
     @property
@@ -105,11 +118,8 @@ class MacroReader():
                         changed = True
                         # append everything up to the macro name to be replaced
                         newLine += line[:index]
-                        # results in name, args, remainder
-                        args = [line[index:index+len(macro[0])]]
-                        args.extend(line[index+len(macro[0]):].split(maxsplit=len(macro[1])))
-                        # don't need the name
-                        args = args[1:]
+                        # results in args, remainder
+                        args = line[index+len(macro[0]):].split(maxsplit=len(macro[1]))
                         # make a copy of the replacement string
                         replacement = str(macro[2])
                         # replace all instances of argument names with the provided
@@ -421,11 +431,7 @@ class AudioSequencer():
                     else:
                         raise ValueError("Sign with no number.")
 
-            tune = self._tunes[note]
-            if octave < 0:
-                tune /= (-octave + 1) ** 2
-            elif octave > 0:
-                tune *= (octave + 1) ** 2
+            tune = self._tunes[note] * (2 ** octave)
 
             if len(speed) > char + 1:
                 if speed[char+1] == '*':
@@ -795,7 +801,6 @@ class AudioSequencer():
                                 upd = channel[2]
                                 if self._trace:
                                     print(upd)
-                                channel[2] = None
                                 self._update_player(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_OUTBUFFER:
@@ -803,7 +808,6 @@ class AudioSequencer():
                                 upd = channel[3]
                                 if self._trace:
                                     print(upd)
-                                channel[3] = None
                                 self._update_player(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_INBUFFER:
@@ -811,7 +815,6 @@ class AudioSequencer():
                                 upd = channel[4]
                                 if self._trace:
                                     print(upd)
-                                channel[4] = None
                                 self._update_player(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_VOLBUFFER:
@@ -819,7 +822,6 @@ class AudioSequencer():
                                 upd = channel[5]
                                 if self._trace:
                                     print(upd)
-                                channel[5] = None
                                 self._update_player(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_SPEEDBUFFER:
@@ -827,7 +829,6 @@ class AudioSequencer():
                                 upd = channel[6]
                                 if self._trace:
                                     print(upd)
-                                channel[6] = None
                                 self._update_player(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_PHASEBUFFER:
@@ -835,7 +836,6 @@ class AudioSequencer():
                                 upd = channel[7]
                                 if self._trace:
                                     print(upd)
-                                channel[7] = None
                                 self._update_player(channel, upd)
                                 changed = True
                         if not changed:
@@ -869,7 +869,6 @@ class AudioSequencer():
                                 upd = channel[2]
                                 if self._trace:
                                     print(upd)
-                                channel[2] = None
                                 self._update_filter(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_OUTBUFFER:
@@ -877,7 +876,6 @@ class AudioSequencer():
                                 upd = channel[3]
                                 if self._trace:
                                     print(upd)
-                                channel[3] = None
                                 self._update_filter(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_INBUFFER:
@@ -885,7 +883,6 @@ class AudioSequencer():
                                 upd = channel[4]
                                 if self._trace:
                                     print(upd)
-                                channel[4] = None
                                 self._update_filter(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_VOLBUFFER:
@@ -893,7 +890,6 @@ class AudioSequencer():
                                 upd = channel[5]
                                 if self._trace:
                                     print(upd)
-                                channel[5] = None
                                 self._update_filter(channel, upd)
                                 changed = True
                         if reason & cg.SYNTH_STOPPED_SLICEBUFFER:
@@ -901,7 +897,6 @@ class AudioSequencer():
                                 upd = channel[6]
                                 if self._trace:
                                     print(upd)
-                                channel[6] = None
                                 self._update_filter(channel, upd)
                                 changed = True
                         if not changed:

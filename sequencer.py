@@ -78,6 +78,8 @@ class Sequencer():
         pos = 0
         changeMask = None
         if not initial:
+            if len(struct) == 0:
+                return 0, EMPTY_ROW
             changeMask = int(struct[0], base=16)
             if changeMask == 0:
                 return 1, EMPTY_ROW
@@ -126,18 +128,36 @@ class Sequencer():
 
     def _read_line(self, file, initial=False):
         structs = file.readline().split('|')
-        if len(structs) != self._desc.columns:
-            raise Exception("wrong number of columns in file ({} != {})".format(len(structs), self._desc.columns))
 
         fullRow = list()
-        for i in range(self._desc.columns):
-            columnDesc = self._desc._column[i]
-            rowDesc = self._desc._rowdesc[columnDesc]
-            split = structs[i].split()
-            pos, newrow = self._read_row(split, rowDesc, initial=initial)
-            if pos < len(split):
-                raise Exception("too many values in column ({} < {})".format(pos, len(split)))
-            fullRow.append(newrow)
+        # allow global only or totally empty lines
+        if not initial and len(structs) == 2 and len(structs[1].strip()) == 0:
+            if len(structs[0].strip()) == 0:
+                # totally empty line "|"
+                for i in range(self._desc.columns):
+                    fullRow.append(EMPTY_ROW)
+            else:
+                # line with only global changes "~~~ |"
+                columnDesc = self._desc._column[0]
+                rowDesc = self._desc._rowdesc[columnDesc]
+                split = structs[0].split()
+                pos, newrow = self._read_row(split, rowDesc)
+                if len(split) > pos:
+                    raise Exception("too many values in column ({} > {})".format(len(split), pos))
+                fullRow.append(newrow)
+                for i in range(1, self._desc.columns):
+                    fullRow.append(EMPTY_ROW)
+        elif len(structs) == self._desc.columns:
+            for i in range(self._desc.columns):
+                columnDesc = self._desc._column[i]
+                rowDesc = self._desc._rowdesc[columnDesc]
+                split = structs[i].split()
+                pos, newrow = self._read_row(split, rowDesc, initial=initial)
+                if len(split) > pos:
+                    raise Exception("too many values in column ({} > {})".format(len(split), pos))
+                fullRow.append(newrow)
+        else:
+            raise Exception("wrong number of columns in file ({} != {})".format(len(structs), self._desc.columns))
 
         return fullRow
 

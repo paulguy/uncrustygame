@@ -309,6 +309,19 @@ static void init_tileset(Tileset *t,
     t->refs = 0;
 }
 
+static void add_tileset_ref(Tileset *ts) {
+    ts->refs++;
+}
+
+static void free_tileset_ref(LayerList *ll, Tileset *ts) {
+    if(ts->refs == 0) {
+        LOG_PRINTF(ll, "WARNING: Attenpt to free reference to tileset with no references.\n");
+        return;
+    }
+
+    ts->refs--;
+}
+
 int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,
                         unsigned int tw,
@@ -361,20 +374,19 @@ int tilemap_add_tileset(LayerList *ll,
             SDL_FreeSurface(surface2);
             return(-1);
         }
-        surface = surface2;
+    } else {
+        surface2 = surface;
     }
 
     /* create the texture */
-    tex = SDL_CreateTextureFromSurface(ll->renderer, surface);
+    tex = SDL_CreateTextureFromSurface(ll->renderer, surface2);
+    /* if it's not this function's surface, don't free it */
+    if(surface != surface2) {
+        SDL_FreeSurface(surface2);
+    }
     if(tex == NULL) {
         LOG_PRINTF(ll, "Failed to create texture from surface: %s.\n", SDL_GetError());
-        if(surface == surface2) {
-            SDL_FreeSurface(surface);
-        }
         return(-1);
-    }
-    if(surface == surface2) {
-        SDL_FreeSurface(surface);
     }
 
     /* make values overwrite existing values */
@@ -451,6 +463,7 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index) {
 }
 
 static int init_tilemap(LayerList *ll, Tilemap *t,
+                        unsigned int tileset,
                         unsigned int w, unsigned int h) {
     t->map = malloc(sizeof(unsigned int) * w * h);
     if(t->map == NULL) {
@@ -460,7 +473,7 @@ static int init_tilemap(LayerList *ll, Tilemap *t,
     memset(t->map, 0, sizeof(unsigned int) * w * h);
     t->w = w;
     t->h = h;
-    t->tileset = -1;
+    t->tileset = tileset;
     t->tex = NULL;
     t->attr_flags = NULL;
     t->attr_colormod = NULL;
@@ -469,11 +482,29 @@ static int init_tilemap(LayerList *ll, Tilemap *t,
     return(0);
 }
 
+static void add_tilemap_ref(Tilemap *tm) {
+    tm->refs++;
+}
+
+static void free_tilemap_ref(LayerList *ll, Tilemap *tm) {
+    if(tm->refs == 0) {
+        LOG_PRINTF(ll, "WARNING: Attenpt to free reference to tilemap with no references.\n");
+        return;
+    }
+
+    tm->refs--;
+}
+
 int tilemap_add_tilemap(LayerList *ll,
+                        unsigned int tileset,
                         unsigned int w,
                         unsigned int h) {
     Tilemap *temp;
     unsigned int i, j;
+    Tileset *ts = get_tileset(ll, tileset);
+    if(ts == NULL) {
+        return(-1);
+    }
 
     if(w == 0 || h == 0) {
         LOG_PRINTF(ll, "Tilemap must have area.\n");
@@ -488,18 +519,20 @@ int tilemap_add_tilemap(LayerList *ll,
             return(-1);
         }
         ll->tilemapsmem = 1;
-        if(init_tilemap(ll, &(ll->tilemap[0]), w, h) < 0) {
+        if(init_tilemap(ll, &(ll->tilemap[0]), tileset, w, h) < 0) {
             return(-1);
         }
+        add_tileset_ref(ts);
         return(0);
     }
 
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->tilemapsmem; i++) {
         if(ll->tilemap[i].map == NULL) {
-            if(init_tilemap(ll, &(ll->tilemap[i]), w, h) < 0) {
+            if(init_tilemap(ll, &(ll->tilemap[i]), tileset, w, h) < 0) {
                 return(-1);
             }
+            add_tileset_ref(ts);
             return(i);
         }
     }
@@ -513,9 +546,11 @@ int tilemap_add_tilemap(LayerList *ll,
     }
     ll->tilemap = temp;
     ll->tilemapsmem *= 2;
-    if(init_tilemap(ll, &(ll->tilemap[i]), w, h) < 0) {
+    if(init_tilemap(ll, &(ll->tilemap[i]), tileset, w, h) < 0) {
         return(-1);
     }
+    add_tileset_ref(ts);
+
     /* initialize empty excess surfaces as NULL */
     for(j = i + 1; j < ll->tilemapsmem; j++) {
         ll->tilemap[j].map = NULL;
@@ -544,10 +579,12 @@ int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
         return(-1);
     }
 
-    /* decrement reference from tileset from this tilemap */
-    if(tm->tileset >= 0) {
-        ll->tileset[tm->tileset].refs--;
+    Tileset *ts = get_tileset(ll, tm->tileset);
+    if(ts == NULL) {
+        return(-1);
     }
+    free_tileset_ref(ll, ts);
+
     free(tm->map);
     tm->map = NULL;
     /* free any attribute layers */
@@ -575,8 +612,12 @@ int tilemap_set_tilemap_tileset(LayerList *ll,
     if(tm == NULL) {
         return(-1);
     }
-    Tileset *ts = get_tileset(ll, tileset);
-    if(ts == NULL) {
+    Tileset *oldts = get_tileset(ll, tm->tileset);
+    if(oldts == NULL) {
+        return(-1);
+    }
+    Tileset *newts = get_tileset(ll, tileset);
+    if(newts == NULL) {
         return(-1);
     }
 
@@ -586,8 +627,9 @@ int tilemap_set_tilemap_tileset(LayerList *ll,
         tm->tex = NULL;
     }
 
+    free_tileset_ref(ll, oldts);
+    add_tileset_ref(newts);
     tm->tileset = tileset;
-    ts->refs++;
 
     return(0);
 }
@@ -596,9 +638,9 @@ int tilemap_set_tilemap_map(LayerList *ll,
                             unsigned int index,
                             unsigned int x,
                             unsigned int y,
-                            unsigned int pitch,
-                            unsigned int w,
-                            unsigned int h,
+                            int pitch,
+                            int w,
+                            int h,
                             const unsigned int *value,
                             unsigned int size) {
     unsigned int i;
@@ -607,7 +649,20 @@ int tilemap_set_tilemap_map(LayerList *ll,
         return(-1);
     }
 
-    if((((h - 1) * pitch) + w) > size) {
+    /* Allow passing in 0s to be filled in for the whole map size, allow a
+     * 0 pitch to be specified to copy the same row over each line */
+    if(pitch < 0) {
+        pitch = tm->w;
+    }
+    if(w <= 0) {
+        w = tm->w;
+    }
+    if(h <= 0) {
+        h = tm->h;
+    }
+
+    if(((((unsigned int)h - 1) * (unsigned int)pitch) +
+        (unsigned int)w) > size) {
         LOG_PRINTF(ll, "Buffer too small to hold tilemap.\n");
         return(-1);
     }
@@ -635,15 +690,27 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
                                    unsigned int index,
                                    unsigned int x,
                                    unsigned int y,
-                                   unsigned int pitch,
-                                   unsigned int w,
-                                   unsigned int h,
+                                   int pitch,
+                                   int w,
+                                   int h,
                                    const unsigned int *value,
                                    unsigned int size) {
     unsigned int i;
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
         return(-1);
+    }
+
+    /* Allow passing in 0s to be filled in for the whole map size, allow a
+     * 0 pitch to be specified to copy the same row over each line */
+    if(pitch < 0) {
+        pitch = tm->w;
+    }
+    if(w <= 0) {
+        w = tm->w;
+    }
+    if(h <= 0) {
+        h = tm->h;
     }
 
     if(((h - 1) * pitch) + w > size) {
@@ -683,15 +750,27 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
                                       unsigned int index,
                                       unsigned int x,
                                       unsigned int y,
-                                      unsigned int pitch,
-                                      unsigned int w,
-                                      unsigned int h,
+                                      int pitch,
+                                      int w,
+                                      int h,
                                       const Uint32 *value,
                                       unsigned int size) {
     unsigned int i;
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
         return(-1);
+    }
+
+    /* Allow passing in 0s to be filled in for the whole map size, allow a
+     * 0 pitch to be specified to copy the same row over each line */
+    if(pitch < 0) {
+        pitch = tm->w;
+    }
+    if(w <= 0) {
+        w = tm->w;
+    }
+    if(h <= 0) {
+        h = tm->h;
     }
 
     if(((h - 1) * pitch) + w > size) {
@@ -743,9 +822,12 @@ int tilemap_update_tilemap(LayerList *ll,
     SDL_RendererFlip flip;
     unsigned int texw, texh;
     SDL_Texture *targetTexture;
-    Tileset *ts;
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
+        return(-1);
+    }
+    Tileset *ts = get_tileset(ll, tm->tileset);
+    if(ts == NULL) {
         return(-1);
     }
 
@@ -756,13 +838,6 @@ int tilemap_update_tilemap(LayerList *ll,
     if(h == 0) {
         h = tm->h;
     }
-
-    /* make sure there's a tileset referenced */
-    if(tm->tileset < 0) {
-        LOG_PRINTF(ll, "Tilemap has no tileset.\n");
-        return(-1);
-    }
-    ts = &(ll->tileset[tm->tileset]);
 
     /* make sure the range specified is within the map */
     if(x > tm->w || x + w > tm->w ||
@@ -821,7 +896,8 @@ int tilemap_update_tilemap(LayerList *ll,
         for(i = x; i < x + w; i++) {
             src.x = tm->map[tm->w * j + i];
             /* check to see if index is within tileset */
-            /* src.x can't be negative, silences a warning */
+            /* src.x can't be negative, because tm->map is unsigned,
+             * silences a warning */
             if((unsigned int)(src.x) > ts->max) {
                 LOG_PRINTF(ll, "Tilemap index beyond tileset: %u\n", src.x);
                 return(-1);
@@ -945,13 +1021,14 @@ static void init_layer(Layer *l,
 int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
     Layer *temp;
     unsigned int i, j;
-    Tileset *ts;
     Tilemap *tm = get_tilemap(ll, tilemap);
     if(tm == NULL) {
         return(-1);
     }
-
-    ts = &(ll->tileset[tm->tileset]);
+    Tileset *ts = get_tileset(ll, tm->tileset);
+    if(ts == NULL) {
+        return(-1);
+    }
 
     /* first created layer, so do some initial setup */
     if(ll->layersmem == 0) {
@@ -962,6 +1039,7 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
         }
         ll->layersmem = 1;
         init_layer(&(ll->layer[0]), tm, ts, tilemap);
+        add_tilemap_ref(tm);
         return(0);
     }
 
@@ -969,6 +1047,7 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
     for(i = 0; i < ll->layersmem; i++) {
         if(ll->layer[i].tilemap == -1) {
             init_layer(&(ll->layer[i]), tm, ts, tilemap);
+            add_tilemap_ref(tm);
             return(i);
         }
     }
@@ -983,6 +1062,8 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
     ll->layer = temp;
     ll->layersmem *= 2;
     init_layer(&(ll->layer[i]), tm, ts, tilemap);
+    add_tilemap_ref(tm);
+
     /* initialize empty excess surfaces as NULL */
     for(j = i + 1; j < ll->layersmem; j++) {
         ll->layer[j].tilemap = -1;
@@ -1006,7 +1087,12 @@ int tilemap_free_layer(LayerList *ll, unsigned int index) {
     if(l == NULL) {
         return(-1);
     }
+    Tilemap *tm = get_tilemap(ll, l->tilemap);
+    if(tm == NULL) {
+        return(-1);
+    }
 
+    free_tilemap_ref(ll, tm);
     l->tilemap = -1;
 
     return(0);
@@ -1029,15 +1115,19 @@ int tilemap_set_layer_window(LayerList *ll,
                              unsigned int w,
                              unsigned int h) {
     unsigned int tmw, tmh;
-    Tilemap *tm;
-    Tileset *ts;
     Layer *l = get_layer(ll, index);
     if(l == NULL) {
         return(-1);
     }
+    Tilemap *tm = get_tilemap(ll, l->tilemap);
+    if(tm == NULL) {
+        return(-1);
+    }
+    Tileset *ts = get_tileset(ll, l->tileset);
+    if(ts == NULL) {
+        return(-1);
+    }
 
-    tm = &(ll->tilemap[l->tilemap]);
-    ts = &(ll->tileset[tm->tileset]);
     tmw = tm->w * ts->tw;
     tmh = tm->h * ts->th;
     /* Allow passing in 0s to be reset to full size */
@@ -1064,15 +1154,19 @@ int tilemap_set_layer_scroll_pos(LayerList *ll,
                                  unsigned int scroll_x,
                                  unsigned int scroll_y) {
     unsigned int tmw, tmh;
-    Tilemap *tm;
-    Tileset *ts;
     Layer *l = get_layer(ll, index);
     if(l == NULL) {
         return(-1);
     }
+    Tilemap *tm = get_tilemap(ll, l->tilemap);
+    if(tm == NULL) {
+        return(-1);
+    }
+    Tileset *ts = get_tileset(ll, l->tileset);
+    if(ts == NULL) {
+        return(-1);
+    }
 
-    tm = &(ll->tilemap[l->tilemap]);
-    ts = &(ll->tileset[tm->tileset]);
     tmw = tm->w * ts->tw;
     tmh = tm->h * ts->th;
 
@@ -1097,10 +1191,9 @@ int tilemap_set_layer_scale(LayerList *ll,
     }
 
     /* SDL doesn't seem to allow negative rect coords and just clamps to 0 so
-     * to avoid unexpected behavior, just throw an error to the user. */
+     * to avoid unexpected behavior, just throw a warning to the user. */
     if(scale_x < 0.0 || scale_y < 0.0) {
-        LOG_PRINTF(ll, "Negative X scale.\n");
-        return(-1);
+        LOG_PRINTF(ll, "WARNING: Negative scale.\n");
     }
 
     l->scale_x = scale_x;
@@ -1185,19 +1278,25 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     unsigned int right, bottom;
     int overRight, overBottom;
     int remainRight, remainBottom;
-    Tileset *ts;
-    Tilemap *tm;
     Layer *l = get_layer(ll, index);
     if(l == NULL) {
         return(-1);
     }
+    Tilemap *tm = get_tilemap(ll, l->tilemap);
+    if(tm == NULL) {
+        return(-1);
+    }
+    Tileset *ts = get_tileset(ll, l->tileset);
+    if(ts == NULL) {
+        return(-1);
+    }
+
     /* Make sure it's a layer with graphics */
-    if(ll->tilemap[l->tilemap].tex == NULL) {
+    if(tm->tex == NULL) {
         LOG_PRINTF(ll, "Layer without graphics: %d\n", index);
         return(-1);
     }
 
-    tm = &(ll->tilemap[l->tilemap]);
     if(SDL_SetTextureColorMod(tm->tex,
             (l->colormod & TILEMAP_RMASK) >> TILEMAP_RSHIFT,
             (l->colormod & TILEMAP_GMASK) >> TILEMAP_GSHIFT,
@@ -1220,7 +1319,6 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
         }
         SDL_SetTextureBlendMode(tm->tex, SDL_BLENDMODE_BLEND);
     }
-    ts = &(ll->tileset[tm->tileset]);
     tmw = tm->w * ts->tw;
     tmh = tm->h * ts->th;
     right = l->scroll_x + l->w;

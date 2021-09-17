@@ -1,3 +1,3 @@
-Finish up generic sequencer.
-Hook up sequencer to synth engine.
+Make tilemap.c modifications compile.
+Track down audio crusts when the synth engine is idle then starts playing audio again.
 Allow synth engine to run on its own, separate from the audio device, for the sake of reuse for other automations.
