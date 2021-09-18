@@ -677,7 +677,7 @@ int tilemap_set_tilemap_map(LayerList *ll,
         return(-1);
     }
 
-    for(i = 0; i < h; i++) {
+    for(i = 0; i < (unsigned int)h; i++) {
         memcpy(&(tm->map[tm->w * (y + i) + x]),
                &(value[(pitch * i)]),
                sizeof(unsigned int) * w); 
@@ -713,7 +713,8 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
         h = tm->h;
     }
 
-    if(((h - 1) * pitch) + w > size) {
+    if(((((unsigned int)h - 1) * (unsigned int)pitch) +
+        (unsigned int)w) > size) {
         LOG_PRINTF(ll, "Buffer too small to hold tilemap.\n");
         return(-1);
     }
@@ -737,7 +738,7 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
         memset(tm->attr_flags, 0, sizeof(unsigned int) * w * h);
     }
  
-    for(i = 0; i < h; i++) {
+    for(i = 0; i < (unsigned int)h; i++) {
         memcpy(&(tm->attr_flags[tm->w * (y + i) + x]),
                &(value[(pitch * i)]),
                sizeof(unsigned int) * w); 
@@ -773,7 +774,8 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
         h = tm->h;
     }
 
-    if(((h - 1) * pitch) + w > size) {
+    if(((((unsigned int)h - 1) * (unsigned int)pitch) +
+        (unsigned int)w) > size) {
         LOG_PRINTF(ll, "Buffer too small to hold tilemap.\n");
         return(-1);
     }
@@ -799,7 +801,7 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
                sizeof(unsigned int) * w * h);
     }
  
-    for(i = 0; i < h; i++) {
+    for(i = 0; i < (unsigned int)h; i++) {
         memcpy(&(tm->attr_colormod[tm->w * (y + i) + x]),
                &(value[(pitch * i)]),
                sizeof(unsigned int) * w); 
@@ -1123,7 +1125,7 @@ int tilemap_set_layer_window(LayerList *ll,
     if(tm == NULL) {
         return(-1);
     }
-    Tileset *ts = get_tileset(ll, l->tileset);
+    Tileset *ts = get_tileset(ll, tm->tileset);
     if(ts == NULL) {
         return(-1);
     }
@@ -1162,7 +1164,7 @@ int tilemap_set_layer_scroll_pos(LayerList *ll,
     if(tm == NULL) {
         return(-1);
     }
-    Tileset *ts = get_tileset(ll, l->tileset);
+    Tileset *ts = get_tileset(ll, tm->tileset);
     if(ts == NULL) {
         return(-1);
     }
@@ -1286,7 +1288,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     if(tm == NULL) {
         return(-1);
     }
-    Tileset *ts = get_tileset(ll, l->tileset);
+    Tileset *ts = get_tileset(ll, tm->tileset);
     if(ts == NULL) {
         return(-1);
     }

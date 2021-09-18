@@ -290,6 +290,15 @@ def main():
     aud.enabled(False)
     if seq != None:
         aud.del_sequence(seq)
+    del aud
+    # not sure if I can work around the seeming randomness of python destroying
+    # things so for now I guess it needs to be assured stuff is cleared in the
+    # right order to prevent things crashing on exit.  Maybe there's some nice
+    # solution to this.
+    del l
+    del tm
+    del ts
+    del ll
     SDL_DestroyRenderer(renderer)
     SDL_DestroyWindow(window)
 

@@ -70,16 +70,11 @@ int load_graphic(LayerList *ll,
     }
     /* create the tilemap, if needed */
     if(*tilemap < 0) {
-        *tilemap = tilemap_add_tilemap(ll, tmWidth, tmHeight);
+        *tilemap = tilemap_add_tilemap(ll, (unsigned int)*tileset, tmWidth, tmHeight);
         if(*tilemap < 0) {
             fprintf(stderr, "Failed to make tilemap.\n");
             return(-1);
         }
-    }
-    /* assign the tileset to the tilemap */
-    if(tilemap_set_tilemap_tileset(ll, *tilemap, *tileset) < 0) {
-        fprintf(stderr, "Failed to apply tileset to tilemap.\n");
-        return(-1);
     }
     /* set up its map for the first time if needed */
     if(values != NULL) {

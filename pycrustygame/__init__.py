@@ -113,12 +113,12 @@ _set_types(_cg.tilemap_set_default_render_target, None, [c_void_p, c_void_p])
 _set_types(_cg.tilemap_set_target_tileset, c_int, [c_void_p, c_int])
 _set_types(_cg.tilemap_add_tileset, c_int, [c_void_p, c_void_p, c_uint, c_uint])
 _set_types(_cg.tilemap_free_tileset, c_int, [c_void_p, c_uint])
-_set_types(_cg.tilemap_add_tilemap, c_int, [c_void_p, c_uint, c_uint])
+_set_types(_cg.tilemap_add_tilemap, c_int, [c_void_p, c_uint, c_uint, c_uint])
 _set_types(_cg.tilemap_free_tilemap, c_int, [c_void_p, c_uint])
 _set_types(_cg.tilemap_set_tilemap_tileset, c_int, [c_void_p, c_uint, c_uint])
-_set_types(_cg.tilemap_set_tilemap_map, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
-_set_types(_cg.tilemap_set_tilemap_attr_flags, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
-_set_types(_cg.tilemap_set_tilemap_attr_colormod, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint])
+_set_types(_cg.tilemap_set_tilemap_map, c_int, [c_void_p, c_uint, c_uint, c_uint, c_int, c_int, c_int, c_void_p, c_uint])
+_set_types(_cg.tilemap_set_tilemap_attr_flags, c_int, [c_void_p, c_uint, c_uint, c_uint, c_int, c_int, c_int, c_void_p, c_uint])
+_set_types(_cg.tilemap_set_tilemap_attr_colormod, c_int, [c_void_p, c_uint, c_uint, c_uint, c_int, c_int, c_int, c_void_p, c_uint])
 _set_types(_cg.tilemap_update_tilemap, c_int, [c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint])
 _set_types(_cg.tilemap_add_layer, c_int, [c_void_p, c_uint])
 _set_types(_cg.tilemap_free_layer, c_int, [c_void_p, c_uint])
@@ -333,7 +333,7 @@ class Layerlist():
         return _cg.layerlist_get_renderer(self._ll)
 
     def tileset(self, surface :SDL_Surface, tw :int, th :int):
-        return Tileset(self, surface, tw, th)
+        return Tileset(self, surface, tileset, tw, th)
 
     def blank_tileset(self,
                       w :int, h :int,
@@ -346,8 +346,7 @@ class Layerlist():
 
     # not sure why i allow for tilemaps without an assigned tileset but whichever
     def tilemap(self, tileset :int, w :int, h :int):
-        tilemap = Tilemap(self, w, h)
-        tilemap.tileset(tileset)
+        tilemap = Tilemap(self, tileset, w, h)
         return tilemap
 
     def layer(self, tilemap :int):
@@ -390,9 +389,9 @@ class Tilemap():
     """
     See tileset.h for details on using this library.
     """
-    def __init__(self, ll :Layerlist, w, h):
+    def __init__(self, ll :Layerlist, tilemap, w, h):
         self._ll = ll
-        self._tm = _cg.tilemap_add_tilemap(ll._ll, w, h)
+        self._tm = _cg.tilemap_add_tilemap(ll._ll, tilemap, w, h)
         if self._tm < 0:
             raise CrustyException()
 

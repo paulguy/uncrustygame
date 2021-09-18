@@ -211,10 +211,12 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index);
  * Add a tilemap.
  *
  * ll       the LayerList
+ * tileset  the tileset applied to this tilemap
  * w, h     the tilemap dimensions in tiles
  * return   the tilemap handle or -1 on failure
  */
 int tilemap_add_tilemap(LayerList *ll,
+                        unsigned int tileset,
                         unsigned int w,
                         unsigned int h);
 /*
@@ -252,9 +254,9 @@ int tilemap_set_tilemap_map(LayerList *ll,
                             unsigned int index,
                             unsigned int x,
                             unsigned int y,
-                            unsigned int pitch,
-                            unsigned int w,
-                            unsigned int h,
+                            int pitch,
+                            int w,
+                            int h,
                             const unsigned int *value,
                             unsigned int size);
 /*
@@ -278,9 +280,9 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
                                    unsigned int index,
                                    unsigned int x,
                                    unsigned int y,
-                                   unsigned int pitch,
-                                   unsigned int w,
-                                   unsigned int h,
+                                   int pitch,
+                                   int w,
+                                   int h,
                                    const unsigned int *value,
                                    unsigned int size);
 /*
@@ -307,9 +309,9 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
                                       unsigned int index,
                                       unsigned int x,
                                       unsigned int y,
-                                      unsigned int pitch,
-                                      unsigned int w,
-                                      unsigned int h,
+                                      int pitch,
+                                      int w,
+                                      int h,
                                       const Uint32 *value,
                                       unsigned int size);
 /*
