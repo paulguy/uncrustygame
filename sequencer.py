@@ -298,7 +298,6 @@ class Sequencer():
             else:
                 line = None
 
-            time = int(time)
             if time >= self._divTime - self._lineTime:
                 time = self._divTime - self._lineTime
                 self._lineTime = 0

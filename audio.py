@@ -730,6 +730,7 @@ class AudioSequencer():
             self._seq.set_pattern(init)
             self.run(-1)
         self._loaded = True
+        self._outpos = 0
         if self._trace:
             s.print_full_stats()
 
@@ -762,11 +763,21 @@ class AudioSequencer():
         consequences if the buffers haven't been touched.
         """
         self._seq.reset()
+        self._outpos = 0
         self._ended = False
 
-    def _run_channels(self, reqtime, line):
+    def _advance_player_pos(self, player, time, needed):
+        if player[9][0] == None and self._outpos < needed:
+            player[0].output_pos(self._outpos)
+
+    def _advance_filter_pos(self, filt, time, needed):
+        if filt[7][0] == None and self._outpos < needed:
+            filt[0].output_pos(self._outpos)
+
+    def _run_channels(self, reqtime, line, needed):
         if self._trace:
             print("=== run_channels === {}".format(reqtime))
+        self._outpos += reqtime
         # for performance and simplicity reasons, this is evaluating whole
         # channels at a time.  Alternatively, it would look to each channel
         # for the next event then run all channels up to that event in repeat
@@ -843,6 +854,7 @@ class AudioSequencer():
                             break
                     time -= got
                     channel[1] -= got
+                self._advance_player_pos(channel, time, needed)
             elif isinstance(channel[0], cg.Filter):
                 time = reqtime
                 if line != None and line[i] != None:
@@ -904,6 +916,7 @@ class AudioSequencer():
                             break
                     time -= got
                     channel[1] -= got
+                self._advance_filter_pos(channel, time, needed)
             else: # silence
                 if line != None and line[i] != None:
                     if self._trace:
@@ -942,19 +955,19 @@ class AudioSequencer():
                 except seq.SequenceEnded:
                     self._ended = True
                     break
-                self._run_channels(time * self._samplesms, line)
+                self._run_channels(time * self._samplesms, line, needed * self._samplesms)
                 needed -= time
 
     def _reset_output_positions(self):
+        # reset output channel positions to 0
         for channel in self._localChannels:
             if isinstance(channel[0], cg.Player):
-                # reset output channel positions to 0
                 if channel[9][0] == None:
                     channel[0].output_pos(0)
             elif isinstance(channel[0], cg.Filter):
-                # reset output channel positions to 0
                 if channel[7][0] == None:
                     channel[0].output_pos(0)
+        self._outpos = 0
 
 
 @cg.SYNTH_FRAME_CB_T
@@ -962,7 +975,7 @@ def audio_system_frame(priv, s):
     return priv[1]._frame_cb()
 
 class AudioSystem():
-    def __init__(self, log_cb_return, log_cb_priv, rate, channels):
+    def __init__(self, log_cb_return, log_cb_priv, rate, channels, trace=False):
         self._s = cg.Synth(audio_system_frame, self,
                            log_cb_return, log_cb_priv,
                            rate, channels)
@@ -972,6 +985,7 @@ class AudioSystem():
         self._fragments = 0
         self._inc_fragments()
         self._error = None
+        self._trace = trace
 
     def print_full_stats(self):
         self._s.print_full_stats()
@@ -1010,6 +1024,8 @@ class AudioSystem():
                 return 0
 
             needed = int(self._s.needed / self._samplesms)
+            if self._trace and len(self._sequences) > 0:
+                print("=== Audio Callback {} ===".format(needed))
             if needed > 0:
                 for seq in self._sequences:
                     self._error = seq[0]

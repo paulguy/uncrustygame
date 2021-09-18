@@ -168,7 +168,7 @@ def main():
     l.colormod(cg.tilemap_color(255, 255, 64, 192))
     l.blendmode(cg.TILEMAP_BLENDMODE_ADD) 
 
-    aud = audio.AudioSystem(log_cb_return, None, 48000, 2)
+    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, True)
     rate = aud.rate
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
                           cg.create_float_array(create_sqrt_slope(0.0, 1.0, rate)),
