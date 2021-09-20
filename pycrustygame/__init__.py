@@ -346,8 +346,7 @@ class Layerlist():
 
     # not sure why i allow for tilemaps without an assigned tileset but whichever
     def tilemap(self, tileset :int, w :int, h :int):
-        tilemap = Tilemap(self, tileset, w, h)
-        return tilemap
+        return Tilemap(self, tileset, w, h)
 
     def layer(self, tilemap :int):
         return Layer(self, tilemap)
@@ -376,6 +375,7 @@ class Tileset():
             raise TypeError()
         if self._ts < 0:
             raise CrustyException("Couldn't create a tileset.")
+        self._refs = []
 
     def __del__(self):
         if _cg.tilemap_free_tileset(self._ll._ll, self) < 0:
@@ -389,13 +389,17 @@ class Tilemap():
     """
     See tileset.h for details on using this library.
     """
-    def __init__(self, ll :Layerlist, tilemap, w, h):
+    def __init__(self, ll :Layerlist, tileset, w, h):
         self._ll = ll
-        self._tm = _cg.tilemap_add_tilemap(ll._ll, tilemap, w, h)
+        self._tm = _cg.tilemap_add_tilemap(ll._ll, tileset, w, h)
         if self._tm < 0:
             raise CrustyException()
+        tileset._refs.append(self)
+        self._ts = tileset
+        self._refs = []
 
     def __del__(self):
+        self._ts._refs.remove(self)
         if _cg.tilemap_free_tilemap(self._ll._ll, self) < 0:
             raise CrustyException()
 
@@ -403,9 +407,11 @@ class Tilemap():
         return self._tm
 
     def tileset(self, tileset :Tileset):
-        self._ts = tileset
+        self._ts._refs.remove(self)
         if _cg.tilemap_set_tilemap_tileset(self._ll._ll, self, tileset._ts) < 0:
             raise CrustyException()
+        tileset._refs.append(self)
+        self._ts = tileset
 
     def map(self,
             x :int, y :int,
@@ -439,13 +445,15 @@ class Layer():
     """
     def __init__(self, ll :Layerlist, tilemap :Tilemap):
         self._ll = ll
-        self._tm = tilemap
         self._l = _cg.tilemap_add_layer(ll._ll, tilemap)
         if self._l < 0:
             raise CrustyException()
+        tilemap._refs.append(self)
+        self._tm = tilemap
 
     def __del__(self):
-        if _cg.tilemap_free_layer(self._ll._ll, self):
+        self._tm._refs.remove(self)
+        if _cg.tilemap_free_layer(self._ll, layer) < 0:
             raise CrustyException()
 
     def __int__(self):
