@@ -1,3 +1,2 @@
-Make tilemap.c modifications compile.
-Track down audio crusts when the synth engine is idle then starts playing audio again.
+Finish conversion to a C extension module and make sure it no longer crashes on exit.
 Allow synth engine to run on its own, separate from the audio device, for the sake of reuse for other automations.

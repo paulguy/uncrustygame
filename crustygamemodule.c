@@ -13,7 +13,7 @@ typedef struct {
     PyObject *renderer;
 } LayerListObject;
 
-static void log_cb_adapter(const char *str, LayerListObject *self) {
+static void log_cb_adapter(LayerListObject *self, const char *str) {
     PyObject *arglist;
     PyObject *result;
 
@@ -22,7 +22,7 @@ static void log_cb_adapter(const char *str, LayerListObject *self) {
     Py_DECREF(arglist);
     /* don't check the result because this is called by C code anyway and it
      * is void */
-    Py_DECREF(result);
+    Py_XDECREF(result);
 }
 
 static PyObject *LayerList_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
@@ -85,6 +85,28 @@ static void LayerList_dealloc(LayerListObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
+static PyObject *LayerList_target_tileset(LayerListObject *self,
+                                          PyObject *args) {
+    int tileset;
+    int retval;
+    if(!PyArg_ParseTuple(args, "i", &tileset)) {
+        PyErr_SetString(PyExc_TypeError, "tileset must be an integer.");
+        return(NULL);
+    }
+
+    if(tilemap_set_target_tileset(self->ll, tileset)) {
+        PyErr_SetString(CrustyException, "Couldn't set target tileset.");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef LayerList_methods[] = {
+    {"target_tileset", (PyCFunction) LayerList_target_tileset, METH_VARARGS, "Set the tileset to render to or the default render target if less than 0."},
+    {NULL}
+};
+
 static PyTypeObject LayerListType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "crustygame.LayerList",
@@ -95,7 +117,7 @@ static PyTypeObject LayerListType = {
     .tp_new = LayerList_new,
     .tp_init = (initproc) LayerList_init,
     .tp_dealloc = (destructor) LayerList_dealloc,
-/*    .tp_methods = LayerList_methods */
+    .tp_methods = LayerList_methods
 };
 
 static struct PyModuleDef crustygamemodule = {
