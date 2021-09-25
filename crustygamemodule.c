@@ -239,97 +239,62 @@ static PyType_Spec LayerListSpec = {
 };
 
 int crustygame_exec(PyObject* m) {
-    fprintf(stderr, "exec\n");
     crustygame_state *state = PyModule_GetState(m);
-    PyObject *ctypes_m;
-    PyObject *ctypes_POINTER;
-    PyObject *SDL_m;
-    PyObject *SDL_Renderer_t;
-    PyObject *SDL_Texture_t;
+    state->CrustyException = NULL;
+    state->LayerListType = NULL;
+    state->LP_SDL_Renderer = NULL;
+    state->LP_SDL_Texture = NULL;
+    PyObject *ctypes_m = NULL;
+    PyObject *ctypes_POINTER = NULL;
+    PyObject *SDL_m = NULL;
+    PyObject *SDL_Renderer_t = NULL;
+    PyObject *SDL_Texture_t = NULL;
 
     state->CrustyException = PyErr_NewException("crustygame.CrustyException", NULL, NULL);
     if (PyModule_AddObject(m, "CrustyException", state->CrustyException) < 0) {
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
 
     state->LayerListType = PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
     if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
 
     /* Generate an LP_SDL_Renderer to compare with for type validation later on
      * so weirdness can't happen if oddball types are passed in */
     ctypes_m = PyImport_ImportModule("ctypes");
     if(ctypes_m == NULL) {
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
     ctypes_POINTER = get_symbol_from_string(ctypes_m, "POINTER");
     Py_XINCREF(ctypes_POINTER);
     if(ctypes_POINTER == NULL) {
-        Py_DECREF(ctypes_m);
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
 
     SDL_m = PyImport_ImportModule("sdl2");
     if(SDL_m == NULL) {
-        Py_DECREF(ctypes_POINTER);
-        Py_DECREF(ctypes_m);
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
 
     SDL_Renderer_t = get_symbol_from_string(SDL_m, "SDL_Renderer");
     Py_XINCREF(SDL_Renderer_t);
     if(SDL_Renderer_t == NULL) {
-        Py_DECREF(SDL_m);
-        Py_DECREF(ctypes_POINTER);
-        Py_DECREF(ctypes_m);
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
     state->LP_SDL_Renderer = PyObject_CallOneArg(ctypes_POINTER, SDL_Renderer_t);
     if(state->LP_SDL_Renderer == NULL) {
-        Py_DECREF(SDL_Renderer_t);
-        Py_DECREF(SDL_m);
-        Py_DECREF(ctypes_POINTER);
-        Py_DECREF(ctypes_m);
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
 
     SDL_Texture_t = get_symbol_from_string(SDL_m, "SDL_Texture");
     Py_XINCREF(SDL_Texture_t);
     if(SDL_Texture_t == NULL) {
-        Py_DECREF(state->LP_SDL_Renderer);
-        Py_DECREF(SDL_Renderer_t);
-        Py_DECREF(SDL_m);
-        Py_DECREF(ctypes_POINTER);
-        Py_DECREF(ctypes_m);
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
     state->LP_SDL_Texture = PyObject_CallOneArg(ctypes_POINTER, SDL_Texture_t);
     if(state->LP_SDL_Texture == NULL) {
-        Py_DECREF(SDL_Texture_t);
-        Py_DECREF(state->LP_SDL_Renderer);
-        Py_DECREF(SDL_Renderer_t);
-        Py_DECREF(SDL_m);
-        Py_DECREF(ctypes_POINTER);
-        Py_DECREF(ctypes_m);
-        Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyException);
-        return(-1);
+        goto error;
     }
 
     Py_DECREF(SDL_Texture_t);
@@ -338,6 +303,17 @@ int crustygame_exec(PyObject* m) {
     Py_DECREF(ctypes_POINTER);
     Py_DECREF(ctypes_m);
     return(0);
+
+error:
+    Py_XDECREF(SDL_Texture_t);
+    Py_XDECREF(state->LP_SDL_Renderer);
+    Py_XDECREF(SDL_Renderer_t);
+    Py_XDECREF(SDL_m);
+    Py_XDECREF(ctypes_POINTER);
+    Py_XDECREF(ctypes_m);
+    Py_XDECREF(state->LayerListType);
+    Py_XDECREF(state->CrustyException);
+    return(-1);
 }
 
 static void crustygame_free(void *p) {
