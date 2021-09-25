@@ -96,18 +96,37 @@ def initialize_video(title :str,
 
 
 def log_cb_return(string, priv):
-    print(string, end='')
+    print("tilemap.h output, ignore: {}".format(string), end='')
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
     window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC)
-    print(type(renderer))
     ll = cg.LayerList(renderer, pixfmt, log_cb_return, None)
 
-    ll.set_target_tileset(0)
+    try:
+        ll.set_target_tileset(window)
+        print("set_target_tileset didn't raise TypeError as expected")
+    except TypeError:
+        pass
 
-    del ll
+    try:
+        ll.set_target_tileset(0)
+        print("set_target_tileset didn't raise CrustyException as expected")
+    except cg.CrustyException:
+        pass
+
+    try:
+        ll.set_default_render_target(window)
+        print("set_default_render_target didn't raise TypeError as expected")
+    except TypeError:
+        pass
+
+    if ll.renderer != renderer:
+        print("Got different renderer back from layerlist")
+
     SDL_Quit()
+
+    print("If no other errors other than those said to ignore, then tests passed.")
 
 if __name__ == "__main__":
     main()

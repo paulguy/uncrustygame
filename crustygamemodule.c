@@ -4,7 +4,7 @@
 #include "tilemap.h"
 
 typedef struct {
-    PyTypeObject *CrustyException;
+    PyObject *CrustyException;
     PyTypeObject *LayerListType;
 
     /* types needed type type checking */
@@ -34,7 +34,7 @@ static PyObject *get_from_dict_string(PyObject *from, const char *str) {
     return(obj);
 }
 
-static PyTypeObject *get_symbol_from_string(PyObject *m, const char *str) {
+static PyObject *get_symbol_from_string(PyObject *m, const char *str) {
     PyObject *moddict = PyModule_GetDict(m);
     if(moddict == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "couldn't get dict for module");
@@ -72,7 +72,7 @@ static PyObject *LayerList_new(PyTypeObject *type, PyObject *args, PyObject *kwd
     /* just have it be do-nothing until it's properly initialize */
     self->ll = NULL;
 
-    return(self);
+    return((PyObject *)self);
 }
 
 static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds) {
@@ -105,7 +105,12 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
     Py_XINCREF(log_cb);
     Py_XINCREF(log_priv);
 
-    self->ll = layerlist_new(renderer, format, log_cb_adapter, self);
+    /* LP_SDL_Renderer is literally just a pointer to an SDL_Renderer, so this
+     * works directly casting from PyObject *. */
+    self->ll = layerlist_new((SDL_Renderer *)renderer,
+                             format,
+                             (log_cb_return_t)log_cb_adapter,
+                             self);
     if(self->ll == NULL) {
         PyErr_SetString(state->CrustyException, "layerlist_new returned an error");
         Py_XDECREF(log_priv);
@@ -130,12 +135,11 @@ static void LayerList_dealloc(LayerListObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
-static PyObject *LayerList_set_default_render_target(PyObject *self,
+static PyObject *LayerList_set_default_render_target(LayerListObject *self,
                                                      PyTypeObject *defining_class,
                                                      PyObject *const *args,
                                                      Py_ssize_t nargs,
                                                      PyObject *kwnames) {
-    LayerListObject *ll = self;
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
     if(nargs < 1) {
@@ -153,18 +157,20 @@ static PyObject *LayerList_set_default_render_target(PyObject *self,
         }
     }
 
-    tilemap_set_default_render_target(ll->ll, target);
+    /* as above, the cast to SDL_Texture works because python type
+     * LP_SDL_Texture is just literally the same as a pointer to a
+     * SDL_Texture *. */
+    tilemap_set_default_render_target(self->ll, (SDL_Texture *)target);
 
     Py_RETURN_NONE;
 }
 
-static PyObject *LayerList_set_target_tileset(PyObject *self,
+static PyObject *LayerList_set_target_tileset(LayerListObject *self,
                                               PyTypeObject *defining_class,
                                               PyObject *const *args,
                                               Py_ssize_t nargs,
                                               PyObject *kwnames) {
     long tileset;
-    int retval;
     if(nargs < 1) {
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
@@ -174,10 +180,9 @@ static PyObject *LayerList_set_target_tileset(PyObject *self,
         return(NULL);
     }
 
-    LayerListObject *ll = self;
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(tilemap_set_target_tileset(ll->ll, (int)tileset)) {
+    if(tilemap_set_target_tileset(self->ll, (int)tileset)) {
         PyErr_SetString(state->CrustyException, "Couldn't set target tileset.");
         return(NULL);
     }
@@ -199,7 +204,7 @@ static PyMethodDef LayerList_methods[] = {
     {NULL}
 };
 
-static int LayerList_getrenderer(LayerListObject *self, PyObject *value, void *closure) {
+static PyObject *LayerList_getrenderer(LayerListObject *self, void *closure) {
     /* don't bother calling the original method, since the object holds its own
      * copy */
     /* I think the reference count needs to be increased?  I think when the
@@ -255,7 +260,7 @@ int crustygame_exec(PyObject* m) {
         goto error;
     }
 
-    state->LayerListType = PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
+    state->LayerListType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
     if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
         goto error;
     }
@@ -282,7 +287,7 @@ int crustygame_exec(PyObject* m) {
     if(SDL_Renderer_t == NULL) {
         goto error;
     }
-    state->LP_SDL_Renderer = PyObject_CallOneArg(ctypes_POINTER, SDL_Renderer_t);
+    state->LP_SDL_Renderer = (PyTypeObject *)PyObject_CallOneArg(ctypes_POINTER, SDL_Renderer_t);
     if(state->LP_SDL_Renderer == NULL) {
         goto error;
     }
@@ -292,7 +297,7 @@ int crustygame_exec(PyObject* m) {
     if(SDL_Texture_t == NULL) {
         goto error;
     }
-    state->LP_SDL_Texture = PyObject_CallOneArg(ctypes_POINTER, SDL_Texture_t);
+    state->LP_SDL_Texture = (PyTypeObject *)PyObject_CallOneArg(ctypes_POINTER, SDL_Texture_t);
     if(state->LP_SDL_Texture == NULL) {
         goto error;
     }
@@ -340,6 +345,5 @@ static struct PyModuleDef crustygamemodule = {
 };
 
 PyMODINIT_FUNC PyInit_crustygame(void) {
-    fprintf(stderr, "PyInit\n");
     return(PyModuleDef_Init(&crustygamemodule));
 }
