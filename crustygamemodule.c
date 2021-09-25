@@ -37,13 +37,13 @@ static PyObject *get_from_dict_string(PyObject *from, const char *str) {
 static PyTypeObject *get_symbol_from_string(PyObject *m, const char *str) {
     PyObject *moddict = PyModule_GetDict(m);
     if(moddict == NULL) {
-        PyErr_SetString(RuntimeError, "couldn't get dict for module");
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get dict for module");
         return(NULL);
     }
 
     PyObject *typeobj = get_from_dict_string(moddict, str);
     if(typeobj == NULL) {
-        PyErr_SetString(RuntimeError, "couldn't get type from module dict");
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get type from module dict");
         return(NULL);
     }
 
@@ -80,6 +80,8 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
     unsigned int format;
     PyObject *log_cb;
     PyObject *log_priv;
+    /* docs say this init isn't called if the class is instantiated as some
+     * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
     if(!PyArg_ParseTuple(args, "OIOO", &renderer, &format, &log_cb, &log_priv)) {
@@ -91,7 +93,7 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
         return(-1);
     }
 
-    if(!PyObject_TypeCheck(renderer, LP_SDL_Renderer)) {
+    if(!PyObject_TypeCheck(renderer, state->LP_SDL_Renderer)) {
         PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
         return(-1);
     }
@@ -105,7 +107,7 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
 
     self->ll = layerlist_new(renderer, format, log_cb_adapter, self);
     if(self->ll == NULL) {
-        PyErr_SetString(CrustyException, "layerlist_new returned an error");
+        PyErr_SetString(state->CrustyException, "layerlist_new returned an error");
         Py_XDECREF(log_priv);
         Py_XDECREF(log_cb);
         Py_XDECREF(renderer);
@@ -133,6 +135,7 @@ static PyObject *LayerList_set_default_render_target(PyObject *self,
                                                      PyObject *const *args,
                                                      Py_ssize_t nargs,
                                                      PyObject *kwnames) {
+    LayerListObject *ll = self;
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
     if(nargs < 1) {
@@ -150,22 +153,32 @@ static PyObject *LayerList_set_default_render_target(PyObject *self,
         }
     }
 
-    tilemap_set_default_render_target(self->ll, target);
+    tilemap_set_default_render_target(ll->ll, target);
 
     Py_RETURN_NONE;
 }
 
-static PyObject *LayerList_set_target_tileset(LayerListObject *self,
-                                              PyObject *args) {
-    int tileset;
+static PyObject *LayerList_set_target_tileset(PyObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    long tileset;
     int retval;
-    if(!PyArg_ParseTuple(args, "i", &tileset)) {
-        PyErr_SetString(PyExc_TypeError, "tileset must be an integer.");
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    tileset = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
 
-    if(tilemap_set_target_tileset(self->ll, tileset)) {
-        PyErr_SetString(CrustyException, "Couldn't set target tileset.");
+    LayerListObject *ll = self;
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(tilemap_set_target_tileset(ll->ll, (int)tileset)) {
+        PyErr_SetString(state->CrustyException, "Couldn't set target tileset.");
         return(NULL);
     }
 
@@ -175,13 +188,13 @@ static PyObject *LayerList_set_target_tileset(LayerListObject *self,
 static PyMethodDef LayerList_methods[] = {
     {
         "set_default_render_target",
-        (PyCMethod) LayerList_set_target_tileset,
+        (PyCMethod) LayerList_set_default_render_target,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the default texture to render to.  Isn't applied immediately, though."},
     {
         "set_target_tileset",
-        (PyCFunction) LayerList_set_target_tileset,
-        METH_VARARGS,
+        (PyCMethod) LayerList_set_target_tileset,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the tileset to render to or the default render target if less than 0."},
     {NULL}
 };
@@ -207,23 +220,26 @@ static int LayerList_traverse(PyObject *self, visitproc visit, void *arg) {
     return 0;
 }
 
+static PyType_Slot LayerListSlots[] = {
+    {Py_tp_new, LayerList_new},
+    {Py_tp_init, (initproc)LayerList_init},
+    {Py_tp_dealloc, (destructor)LayerList_dealloc},
+    {Py_tp_methods, LayerList_methods},
+    {Py_tp_getset, LayerList_getsetters},
+    {Py_tp_traverse, LayerList_traverse},
+    {0, NULL}
+};
+
 static PyType_Spec LayerListSpec = {
     .name = "crustygame.LayerList",
     .basicsize = sizeof(LayerListObject),
     .itemsize = 0,
     .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
-    .slots = {
-        {Py_tp_new, LayerList_new},
-        {Py_tp_init, (initproc)LayerList_init},
-        {Py_tp_dealloc, (destructor)LayerList_dealloc},
-        {Py_tp_methods, LayerList_methods},
-        {Py_tp_getset, LayerList_getsetters},
-        {Py_tp_traverse, LayerList_traverse},
-        {0, NULL}
-    }
+    .slots = LayerListSlots
 };
 
 int crustygame_exec(PyObject* m) {
+    fprintf(stderr, "exec\n");
     crustygame_state *state = PyModule_GetState(m);
     PyObject *ctypes_m;
     PyObject *ctypes_POINTER;
@@ -237,7 +253,7 @@ int crustygame_exec(PyObject* m) {
         return(-1);
     }
 
-    state->LayerListType = PyType_FromModuleAndSpec(m, LayerListSpec, NULL);
+    state->LayerListType = PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
     if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
         Py_DECREF(state->LayerListType);
         Py_DECREF(state->CrustyException);
@@ -252,7 +268,7 @@ int crustygame_exec(PyObject* m) {
         Py_DECREF(state->CrustyException);
         return(-1);
     }
-    ctypes_POINTER = get_symbol_from_string(ctypes, "POINTER");
+    ctypes_POINTER = get_symbol_from_string(ctypes_m, "POINTER");
     Py_XINCREF(ctypes_POINTER);
     if(ctypes_POINTER == NULL) {
         Py_DECREF(ctypes_m);
@@ -261,23 +277,23 @@ int crustygame_exec(PyObject* m) {
         return(-1);
     }
 
-    SDLs = PyImport_ImportModule("sdl2");
-    if(SDL2 == NULL) {
+    SDL_m = PyImport_ImportModule("sdl2");
+    if(SDL_m == NULL) {
         Py_DECREF(ctypes_POINTER);
         Py_DECREF(ctypes_m);
         Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyEXception);
+        Py_DECREF(state->CrustyException);
         return(-1);
     }
 
-    SDL_Renderer_t = get_symbol_from_string(SDL, "SDL_Renderer");
+    SDL_Renderer_t = get_symbol_from_string(SDL_m, "SDL_Renderer");
     Py_XINCREF(SDL_Renderer_t);
     if(SDL_Renderer_t == NULL) {
         Py_DECREF(SDL_m);
         Py_DECREF(ctypes_POINTER);
         Py_DECREF(ctypes_m);
         Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyEXception);
+        Py_DECREF(state->CrustyException);
         return(-1);
     }
     state->LP_SDL_Renderer = PyObject_CallOneArg(ctypes_POINTER, SDL_Renderer_t);
@@ -291,7 +307,7 @@ int crustygame_exec(PyObject* m) {
         return(-1);
     }
 
-    SDL_Texture_t = get_symbol_from_string(SDL, "SDL_Texture");
+    SDL_Texture_t = get_symbol_from_string(SDL_m, "SDL_Texture");
     Py_XINCREF(SDL_Texture_t);
     if(SDL_Texture_t == NULL) {
         Py_DECREF(state->LP_SDL_Renderer);
@@ -300,7 +316,7 @@ int crustygame_exec(PyObject* m) {
         Py_DECREF(ctypes_POINTER);
         Py_DECREF(ctypes_m);
         Py_DECREF(state->LayerListType);
-        Py_DECREF(state->CrustyEXception);
+        Py_DECREF(state->CrustyException);
         return(-1);
     }
     state->LP_SDL_Texture = PyObject_CallOneArg(ctypes_POINTER, SDL_Texture_t);
@@ -333,19 +349,21 @@ static void crustygame_free(void *p) {
     PyObject_Free(p);
 }
 
+static struct PyModuleDef_Slot crustygamemodule_slots[] = {
+    {Py_mod_exec, crustygame_exec},
+    {0, NULL}
+};
+
 static struct PyModuleDef crustygamemodule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "crustygame",
     .m_doc = NULL,
     .m_size = sizeof(crustygame_state),
-    .m_slots = {
-        {Py_mod_exec, crustygame_exec},
-        {0, NULL}
-    },
+    .m_slots = crustygamemodule_slots,
     .m_free = (freefunc)crustygame_free
 };
 
-PyMODINIT_FUNC
-PyInit_crustygame(void) {
-    return(PyModuleDef_Init(crustygamemodule));
+PyMODINIT_FUNC PyInit_crustygame(void) {
+    fprintf(stderr, "PyInit\n");
+    return(PyModuleDef_Init(&crustygamemodule));
 }

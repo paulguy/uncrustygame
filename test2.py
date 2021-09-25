@@ -96,17 +96,15 @@ def initialize_video(title :str,
 
 
 def log_cb_return(string, priv):
-    print(priv)
     print(string, end='')
 
 def main():
     sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_AUDIO)
     window, renderer, pixfmt = initialize_video("asdf", 640, 480, sdl2.SDL_WINDOW_SHOWN, sdl2.SDL_RENDERER_PRESENTVSYNC)
     print(type(renderer))
-    print(sdl2.render.LP_SDL_Renderer)
-    ll = cg.LayerList(renderer, pixfmt, log_cb_return, "test")
+    ll = cg.LayerList(renderer, pixfmt, log_cb_return, None)
 
-    ll.target_tileset(0)
+    ll.set_target_tileset(0)
 
     del ll
     sdl2.SDL_Quit()
