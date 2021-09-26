@@ -34,6 +34,8 @@ static PyObject *get_from_dict_string(PyObject *from, const char *str) {
     return(obj);
 }
 
+/* this using function above it are helpful in getting a symbol provided as a
+ * string from a module. */
 static PyObject *get_symbol_from_string(PyObject *m, const char *str) {
     PyObject *moddict = PyModule_GetDict(m);
     if(moddict == NULL) {
@@ -50,6 +52,9 @@ static PyObject *get_symbol_from_string(PyObject *m, const char *str) {
     return(typeobj);
 }
 
+/* used for unwrapping the real log_cb and log_priv and calling the
+ * user-supplied callable, on behalf of the generic C-side function which calls
+ * this method */
 static void log_cb_adapter(LayerListObject *self, const char *str) {
     PyObject *arglist;
     PyObject *result;
@@ -135,6 +140,11 @@ static void LayerList_dealloc(LayerListObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
+/* member functions which need to do type checking by accessing the types held
+ * in the module state need to use the rather new as of 3.9 PyCMethod function
+ * members of the type as this is the only one which provides the _real_ type
+ * and guarantees GetModuleState will actually return the state of the defining
+ * class. */
 static PyObject *LayerList_set_default_render_target(LayerListObject *self,
                                                      PyTypeObject *defining_class,
                                                      PyObject *const *args,
@@ -219,12 +229,14 @@ static PyGetSetDef LayerList_getsetters[] = {
     {NULL}
 };
 
-/* needed because it's a heap type, i guess */
+/* needed because it's a heap type, i guess?  documentation says it's needed */
 static int LayerList_traverse(PyObject *self, visitproc visit, void *arg) {
     Py_VISIT(Py_TYPE(self));
     return 0;
 }
 
+/* Needed for heap-based type instantiation.  Hopefully future proof for this
+ * project.  Its benefits seem worth the bit of extra complexity. */
 static PyType_Slot LayerListSlots[] = {
     {Py_tp_new, LayerList_new},
     {Py_tp_init, (initproc)LayerList_init},
@@ -243,8 +255,28 @@ static PyType_Spec LayerListSpec = {
     .slots = LayerListSlots
 };
 
-int crustygame_exec(PyObject* m) {
+/* objects successfully returned by this function automatically have a new
+ * reference because objects returned by the various PyObject_Call* functions
+ * return with a new reference. */
+static PyTypeObject *get_literal_pointer_type(PyObject *module,
+                                              PyObject *POINTER,
+                                              const char *str) {
+    PyObject *type = get_symbol_from_string(module, str);
+    if(type == NULL) {
+        return(NULL);
+    }
+    PyObject *lptype = PyObject_CallOneArg(POINTER, type);
+    if(lptype == NULL) {
+        return(NULL);
+    }
+
+    return((PyTypeObject *)lptype);
+}
+
+static int crustygame_exec(PyObject* m) {
     crustygame_state *state = PyModule_GetState(m);
+    /* set all to NULL so a line up Py_XDECREF() will just skip over what's not
+     * been referenced, yet */
     state->CrustyException = NULL;
     state->LayerListType = NULL;
     state->LP_SDL_Renderer = NULL;
@@ -252,21 +284,24 @@ int crustygame_exec(PyObject* m) {
     PyObject *ctypes_m = NULL;
     PyObject *ctypes_POINTER = NULL;
     PyObject *SDL_m = NULL;
-    PyObject *SDL_Renderer_t = NULL;
-    PyObject *SDL_Texture_t = NULL;
 
+    /* Make an exception used for problems returned by the library. */
     state->CrustyException = PyErr_NewException("crustygame.CrustyException", NULL, NULL);
     if (PyModule_AddObject(m, "CrustyException", state->CrustyException) < 0) {
         goto error;
     }
 
+    /* heap allocate the new type and store it in the module state */
     state->LayerListType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
     if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
         goto error;
     }
 
-    /* Generate an LP_SDL_Renderer to compare with for type validation later on
-     * so weirdness can't happen if oddball types are passed in */
+    /* import ctypes for its POINTER() method which produces, and importantly
+     * internally caches the literal pointer type of a ctypes defined structure
+     * which python's sdl2 uses for structs passed around.  This is so types
+     * can be checked before possible, difficult to track down crashes may
+     * occur and useful error messages can be given to the user. */
     ctypes_m = PyImport_ImportModule("ctypes");
     if(ctypes_m == NULL) {
         goto error;
@@ -277,42 +312,28 @@ int crustygame_exec(PyObject* m) {
         goto error;
     }
 
+    /* import sdl2 and get the literal pointer types needed for type checks. */
     SDL_m = PyImport_ImportModule("sdl2");
     if(SDL_m == NULL) {
         goto error;
     }
-
-    SDL_Renderer_t = get_symbol_from_string(SDL_m, "SDL_Renderer");
-    Py_XINCREF(SDL_Renderer_t);
-    if(SDL_Renderer_t == NULL) {
-        goto error;
-    }
-    state->LP_SDL_Renderer = (PyTypeObject *)PyObject_CallOneArg(ctypes_POINTER, SDL_Renderer_t);
+    state->LP_SDL_Renderer = get_literal_pointer_type(SDL_m, ctypes_POINTER, "SDL_Renderer");
     if(state->LP_SDL_Renderer == NULL) {
         goto error;
     }
-
-    SDL_Texture_t = get_symbol_from_string(SDL_m, "SDL_Texture");
-    Py_XINCREF(SDL_Texture_t);
-    if(SDL_Texture_t == NULL) {
-        goto error;
-    }
-    state->LP_SDL_Texture = (PyTypeObject *)PyObject_CallOneArg(ctypes_POINTER, SDL_Texture_t);
+    state->LP_SDL_Texture = get_literal_pointer_type(SDL_m, ctypes_POINTER, "SDL_Texture");
     if(state->LP_SDL_Texture == NULL) {
         goto error;
     }
 
-    Py_DECREF(SDL_Texture_t);
-    Py_DECREF(SDL_Renderer_t);
     Py_DECREF(SDL_m);
     Py_DECREF(ctypes_POINTER);
     Py_DECREF(ctypes_m);
     return(0);
 
 error:
-    Py_XDECREF(SDL_Texture_t);
+    Py_XDECREF(state->LP_SDL_Texture);
     Py_XDECREF(state->LP_SDL_Renderer);
-    Py_XDECREF(SDL_Renderer_t);
     Py_XDECREF(SDL_m);
     Py_XDECREF(ctypes_POINTER);
     Py_XDECREF(ctypes_m);
@@ -321,6 +342,8 @@ error:
     return(-1);
 }
 
+/* This is an oddball module method that I guess isn't in a slot.  Don't know
+ * why, or whether it matters? */
 static void crustygame_free(void *p) {
     crustygame_state *state = PyModule_GetState((PyObject *)p);
     Py_DECREF(state->LP_SDL_Texture);
@@ -330,6 +353,9 @@ static void crustygame_free(void *p) {
     PyObject_Free(p);
 }
 
+/* heap-based module instantiation.  Using this because types in the module
+ * state I would assume are going to be different in many cases where there
+ * would need to be many instances of the same module? */
 static struct PyModuleDef_Slot crustygamemodule_slots[] = {
     {Py_mod_exec, crustygame_exec},
     {0, NULL}
