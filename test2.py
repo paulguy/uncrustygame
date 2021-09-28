@@ -86,6 +86,7 @@ def initialize_video(title :str,
                     maxbpp = SDL_BITSPERPIXEL(d[1].texture_formats[i])
                     pixfmt = d[1].texture_formats[i]
 
+        print("Picked {} renderer".format(d[1].name.decode("utf-8")))
         break
 
     if renderer == None:
@@ -100,8 +101,18 @@ def log_cb_return(string, priv):
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
-    window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC)
+    window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
+    sdlfmt = SDL_AllocFormat(pixfmt)
+    blue = SDL_MapRGB(sdlfmt, 0, 0, 255)
     ll = cg.LayerList(renderer, pixfmt, log_cb_return, None)
+
+    if ll.renderer != renderer:
+        print("Got different renderer back from layerlist")
+
+    ts1 = cg.Tileset(ll, 32, 32, blue, 16, 16)
+    ts2 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8)
+    surface = SDL_CreateRGBSurfaceWithFormat(0, 64, 64, 32, pixfmt)
+    ts3 = cg.Tileset(ll, surface, 64, 64)
 
     try:
         ll.set_target_tileset(window)
@@ -111,9 +122,14 @@ def main():
 
     try:
         ll.set_target_tileset(0)
-        print("set_target_tileset didn't raise CrustyException as expected")
-    except cg.CrustyException:
+        print("set_target_tileset didn't raise TypeError as expected")
+    except TypeError:
         pass
+
+    ll.set_target_tileset(ts1);
+    ll.set_target_tileset(ts2);
+    ll.set_target_tileset(ts3);
+    ll.set_target_tileset(None);
 
     try:
         ll.set_default_render_target(window)
@@ -121,8 +137,8 @@ def main():
     except TypeError:
         pass
 
-    if ll.renderer != renderer:
-        print("Got different renderer back from layerlist")
+    tm1 = cg.Tilemap(ll, ts1, 4, 4)
+    tm1.set_tileset(ts2)
 
     SDL_Quit()
 

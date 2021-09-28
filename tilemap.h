@@ -315,7 +315,7 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
                                       const Uint32 *value,
                                       unsigned int size);
 /*
- * Update a region of the tilemap.  This is necessary to perform on any update
+ * Redraw a region of the tilemap.  This is necessary to perform on any update
  * to the tilemap or pointed-to tileset, otherwise it won't appear any
  * different, or may just error.
  * 

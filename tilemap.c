@@ -108,7 +108,7 @@ int tilemap_tileset_from_bmp(LayerList *ll,
 
     surface = SDL_LoadBMP(filename);
     if(surface == NULL) {
-        fprintf(stderr, "Failed to load %s.\n", filename);
+        LOG_PRINTF(ll, "Failed to load %s.\n", filename);
         return(-1);
     }
 
@@ -290,7 +290,8 @@ int tilemap_set_target_tileset(LayerList *ll, int tileset) {
     }
 
     if(SDL_SetRenderTarget(ll->renderer, texture) < 0) {
-        LOG_PRINTF(ll, "Failed to set render target.\n");
+        LOG_PRINTF(ll, "Failed to set render target: %s\n",
+                   SDL_GetError());
         return(-1);
     }
 
@@ -328,7 +329,7 @@ int tilemap_add_tileset(LayerList *ll,
                         unsigned int th) {
     Tileset *temp;
     SDL_Surface *surface2 = NULL;
-    SDL_Texture *tex;
+    SDL_Texture *tex, *tex2;
     unsigned int i, j;
     unsigned int maxx, maxy;
     unsigned int texw, texh;
@@ -388,6 +389,41 @@ int tilemap_add_tileset(LayerList *ll,
         LOG_PRINTF(ll, "Failed to create texture from surface: %s.\n", SDL_GetError());
         return(-1);
     }
+    /* need to create a new texture to copy to because creating a texture from
+     * a surface isn't a target texture */
+    tex2 = SDL_CreateTexture(ll->renderer,
+                             ll->format,
+                             SDL_TEXTUREACCESS_TARGET,
+                             texw,
+                             texh);
+    if(tex2 == NULL) {
+        LOG_PRINTF(ll, "Failed to create texture: %s.\n", SDL_GetError());
+        SDL_DestroyTexture(tex);
+        return(-1);
+    }
+    if(SDL_SetRenderTarget(ll->renderer, tex2) < 0) {
+        LOG_PRINTF(ll, "Failed to set render target to copy texture: %s.\n",
+                       SDL_GetError());
+        SDL_DestroyTexture(tex2);
+        SDL_DestroyTexture(tex);
+        return(-1);
+    }
+    if(SDL_RenderCopy(ll->renderer, tex, NULL, NULL) < 0) {
+        LOG_PRINTF(ll, "Failed to copy texture: %s.\n",
+                       SDL_GetError());
+        SDL_DestroyTexture(tex2);
+        SDL_DestroyTexture(tex);
+        return(-1);
+    }
+    if(SDL_SetRenderTarget(ll->renderer, NULL) < 0) {
+        LOG_PRINTF(ll, "Failed to set render target to screen: %s.\n",
+                       SDL_GetError());
+        SDL_DestroyTexture(tex2);
+        SDL_DestroyTexture(tex);
+        return(-1);
+    }
+    SDL_DestroyTexture(tex);
+    tex = tex2;
 
     /* make values overwrite existing values */
     if(SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE) < 0) {
@@ -855,7 +891,6 @@ int tilemap_update_tilemap(LayerList *ll,
 
         tm->tex = SDL_CreateTexture(ll->renderer,
                                     ll->format,
-                                    SDL_TEXTUREACCESS_STATIC |
                                     SDL_TEXTUREACCESS_TARGET,
                                     texw,
                                     texh);
@@ -914,12 +949,12 @@ int tilemap_update_tilemap(LayerList *ll,
                         (colormod & TILEMAP_RMASK) >> TILEMAP_RSHIFT,
                         (colormod & TILEMAP_GMASK) >> TILEMAP_GSHIFT,
                         (colormod & TILEMAP_BMASK) >> TILEMAP_BSHIFT) < 0) {
-                    fprintf(stderr, "Failed to set tile colormod.\n");
+                    LOG_PRINTF(ll, "Failed to set tile colormod.\n");
                     return(-1);
                 }
                 if(SDL_SetTextureAlphaMod(ts->tex,
                         (colormod & TILEMAP_AMASK) >> TILEMAP_ASHIFT) < 0) {
-                    fprintf(stderr, "Failed to set tile alphamod.\n");
+                    LOG_PRINTF(ll, "Failed to set tile alphamod.\n");
                     return(-1);
                 }
             }
@@ -978,11 +1013,11 @@ int tilemap_update_tilemap(LayerList *ll,
             }
             if(tm->attr_colormod) {
                 if(SDL_SetTextureColorMod(ts->tex, 255, 255, 255) < 0) {
-                    fprintf(stderr, "Failed to set tile colormod.\n");
+                    LOG_PRINTF(ll, "Failed to set tile colormod.\n");
                     return(-1);
                 }
                 if(SDL_SetTextureAlphaMod(ts->tex, 255) < 0) {
-                    fprintf(stderr, "Failed to set tile alphamod.\n");
+                    LOG_PRINTF(ll, "Failed to set tile alphamod.\n");
                     return(-1);
                 }
             }
@@ -1303,20 +1338,20 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
             (l->colormod & TILEMAP_RMASK) >> TILEMAP_RSHIFT,
             (l->colormod & TILEMAP_GMASK) >> TILEMAP_GSHIFT,
             (l->colormod & TILEMAP_BMASK) >> TILEMAP_BSHIFT) < 0) {
-        fprintf(stderr, "Failed to set layer colormod.\n");
+        LOG_PRINTF(ll, "Failed to set layer colormod.\n");
         return(-1);
     }
     if(SDL_SetTextureAlphaMod(tm->tex,
             (l->colormod & TILEMAP_AMASK) >> TILEMAP_ASHIFT) < 0) {
-        fprintf(stderr, "Failed to set tile alphamod.\n");
+        LOG_PRINTF(ll, "Failed to set tile alphamod.\n");
         return(-1);
     }
 
     if(SDL_SetTextureBlendMode(tm->tex, l->blendMode) < 0) {
         if(ll->blendWarned == 0) {
-            fprintf(stderr, "Failed to set layer blend mode, falling back to "
-                            "SDL_BLENDMODE_BLEND, some things may appear "
-                            "wrong. This warning will appear only once.\n");
+            LOG_PRINTF(ll, "Failed to set layer blend mode, falling back to "
+                           "SDL_BLENDMODE_BLEND, some things may appear "
+                           "wrong. This warning will appear only once.\n");
             ll->blendWarned = 1;
         }
         SDL_SetTextureBlendMode(tm->tex, SDL_BLENDMODE_BLEND);

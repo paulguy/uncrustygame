@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
@@ -7,6 +9,10 @@ typedef struct {
     PyObject *CrustyException;
     PyTypeObject *LayerListType;
     PyTypeObject *TilesetType;
+    PyTypeObject *TilemapType;
+
+    /* ctypes callable which will point to the function a bit further down */
+    PyObject *return_ptr;
 
     /* types needed type type checking */
     PyTypeObject *LP_SDL_Renderer;
@@ -19,14 +25,28 @@ typedef struct {
     LayerList *ll;
     PyObject *log_cb;
     PyObject *log_priv;
-    PyObject *renderer;
+    /* for the refernce */
+    PyObject *py_renderer;
+    SDL_Renderer *renderer;
 } LayerListObject;
 
 typedef struct {
     PyObject_HEAD
     LayerListObject *ll;
-    unsigned int tileset;
+    int tileset;
 } TilesetObject;
+
+typedef struct {
+    PyObject_HEAD
+    LayerListObject *ll;
+    TilesetObject *ts;
+    int tilemap;
+} TilemapObject;
+
+/* awful hack function used to get pointers back from a ctypes object */
+uintptr_t return_ptr(void *ptr) {
+    return((uintptr_t)ptr);
+}
 
 static PyObject *get_from_dict_string(PyObject *from, const char *str) {
     PyObject *pystr;
@@ -75,6 +95,25 @@ static void log_cb_adapter(LayerListObject *self, const char *str) {
     Py_XDECREF(result);
 }
 
+/* pass a ctype LP_* type object through ctypes and have it return an intptr_t
+ * back in and pass that back as a void pointer.  Seems to work, don't know
+ * about cross platform compatibility, but this seems to be the only way for
+ * this to work. */
+/* probably a pretty slow method to call so probably don't do it too often.. */
+static void *get_value_from_lp_object(crustygame_state *state,
+                                      PyObject *lp_obj) {
+    void *ptr;
+
+    PyObject *num = PyObject_CallOneArg(state->return_ptr, lp_obj);
+    if(num == NULL) {
+        return(NULL);
+    }
+    ptr = PyLong_AsVoidPtr(num);
+
+    Py_DECREF(num);
+    return(ptr);
+}
+
 /* documentation says it's needed for heap allocated types */
 static int heap_type_traverse(PyObject *self, visitproc visit, void *arg) {
     Py_VISIT(Py_TYPE(self));
@@ -96,6 +135,9 @@ static PyObject *LayerList_new(PyTypeObject *type, PyObject *args, PyObject *kwd
 
 static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds) {
     unsigned int format;
+    self->py_renderer = NULL;
+    self->log_cb = NULL;
+    self->log_priv = NULL;
 
     if(self->ll != NULL) {
         PyErr_SetString(PyExc_TypeError, "LayerList already initialized");
@@ -107,17 +149,17 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
     if(!PyArg_ParseTuple(args, "OIOO",
-                         &(self->renderer),
+                         &(self->py_renderer),
                          &format,
                          &(self->log_cb),
                          &(self->log_priv))) {
         return(-1);
     }
-    Py_XINCREF(self->renderer);
+    Py_XINCREF(self->py_renderer);
     Py_XINCREF(self->log_cb);
     Py_XINCREF(self->log_priv);
 
-    if(!PyObject_TypeCheck(self->renderer, state->LP_SDL_Renderer)) {
+    if(!PyObject_TypeCheck(self->py_renderer, state->LP_SDL_Renderer)) {
         PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
         goto error;
     }
@@ -125,8 +167,12 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
         PyErr_SetString(PyExc_TypeError, "log_cb must be callable");
         goto error;
     }
-    /* LP_SDL_Renderer is literally just a pointer to an SDL_Renderer, so this
-     * works directly casting from PyObject *. */
+    self->renderer = (SDL_Renderer *)get_value_from_lp_object(state, self->py_renderer);
+    if(self->renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
     self->ll = layerlist_new((SDL_Renderer *)(self->renderer),
                              format,
                              (log_cb_return_t)log_cb_adapter,
@@ -141,7 +187,7 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
 error:
     Py_CLEAR(self->log_priv);
     Py_CLEAR(self->log_cb);
-    Py_CLEAR(self->renderer);
+    Py_CLEAR(self->py_renderer);
     return(-1);
 }
 
@@ -151,7 +197,7 @@ static void LayerList_dealloc(LayerListObject *self) {
     }
     Py_XDECREF(self->log_priv);
     Py_XDECREF(self->log_cb);
-    Py_XDECREF(self->renderer);
+    Py_XDECREF(self->py_renderer);
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
@@ -165,6 +211,8 @@ static PyObject *LayerList_set_default_render_target(LayerListObject *self,
                                                      PyObject *const *args,
                                                      Py_ssize_t nargs,
                                                      PyObject *kwnames) {
+    SDL_Texture *target = NULL;
+
     if(self->ll == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
         return(NULL);
@@ -176,20 +224,21 @@ static PyObject *LayerList_set_default_render_target(LayerListObject *self,
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
-    PyObject *target = args[0];
 
-    if(target == Py_None) {
+    if(args[0] == Py_None) {
         target = NULL;
     } else {
-        if(!PyObject_TypeCheck(target, state->LP_SDL_Texture)) {
-            PyErr_SetString(PyExc_TypeError, "render target must be a SDL_Texture.");
+        if(!PyObject_TypeCheck(args[0], state->LP_SDL_Texture)) {
+            PyErr_SetString(PyExc_TypeError, "render target must be a SDL_Texture or None.");
+            return(NULL);
+        }
+        target = (SDL_Texture *)get_value_from_lp_object(state, args[0]);
+        if(target == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Texture");
             return(NULL);
         }
     }
 
-    /* as above, the cast to SDL_Texture works because python type
-     * LP_SDL_Texture is just literally the same as a pointer to a
-     * SDL_Texture *. */
     tilemap_set_default_render_target(self->ll, (SDL_Texture *)target);
 
     Py_RETURN_NONE;
@@ -200,7 +249,7 @@ static PyObject *LayerList_set_target_tileset(LayerListObject *self,
                                               PyObject *const *args,
                                               Py_ssize_t nargs,
                                               PyObject *kwnames) {
-    long tileset;
+    int target = -1;
 
     if(self->ll == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
@@ -213,12 +262,18 @@ static PyObject *LayerList_set_target_tileset(LayerListObject *self,
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
-    tileset = PyLong_AsLong(args[0]);
-    if(PyErr_Occurred() != NULL) {
-        return(NULL);
+
+    if(args[0] == Py_None) {
+        target = -1;
+    } else {
+        if(!PyObject_TypeCheck(args[0], state->TilesetType)) {
+            PyErr_SetString(PyExc_TypeError, "render target must be a Tileset or None.");
+            return(NULL);
+        }
+        target = ((TilesetObject *)(args[0]))->tileset;
     }
 
-    if(tilemap_set_target_tileset(self->ll, (int)tileset)) {
+    if(tilemap_set_target_tileset(self->ll, target) < 0) {
         PyErr_SetString(state->CrustyException, "Couldn't set target tileset.");
         return(NULL);
     }
@@ -251,8 +306,8 @@ static PyObject *LayerList_getrenderer(LayerListObject *self, void *closure) {
     /* I think the reference count needs to be increased?  I think when the
      * calling functions returns it'll be decremented?  So i guess prevent it
      * from being deleted? */
-    Py_INCREF(self->renderer);
-    return(self->renderer);
+    Py_INCREF(self->py_renderer);
+    return(self->py_renderer);
 }
 
 static PyGetSetDef LayerList_getsetters[] = {
@@ -298,7 +353,8 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     unsigned int w, h;
     unsigned int color;
     const char *filename;
-    PyObject *surface;
+    PyObject *py_surface = NULL;
+    SDL_Surface *surface = NULL;
     PyObject *etype, *evalue, *etraceback;
 
     if(self->ll != NULL) {
@@ -312,7 +368,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
      * number of arguments and would definitely fail if the wrong amount of
      * arguments was provided */
     if(!PyArg_ParseTuple(args, "OIIIII",
-                         &self->ll, &w, &h, &color, &tw, &th)) {
+                         &(self->ll), &w, &h, &color, &tw, &th)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         /* don't care too much to inspect what went wrong, just try something
          * else anyway */
@@ -322,7 +378,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     } else {
         Py_XINCREF(self->ll);
         if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
-            PyErr_SetString(PyExc_TypeError, "first argument must be a LayerListType");
+            PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
             goto error;
         }
 
@@ -337,7 +393,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
 
     /* now check if a string is provided, and if so use it as a filename */
     if(!PyArg_ParseTuple(args, "OsII",
-                         &self->ll, &filename, &tw, &th)) {
+                         &(self->ll), &filename, &tw, &th)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
@@ -345,7 +401,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     } else {
         Py_XINCREF(self->ll);
         if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
-            PyErr_SetString(PyExc_TypeError, "first argument must be a LayerListType");
+            PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
             goto error;
         }
 
@@ -365,32 +421,35 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
      * succeed, where this one can't be first because it'd catch any object
      * then fail anyway */
     if(!PyArg_ParseTuple(args, "OOII",
-                         &self->ll, &surface, &tw, &th)) {
+                         &(self->ll), &py_surface, &tw, &th)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
         Py_XDECREF(etraceback);
     } else {
         Py_XINCREF(self->ll);
-        Py_XINCREF(surface);
+        Py_XINCREF(py_surface);
         if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
-            PyErr_SetString(PyExc_TypeError, "first argument must be a LayerListType");
+            PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
             goto error;
         }
-        if(!PyObject_TypeCheck(surface, state->LP_SDL_Surface)) {
+        if(!PyObject_TypeCheck(py_surface, state->LP_SDL_Surface)) {
             PyErr_SetString(PyExc_TypeError, "second argument must be a SDL_Surface");
             goto error;
         }
+        surface = (SDL_Surface *)get_value_from_lp_object(state, py_surface);
+        if(surface == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Surface");
+            goto error;
+        }
 
-        self->tileset = tilemap_add_tileset(self->ll->ll,
-                                            (SDL_Surface *)surface,
-                                            tw, th);
+        self->tileset = tilemap_add_tileset(self->ll->ll, surface, tw, th);
         if(self->tileset < 0) {
             PyErr_SetString(state->CrustyException, "tilemap_add_tileset failed");
             goto error;
         }
-        Py_XDECREF(surface);
 
+        Py_DECREF(py_surface);
         return(0);
     }
 
@@ -398,7 +457,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     PyErr_SetString(PyExc_TypeError, "invalid arguments for tileset creation");
 
 error:
-    Py_XDECREF(surface);
+    Py_XDECREF(py_surface);
     Py_CLEAR(self->ll);
     return(-1);
 }
@@ -425,6 +484,353 @@ static PyType_Spec TilesetSpec = {
     .itemsize = 0,
     .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .slots = TilesetSlots
+};
+
+static PyObject *Tilemap_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    TilemapObject *self;
+
+    self = (TilemapObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    self->ll = NULL;
+    self->ts = NULL;
+    self->tilemap = -1;
+ 
+    return((PyObject *)self);
+}
+
+static int Tilemap_init(TilemapObject *self, PyObject *args, PyObject *kwds) {
+    unsigned int w, h;
+
+    if(self->ll != NULL) {
+        PyErr_SetString(PyExc_TypeError, "Tilemap already initialized");
+        return(-1);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OOII", &(self->ll), &(self->ts), &w, &h)) {
+        return(-1);
+    }
+    Py_XINCREF(self->ll);
+    Py_XINCREF(self->ts);
+    if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
+        goto error;
+    }
+    if(!PyObject_TypeCheck(self->ts, state->TilesetType)) {
+        PyErr_SetString(PyExc_TypeError, "second argument must be a Tileset");
+        goto error;
+    }
+
+    self->tilemap = tilemap_add_tilemap(self->ll->ll, self->ts->tileset, w, h);
+    if(self->tilemap < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_add_tilemap failed");
+        goto error;
+    }
+
+    return(0);
+
+error:
+    Py_CLEAR(self->ts);
+    Py_CLEAR(self->ll);
+    return(-1);
+}
+
+static void Tilemap_dealloc(TilemapObject *self) {
+    if(self->tilemap >= 0) {
+        tilemap_free_tilemap(self->ll->ll, self->tilemap);
+        Py_DECREF(self->ll);
+    }
+    Py_XDECREF(self->ts);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Tilemap_set_tileset(TilemapObject *self,
+                                     PyTypeObject *defining_class,
+                                     PyObject *const *args,
+                                     Py_ssize_t nargs,
+                                     PyObject *kwnames) {
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->TilesetType)) {
+        PyErr_SetString(PyExc_TypeError, "tileset must be a Tileset.");
+        return(NULL);
+    }
+    TilesetObject *newts = args[0];
+    Py_CLEAR(self->ts);
+
+    if(tilemap_set_tilemap_tileset(self->ll->ll,
+                                   self->tilemap,
+                                   newts->tileset) < 0) {
+        PyErr_SetString(state->CrustyException, "Couldn't set tileset.");
+        return(NULL);
+    }
+    self->ts = newts;
+    Py_INCREF(newts);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_map(TilemapObject *self,
+                                 PyTypeObject *defining_class,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs,
+                                 PyObject *kwnames) {
+    unsigned long x, y;
+    long pitch, w, h;
+    Py_buffer buf;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 6) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 6 argument");
+        return(NULL);
+    }
+    x = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    pitch = PyLong_AsLong(args[2]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    w = PyLong_AsLong(args[3]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    h = PyLong_AsLong(args[4]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    if(PyObject_GetBuffer(args[5], &buf, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    
+    if(tilemap_set_tilemap_map(self->ll->ll, self->tilemap, x, y, pitch, w, h, buf.buf, buf.len) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_tilemap_map failed");
+        PyBuffer_Release(&buf);
+        return(NULL);
+    }
+
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_attr_flags(TilemapObject *self,
+                                        PyTypeObject *defining_class,
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs,
+                                        PyObject *kwnames) {
+    unsigned long x, y;
+    long pitch, w, h;
+    Py_buffer buf;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 6) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 6 argument");
+        return(NULL);
+    }
+    x = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    pitch = PyLong_AsLong(args[2]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    w = PyLong_AsLong(args[3]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    h = PyLong_AsLong(args[4]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    if(PyObject_GetBuffer(args[5], &buf, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    
+    if(tilemap_set_tilemap_attr_flags(self->ll->ll, self->tilemap, x, y, pitch, w, h, buf.buf, buf.len) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_tilemap_attr_flags failed");
+        PyBuffer_Release(&buf);
+        return(NULL);
+    }
+
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_attr_colormod(TilemapObject *self,
+                                           PyTypeObject *defining_class,
+                                           PyObject *const *args,
+                                           Py_ssize_t nargs,
+                                           PyObject *kwnames) {
+    unsigned long x, y;
+    long pitch, w, h;
+    Py_buffer buf;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 6) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 6 argument");
+        return(NULL);
+    }
+    x = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    pitch = PyLong_AsLong(args[2]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    w = PyLong_AsLong(args[3]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    h = PyLong_AsLong(args[4]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    if(PyObject_GetBuffer(args[5], &buf, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    
+    if(tilemap_set_tilemap_attr_colormod(self->ll->ll, self->tilemap, x, y, pitch, w, h, buf.buf, buf.len) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_tilemap_attr_colormod failed");
+        PyBuffer_Release(&buf);
+        return(NULL);
+    }
+
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_update(TilemapObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    unsigned long x, y, w, h;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 4) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 4 argument");
+        return(NULL);
+    }
+    x = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    w = PyLong_AsUnsignedLong(args[2]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    h = PyLong_AsUnsignedLong(args[3]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    
+    if(tilemap_update_tilemap(self->ll->ll, self->tilemap, x, y, w, h) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_update_tilemap failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef Tilemap_methods[] = {
+    {
+        "set_tileset",
+        (PyCMethod) Tilemap_set_tileset,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set a tileset which will be used for rendering out the tilemap."},
+    {
+        "set_map",
+        (PyCMethod) Tilemap_set_map,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Update a rectangle section of the tilemap."},
+    {
+        "set_attr_flags",
+        (PyCMethod) Tilemap_set_attr_flags,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Add/update attribute flags to a tilemap."},
+    {
+        "set_attr_colormod",
+        (PyCMethod) Tilemap_set_attr_colormod,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Add/update colormod values for a tilemap."},
+    {
+        "update",
+        (PyCMethod) Tilemap_update,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Redraw a region of the tilemap."},
+    {NULL}
+};
+
+static PyType_Slot TilemapSlots[] = {
+    {Py_tp_new, Tilemap_new},
+    {Py_tp_init, (initproc)Tilemap_init},
+    {Py_tp_dealloc, (destructor)Tilemap_dealloc},
+    {Py_tp_traverse, heap_type_traverse},
+    {Py_tp_methods, Tilemap_methods},
+    {0, NULL}
+};
+
+static PyType_Spec TilemapSpec = {
+    .name = "crustygame.Tilemap",
+    .basicsize = sizeof(TilemapObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = TilemapSlots
 };
 
 /* objects successfully returned by this function automatically have a new
@@ -456,6 +862,12 @@ static int crustygame_exec(PyObject* m) {
     state->LP_SDL_Surface = NULL;
     PyObject *ctypes_m = NULL;
     PyObject *ctypes_POINTER = NULL;
+    PyObject *ctypes_CDLL = NULL;
+    PyObject *ctypes_ulong = NULL;
+    PyObject *ctypes_void_p = NULL;
+    PyObject *filename = NULL;
+    PyObject *ctypes_this_module = NULL;
+    PyObject *argtypes_tuple = NULL;
     PyObject *SDL_m = NULL;
 
     /* Make an exception used for problems returned by the library. */
@@ -473,6 +885,10 @@ static int crustygame_exec(PyObject* m) {
     if(PyModule_AddObject(m, "Tileset", (PyObject *)state->TilesetType) < 0) {
         goto error;
     }
+    state->TilemapType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &TilemapSpec, NULL);
+    if(PyModule_AddObject(m, "Tilemap", (PyObject *)state->TilemapType) < 0) {
+        goto error;
+    }
 
     /* import ctypes for its POINTER() method which produces, and importantly
      * internally caches the literal pointer type of a ctypes defined structure
@@ -486,6 +902,57 @@ static int crustygame_exec(PyObject* m) {
     ctypes_POINTER = get_symbol_from_string(ctypes_m, "POINTER");
     Py_XINCREF(ctypes_POINTER);
     if(ctypes_POINTER == NULL) {
+        goto error;
+    }
+    /* do some awful hackery so pointer values can be extracted directly from
+     * ctypes LP_* types.  Use a method that returns an intptr_t when passed
+     * a ctypes LP_* type by importing this module with ctypes, grabbing that
+     * method as a ctypes callable and setting the right attributes on it. */
+    ctypes_CDLL = get_symbol_from_string(ctypes_m, "CDLL");
+    Py_XINCREF(ctypes_CDLL);
+    if(ctypes_CDLL == NULL) {
+        goto error;
+    }
+    /* types that'll be needed */
+    ctypes_ulong = get_symbol_from_string(ctypes_m, "c_ulong");
+    Py_XINCREF(ctypes_ulong);
+    if(ctypes_ulong == NULL) {
+        goto error;
+    }
+    ctypes_void_p = get_symbol_from_string(ctypes_m, "c_void_p");
+    Py_XINCREF(ctypes_void_p);
+    if(ctypes_void_p == NULL) {
+        goto error;
+    }
+    /* get this filename to import this module */
+    filename = PyModule_GetFilenameObject(m);
+    if(filename == NULL) {
+        goto error;
+    }
+    /* import it */
+    ctypes_this_module = PyObject_CallOneArg(ctypes_CDLL, filename);
+    if(ctypes_this_module == NULL) {
+        goto error;
+    }
+    /* get the adapter function */
+    state->return_ptr = PyObject_GetAttrString(ctypes_this_module,
+                                               "return_ptr");
+    Py_XINCREF(state->return_ptr);
+    if(state->return_ptr == NULL) {
+        goto error;
+    }
+    /* set its return type to be 64 bits... might want to do some extra stuff
+     * to assure 32 bit platform support */
+    if(PyObject_SetAttrString(state->return_ptr, "restype", ctypes_ulong) < 0) {
+        goto error;
+    }
+    /* put the pointer argument type in a tuple because that's how it has to be
+     * then pass it in as the argument type. */
+    argtypes_tuple = PyTuple_Pack(1, ctypes_void_p);
+    if(argtypes_tuple == NULL) {
+        goto error;
+    }
+    if(PyObject_SetAttrString(state->return_ptr, "argtypes", argtypes_tuple) < 0) {
         goto error;
     }
 
@@ -508,6 +975,12 @@ static int crustygame_exec(PyObject* m) {
     }
 
     Py_DECREF(SDL_m);
+    Py_DECREF(argtypes_tuple);
+    Py_DECREF(ctypes_this_module);
+    Py_DECREF(filename);
+    Py_DECREF(ctypes_void_p);
+    Py_DECREF(ctypes_ulong);
+    Py_DECREF(ctypes_CDLL);
     Py_DECREF(ctypes_POINTER);
     Py_DECREF(ctypes_m);
     return(0);
@@ -520,8 +993,16 @@ error:
     Py_CLEAR(state->LP_SDL_Texture);
     Py_CLEAR(state->LP_SDL_Renderer);
     Py_XDECREF(SDL_m);
+    Py_CLEAR(state->return_ptr);
+    Py_XDECREF(argtypes_tuple);
+    Py_XDECREF(ctypes_this_module);
+    Py_XDECREF(filename);
+    Py_XDECREF(ctypes_void_p);
+    Py_XDECREF(ctypes_ulong);
+    Py_XDECREF(ctypes_CDLL);
     Py_XDECREF(ctypes_POINTER);
     Py_XDECREF(ctypes_m);
+    Py_CLEAR(state->TilemapType);
     Py_CLEAR(state->TilesetType);
     Py_CLEAR(state->LayerListType);
     Py_CLEAR(state->CrustyException);
@@ -535,6 +1016,9 @@ static void crustygame_free(void *p) {
     Py_XDECREF(state->LP_SDL_Surface);
     Py_XDECREF(state->LP_SDL_Texture);
     Py_XDECREF(state->LP_SDL_Renderer);
+    Py_XDECREF(state->return_ptr);
+    Py_XDECREF(state->TilemapType);
+    Py_XDECREF(state->TilesetType);
     Py_XDECREF(state->LayerListType);
     Py_XDECREF(state->CrustyException);
     PyObject_Free(p);
