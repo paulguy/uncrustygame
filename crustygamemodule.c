@@ -567,7 +567,7 @@ static PyObject *Tilemap_set_tileset(TilemapObject *self,
         PyErr_SetString(PyExc_TypeError, "tileset must be a Tileset.");
         return(NULL);
     }
-    TilesetObject *newts = args[0];
+    TilesetObject *newts = (TilesetObject *)args[0];
     Py_CLEAR(self->ts);
 
     if(tilemap_set_tilemap_tileset(self->ll->ll,
