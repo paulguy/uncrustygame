@@ -881,6 +881,9 @@ static int crustygame_exec(PyObject* m) {
 
     /* heap allocate the new types and store them in the module state */
     state->LayerListType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
+    /* without this, quitting crashes if the module is loaded and then pythn is
+     * quit immediately */
+    Py_XINCREF(state->LayerListType);
     if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
         goto error;
     }
