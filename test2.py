@@ -169,8 +169,8 @@ def main():
     del ts2
     del ts1
 
-    ts1 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8)
-    tm1 = cg.Tilemap(ll, ts1, 8, 8)
+    ts1 = ll.Tileset("cdemo/font.bmp", 8, 8)
+    tm1 = ll.Tilemap(ts1, 8, 8)
     tm1.map(2, 2, 4, 4, 3, array.array('u', "tseta sisiht"))
     tm1.attr_flags(2, 2, 0, 4, 3, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
     tm1.attr_colormod(2, 2, 4, 4, 3, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red, green, blue)))
@@ -183,13 +183,13 @@ def main():
     l1.rotation(180)
     l1.colormod(transparent_rg)
     l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
-    ts2 = cg.Tileset(ll, 64, 64, sdl_blue, 64, 64)
+    ts2 = ll.Tileset(64, 64, sdl_blue, 64, 64)
     ll.target_tileset(ts2)
     l1.draw()
     ll.target_tileset(None)
-    tm2 = cg.Tilemap(ll, ts2, 1, 1)
+    tm2 = ts2.Tilemap(1, 1)
     tm2.update(0, 0, 1, 1)
-    l2 = cg.Layer(ll, tm2)
+    l2 = tm2.Layer()
     l2.pos(100, 100)
     l2.scale(4.0, 4.0)
     l2.draw()

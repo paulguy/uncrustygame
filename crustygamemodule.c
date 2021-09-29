@@ -289,6 +289,74 @@ static PyObject *LayerList_set_target_tileset(LayerListObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *LayerList_LL_Tileset(LayerListObject *self,
+                                      PyTypeObject *defining_class,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs,
+                                      PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *tileset;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs == 3) {
+        arglist = PyTuple_Pack(4, self, args[0], args[1], args[2]);
+    } else if(nargs == 5) {
+        arglist = PyTuple_Pack(6, self, args[0], args[1], args[2], args[3], args[4]);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "this function needs 3 or 5 arguments");
+        return(NULL);
+    }
+
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    tileset = PyObject_CallObject(state->TilesetType, arglist);
+    Py_DECREF(arglist);
+    if(tileset == NULL) {
+        return(NULL);
+    }
+    return(tileset);
+}
+
+static PyObject *LayerList_LL_Tilemap(LayerListObject *self,
+                                      PyTypeObject *defining_class,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs,
+                                      PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *tilemap;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 3) {
+        PyErr_SetString(PyExc_TypeError, "this function needs 3 arguments");
+        return(NULL);
+    }
+
+    arglist = PyTuple_Pack(4, self, args[0], args[1], args[2]);
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    tilemap = PyObject_CallObject(state->TilemapType, arglist);
+    Py_DECREF(arglist);
+    if(tilemap == NULL) {
+        return(NULL);
+    }
+
+    return(tilemap);
+}
+
 static PyMethodDef LayerList_methods[] = {
     {
         "default_render_target",
@@ -300,6 +368,16 @@ static PyMethodDef LayerList_methods[] = {
         (PyCMethod) LayerList_set_target_tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the tileset to render to or the default render target if less than 0."},
+    {
+        "Tileset",
+        (PyCMethod) LayerList_LL_Tileset,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience method to create a Tileset from this LayerList."},
+    {
+        "Tilemap",
+        (PyCMethod) LayerList_LL_Tilemap,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience method to create a Tilemap from this LayerList."},
     {NULL}
 };
 
@@ -478,11 +556,54 @@ static void Tileset_dealloc(TilesetObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
+static PyObject *LayerList_TS_Tilemap(TilesetObject *self,
+                                      PyTypeObject *defining_class,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs,
+                                      PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *tilemap;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "this function needs 2 arguments");
+        return(NULL);
+    }
+
+    arglist = PyTuple_Pack(4, self->ll, self, args[0], args[1]);
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    tilemap = PyObject_CallObject(state->TilemapType, arglist);
+    Py_DECREF(arglist);
+    if(tilemap == NULL) {
+        return(NULL);
+    }
+
+    return(tilemap);
+}
+
+static PyMethodDef Tileset_methods[] = {
+    {
+        "Tilemap",
+        (PyCMethod) LayerList_TS_Tilemap,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience method to create a Tilemap from this Tileset."},
+    {NULL}
+};
+
 static PyType_Slot TilesetSlots[] = {
     {Py_tp_new, Tileset_new},
     {Py_tp_init, (initproc)Tileset_init},
     {Py_tp_dealloc, (destructor)Tileset_dealloc},
     {Py_tp_traverse, heap_type_traverse},
+    {Py_tp_methods, Tileset_methods},
     {0, NULL}
 };
 
@@ -809,6 +930,34 @@ static PyObject *Tilemap_update(TilemapObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *LayerList_TM_Layer(TilemapObject *self,
+                                    PyTypeObject *defining_class,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *layer;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    arglist = PyTuple_Pack(2, self->ll, self);
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    layer = PyObject_CallObject(state->LayerType, arglist);
+    Py_DECREF(arglist);
+    if(layer == NULL) {
+        return(NULL);
+    }
+
+    return(layer);
+}
+
 static PyMethodDef Tilemap_methods[] = {
     {
         "tileset",
@@ -835,6 +984,11 @@ static PyMethodDef Tilemap_methods[] = {
         (PyCMethod) Tilemap_update,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Redraw a region of the tilemap."},
+    {
+        "Layer",
+        (PyCMethod) LayerList_TM_Layer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience method to create a Layer from this Tilemap."},
     {NULL}
 };
 
