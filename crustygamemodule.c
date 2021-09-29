@@ -10,6 +10,7 @@ typedef struct {
     PyTypeObject *LayerListType;
     PyTypeObject *TilesetType;
     PyTypeObject *TilemapType;
+    PyTypeObject *LayerType;
 
     /* ctypes callable which will point to the function a bit further down */
     PyObject *return_ptr;
@@ -42,6 +43,13 @@ typedef struct {
     TilesetObject *ts;
     int tilemap;
 } TilemapObject;
+
+typedef struct {
+    PyObject_HEAD
+    LayerListObject *ll;
+    TilemapObject *tm;
+    int layer;
+} LayerObject;
 
 /* awful hack function used to get pointers back from a ctypes object */
 uintptr_t awful_return_ptr_hack_funct(void *ptr) {
@@ -283,12 +291,12 @@ static PyObject *LayerList_set_target_tileset(LayerListObject *self,
 
 static PyMethodDef LayerList_methods[] = {
     {
-        "set_default_render_target",
+        "default_render_target",
         (PyCMethod) LayerList_set_default_render_target,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the default texture to render to.  Isn't applied immediately, though."},
     {
-        "set_target_tileset",
+        "target_tileset",
         (PyCMethod) LayerList_set_target_tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the tileset to render to or the default render target if less than 0."},
@@ -625,8 +633,14 @@ static PyObject *Tilemap_set_map(TilemapObject *self,
     if(PyObject_GetBuffer(args[5], &buf, PyBUF_CONTIG_RO) < 0) {
         return(NULL);
     }
-    
-    if(tilemap_set_tilemap_map(self->ll->ll, self->tilemap, x, y, pitch, w, h, buf.buf, buf.len) < 0) {
+
+    /* buf and len are in terms of char *, but tilemap methods are in terms of
+     * ints */
+    if(tilemap_set_tilemap_map(self->ll->ll,
+                               self->tilemap,
+                               x, y, pitch, w, h,
+                               (unsigned int *)(buf.buf),
+                               buf.len / sizeof(unsigned int)) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_tilemap_map failed");
         PyBuffer_Release(&buf);
         return(NULL);
@@ -680,7 +694,11 @@ static PyObject *Tilemap_set_attr_flags(TilemapObject *self,
         return(NULL);
     }
     
-    if(tilemap_set_tilemap_attr_flags(self->ll->ll, self->tilemap, x, y, pitch, w, h, buf.buf, buf.len) < 0) {
+    if(tilemap_set_tilemap_attr_flags(self->ll->ll,
+                                      self->tilemap,
+                                      x, y, pitch, w, h,
+                                      (unsigned int *)(buf.buf),
+                                      buf.len / sizeof(unsigned int)) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_tilemap_attr_flags failed");
         PyBuffer_Release(&buf);
         return(NULL);
@@ -734,7 +752,11 @@ static PyObject *Tilemap_set_attr_colormod(TilemapObject *self,
         return(NULL);
     }
     
-    if(tilemap_set_tilemap_attr_colormod(self->ll->ll, self->tilemap, x, y, pitch, w, h, buf.buf, buf.len) < 0) {
+    if(tilemap_set_tilemap_attr_colormod(self->ll->ll,
+                                         self->tilemap,
+                                         x, y, pitch, w, h,
+                                         (unsigned int *)(buf.buf),
+                                         buf.len / sizeof(unsigned int)) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_tilemap_attr_colormod failed");
         PyBuffer_Release(&buf);
         return(NULL);
@@ -789,22 +811,22 @@ static PyObject *Tilemap_update(TilemapObject *self,
 
 static PyMethodDef Tilemap_methods[] = {
     {
-        "set_tileset",
+        "tileset",
         (PyCMethod) Tilemap_set_tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set a tileset which will be used for rendering out the tilemap."},
     {
-        "set_map",
+        "map",
         (PyCMethod) Tilemap_set_map,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Update a rectangle section of the tilemap."},
     {
-        "set_attr_flags",
+        "attr_flags",
         (PyCMethod) Tilemap_set_attr_flags,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Add/update attribute flags to a tilemap."},
     {
-        "set_attr_colormod",
+        "attr_colormod",
         (PyCMethod) Tilemap_set_attr_colormod,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Add/update colormod values for a tilemap."},
@@ -833,6 +855,419 @@ static PyType_Spec TilemapSpec = {
     .slots = TilemapSlots
 };
 
+static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    LayerObject *self;
+
+    self = (LayerObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    self->ll = NULL;
+    self->tm = NULL;
+    self->layer = -1;
+ 
+    return((PyObject *)self);
+}
+
+static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
+    if(self->ll != NULL) {
+        PyErr_SetString(PyExc_TypeError, "Layer already initialized");
+        return(-1);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OO", &(self->ll), &(self->tm))) {
+        return(-1);
+    }
+    Py_XINCREF(self->ll);
+    Py_XINCREF(self->tm);
+    if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
+        goto error;
+    }
+    if(!PyObject_TypeCheck(self->tm, state->TilemapType)) {
+        PyErr_SetString(PyExc_TypeError, "second argument must be a Tilemap");
+        goto error;
+    }
+
+    self->layer = tilemap_add_layer(self->ll->ll, self->tm->tilemap);
+    if(self->layer < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_add_layer failed");
+        goto error;
+    }
+
+    return(0);
+
+error:
+    Py_CLEAR(self->tm);
+    Py_CLEAR(self->ll);
+    return(-1);
+}
+
+static void Layer_dealloc(LayerObject *self) {
+    if(self->layer >= 0) {
+        tilemap_free_layer(self->ll->ll, self->layer);
+        Py_DECREF(self->ll);
+    }
+    Py_XDECREF(self->tm);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Tilemap_set_layer_pos(LayerObject *self,
+                                       PyTypeObject *defining_class,
+                                       PyObject *const *args,
+                                       Py_ssize_t nargs,
+                                       PyObject *kwnames) {
+    long x, y;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    x = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_pos(self->ll->ll, self->layer, x, y) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_pos failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_window(LayerObject *self,
+                                          PyTypeObject *defining_class,
+                                          PyObject *const *args,
+                                          Py_ssize_t nargs,
+                                          PyObject *kwnames) {
+    unsigned long w, h;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    w = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    h = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_window(self->ll->ll, self->layer, w, h) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_window failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_scroll_pos(LayerObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    unsigned long x, y;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    x = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_scroll_pos(self->ll->ll, self->layer, x, y) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_scroll_pos failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_scale(LayerObject *self,
+                                         PyTypeObject *defining_class,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs,
+                                         PyObject *kwnames) {
+    double x, y;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    x = PyFloat_AsDouble(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyFloat_AsDouble(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_scale(self->ll->ll, self->layer, x, y) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_scale failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_rotation_center(LayerObject *self,
+                                                   PyTypeObject *defining_class,
+                                                   PyObject *const *args,
+                                                   Py_ssize_t nargs,
+                                                   PyObject *kwnames) {
+    long x, y;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    x = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_rotation_center(self->ll->ll, self->layer, x, y) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_rotation_center failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_rotation(LayerObject *self,
+                                            PyTypeObject *defining_class,
+                                            PyObject *const *args,
+                                            Py_ssize_t nargs,
+                                            PyObject *kwnames) {
+    double rot;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    rot = PyFloat_AsDouble(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+  
+    if(tilemap_set_layer_rotation(self->ll->ll, self->layer, rot) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_rotation failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_colormod(LayerObject *self,
+                                            PyTypeObject *defining_class,
+                                            PyObject *const *args,
+                                            Py_ssize_t nargs,
+                                            PyObject *kwnames) {
+    unsigned long colormod;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    colormod = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_colormod(self->ll->ll, self->layer, colormod) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_colormod failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_set_layer_blendmode(LayerObject *self,
+                                             PyTypeObject *defining_class,
+                                             PyObject *const *args,
+                                             Py_ssize_t nargs,
+                                             PyObject *kwnames) {
+    long blendmode;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    blendmode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+   
+    if(tilemap_set_layer_blendmode(self->ll->ll, self->layer, blendmode) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_blendmode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Tilemap_draw_layer(LayerObject *self,
+                                    PyTypeObject *defining_class,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwnames) {
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(tilemap_draw_layer(self->ll->ll, self->layer) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_draw_layer failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef Layer_methods[] = {
+    {
+        "pos",
+        (PyCMethod) Tilemap_set_layer_pos,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the on-screen position to draw the layer to."},
+    {
+        "window",
+        (PyCMethod) Tilemap_set_layer_window,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the window size of the view in to the tilemap to show."},
+    {
+        "scroll_pos",
+        (PyCMethod) Tilemap_set_layer_scroll_pos,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the scroll position (top-left corner) of the tilemap to show."},
+    {
+        "scale",
+        (PyCMethod) Tilemap_set_layer_scale,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the scale of the layer."},
+    {
+        "rotation_center",
+        (PyCMethod) Tilemap_set_layer_rotation_center,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the point around which the layer is rotated."},
+    {
+        "rotation",
+        (PyCMethod) Tilemap_set_layer_rotation,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the rotation of the layer, in degrees."},
+    {
+        "colormod",
+        (PyCMethod) Tilemap_set_layer_colormod,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the layer's colormod."},
+    {
+        "blendmode",
+        (PyCMethod) Tilemap_set_layer_blendmode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the layer blendmode."},
+    {
+        "draw",
+        (PyCMethod) Tilemap_draw_layer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Finally, draw a layer to the screen or render target."},
+    {NULL}
+};
+
+static PyType_Slot LayerSlots[] = {
+    {Py_tp_new, Layer_new},
+    {Py_tp_init, (initproc)Layer_init},
+    {Py_tp_dealloc, (destructor)Layer_dealloc},
+    {Py_tp_traverse, heap_type_traverse},
+    {Py_tp_methods, Layer_methods},
+    {0, NULL}
+};
+
+static PyType_Spec LayerSpec = {
+    .name = "crustygame.Layer",
+    .basicsize = sizeof(LayerObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = LayerSlots
+};
+
 /* objects successfully returned by this function automatically have a new
  * reference because objects returned by the various PyObject_Call* functions
  * return with a new reference. */
@@ -859,6 +1294,7 @@ static int crustygame_exec(PyObject* m) {
     state->LayerListType = NULL;
     state->TilesetType = NULL;
     state->TilemapType = NULL;
+    state->LayerType = NULL;
     state->return_ptr = NULL;
     state->LP_SDL_Renderer = NULL;
     state->LP_SDL_Texture = NULL;
@@ -898,6 +1334,10 @@ static int crustygame_exec(PyObject* m) {
     }
     state->TilemapType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &TilemapSpec, NULL);
     if(PyModule_AddObject(m, "Tilemap", (PyObject *)state->TilemapType) < 0) {
+        goto error;
+    }
+    state->LayerType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerSpec, NULL);
+    if(PyModule_AddObject(m, "Layer", (PyObject *)state->LayerType) < 0) {
         goto error;
     }
 
@@ -980,6 +1420,67 @@ static int crustygame_exec(PyObject* m) {
         goto error;
     }
 
+    if(PyModule_AddIntMacro(m, TILEMAP_HFLIP_MASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_VFLIP_MASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_ROTATE_MASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_ROTATE_NONE) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_ROTATE_90) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_ROTATE_180) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_ROTATE_270) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BLENDMODE_BLEND) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BLENDMODE_ADD) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BLENDMODE_MOD) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BLENDMODE_MUL) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BLENDMODE_SUB) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BSHIFT) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_BMASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_GSHIFT) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_GMASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_RSHIFT) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_RMASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_ASHIFT) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, TILEMAP_AMASK) < 0) {
+        goto error;
+    }
+
     Py_DECREF(SDL_m);
     Py_DECREF(argtypes_tuple);
     Py_DECREF(ctypes_this_module);
@@ -1008,6 +1509,7 @@ error:
     Py_XDECREF(ctypes_CDLL);
     Py_XDECREF(ctypes_POINTER);
     Py_XDECREF(ctypes_m);
+    Py_CLEAR(state->LayerType);
     Py_CLEAR(state->TilemapType);
     Py_CLEAR(state->TilesetType);
     Py_CLEAR(state->LayerListType);
@@ -1023,6 +1525,7 @@ static void crustygame_free(void *p) {
     Py_XDECREF(state->LP_SDL_Texture);
     Py_XDECREF(state->LP_SDL_Renderer);
     Py_XDECREF(state->return_ptr);
+    Py_XDECREF(state->LayerType);
     Py_XDECREF(state->TilemapType);
     Py_XDECREF(state->TilesetType);
     Py_XDECREF(state->LayerListType);

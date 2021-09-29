@@ -329,6 +329,7 @@ int tilemap_add_tileset(LayerList *ll,
                         unsigned int th) {
     Tileset *temp;
     SDL_Surface *surface2 = NULL;
+    SDL_Texture *targetTexture;
     SDL_Texture *tex, *tex2;
     unsigned int i, j;
     unsigned int maxx, maxy;
@@ -393,6 +394,7 @@ int tilemap_add_tileset(LayerList *ll,
      * a surface isn't a target texture */
     tex2 = SDL_CreateTexture(ll->renderer,
                              ll->format,
+                             SDL_TEXTUREACCESS_STATIC |
                              SDL_TEXTUREACCESS_TARGET,
                              texw,
                              texh);
@@ -401,9 +403,16 @@ int tilemap_add_tileset(LayerList *ll,
         SDL_DestroyTexture(tex);
         return(-1);
     }
+    targetTexture = SDL_GetRenderTarget(ll->renderer);
     if(SDL_SetRenderTarget(ll->renderer, tex2) < 0) {
         LOG_PRINTF(ll, "Failed to set render target to copy texture: %s.\n",
                        SDL_GetError());
+        SDL_DestroyTexture(tex2);
+        SDL_DestroyTexture(tex);
+        return(-1);
+    }
+    if(SDL_RenderClear(ll->renderer) < 0) {
+        LOG_PRINTF(ll, "Failed to clear texture.\n");
         SDL_DestroyTexture(tex2);
         SDL_DestroyTexture(tex);
         return(-1);
@@ -415,7 +424,7 @@ int tilemap_add_tileset(LayerList *ll,
         SDL_DestroyTexture(tex);
         return(-1);
     }
-    if(SDL_SetRenderTarget(ll->renderer, NULL) < 0) {
+    if(SDL_SetRenderTarget(ll->renderer, targetTexture) < 0) {
         LOG_PRINTF(ll, "Failed to set render target to screen: %s.\n",
                        SDL_GetError());
         SDL_DestroyTexture(tex2);
@@ -771,7 +780,7 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
             LOG_PRINTF(ll, "Failed to allocate tilemap attribute map.\n");
             return(-1);
         }
-        memset(tm->attr_flags, 0, sizeof(unsigned int) * w * h);
+        memset(tm->attr_flags, 0, sizeof(unsigned int) * tm->w * tm->h);
     }
  
     for(i = 0; i < (unsigned int)h; i++) {
@@ -834,7 +843,7 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
             return(-1);
         }
         memset(tm->attr_colormod, 0,
-               sizeof(unsigned int) * w * h);
+               sizeof(unsigned int) * tm->w * tm->h);
     }
  
     for(i = 0; i < (unsigned int)h; i++) {
@@ -891,6 +900,7 @@ int tilemap_update_tilemap(LayerList *ll,
 
         tm->tex = SDL_CreateTexture(ll->renderer,
                                     ll->format,
+                                    SDL_TEXTUREACCESS_STATIC |
                                     SDL_TEXTUREACCESS_TARGET,
                                     texw,
                                     texh);

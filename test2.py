@@ -1,5 +1,7 @@
 from sdl2 import *
 import crustygame as cg
+import array
+import time
 
 def _driver_key(info):
     info = info[1]
@@ -96,6 +98,20 @@ def initialize_video(title :str,
     return window, renderer, pixfmt
 
 
+def clear_frame(ll, r, g, b):
+    if SDL_SetRenderDrawColor(ll.renderer, r, g, b, SDL_ALPHA_OPAQUE) < 0:
+        raise(Exception())
+    if SDL_RenderClear(ll.renderer) < 0:
+        raise(Exception())
+    if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT) < 0:
+        raise(Exception())
+
+def make_color(r, g, b, a):
+    return((r << cg.TILEMAP_RSHIFT) |
+           (g << cg.TILEMAP_GSHIFT) |
+           (b << cg.TILEMAP_BSHIFT) |
+           (a << cg.TILEMAP_ASHIFT))
+
 def log_cb_return(string, priv):
     print("tilemap.h output, ignore: {}".format(string), end='')
 
@@ -103,44 +119,101 @@ def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
     window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
     sdlfmt = SDL_AllocFormat(pixfmt)
-    blue = SDL_MapRGB(sdlfmt, 0, 0, 255)
+    sdl_red = SDL_MapRGBA(sdlfmt, 255, 0, 0, 255)
+    sdl_green = SDL_MapRGBA(sdlfmt, 0, 255, 0, 255)
+    sdl_blue = SDL_MapRGBA(sdlfmt, 0, 0, 255, 255)
+    red = make_color(255, 31, 31, 255)
+    green = make_color(31, 255, 31, 255)
+    blue = make_color(127, 127, 255, 255)
+    transparent_rg = SDL_MapRGBA(sdlfmt, 255, 255, 63, 191)
     ll = cg.LayerList(renderer, pixfmt, log_cb_return, None)
 
     if ll.renderer != renderer:
         print("Got different renderer back from layerlist")
 
-    ts1 = cg.Tileset(ll, 32, 32, blue, 16, 16)
+    ts1 = cg.Tileset(ll, 32, 32, sdl_blue, 16, 16)
     ts2 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8)
     surface = SDL_CreateRGBSurfaceWithFormat(0, 64, 64, 32, pixfmt)
     ts3 = cg.Tileset(ll, surface, 64, 64)
+    SDL_FreeSurface(surface)
 
     try:
-        ll.set_target_tileset(window)
+        ll.target_tileset(window)
         print("set_target_tileset didn't raise TypeError as expected")
     except TypeError:
         pass
 
     try:
-        ll.set_target_tileset(0)
+        ll.target_tileset(0)
         print("set_target_tileset didn't raise TypeError as expected")
     except TypeError:
         pass
 
-    ll.set_target_tileset(ts1);
-    ll.set_target_tileset(ts2);
-    ll.set_target_tileset(ts3);
-    ll.set_target_tileset(None);
+    ll.target_tileset(ts1);
+    ll.target_tileset(ts2);
+    ll.target_tileset(ts3);
+    ll.target_tileset(None);
 
     try:
-        ll.set_default_render_target(window)
+        ll.default_render_target(window)
         print("set_default_render_target didn't raise TypeError as expected")
     except TypeError:
         pass
 
     tm1 = cg.Tilemap(ll, ts1, 4, 4)
-    tm1.set_tileset(ts2)
+    tm1.tileset(ts2)
     SDL_RenderPresent(renderer)
 
+    del tm1
+    del ts3
+    del ts2
+    del ts1
+
+    ts1 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8)
+    tm1 = cg.Tilemap(ll, ts1, 8, 8)
+    tm1.map(2, 2, 4, 4, 3, array.array('u', "tseta sisiht"))
+    tm1.attr_flags(2, 2, 0, 4, 3, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
+    tm1.attr_colormod(2, 2, 4, 4, 3, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red, green, blue)))
+    tm1.update(0, 0, 8, 8)
+    l1 = cg.Layer(ll, tm1);
+    l1.window(32, 24)
+    l1.scroll_pos(16, 16)
+    l1.pos(16, 16)
+    l1.rotation_center(16, 12)
+    l1.rotation(180)
+    l1.colormod(transparent_rg)
+    l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
+    ts2 = cg.Tileset(ll, 64, 64, sdl_blue, 64, 64)
+    ll.target_tileset(ts2)
+    l1.draw()
+    ll.target_tileset(None)
+    tm2 = cg.Tilemap(ll, ts2, 1, 1)
+    tm2.update(0, 0, 1, 1)
+    l2 = cg.Layer(ll, tm2)
+    l2.pos(100, 100)
+    l2.scale(4.0, 4.0)
+    l2.draw()
+
+    running = True
+    lastTime = time.monotonic()
+    while running:
+        event = SDL_Event()
+
+        while SDL_PollEvent(event):
+            if event.type == SDL_QUIT or event.type == SDL_KEYDOWN:
+                running = False
+        
+        thisTime = time.monotonic()
+
+        clear_frame(ll, 32, 128, 192)
+        l2.draw()
+        # stuff here
+
+        lastTime = thisTime
+        SDL_RenderPresent(renderer)
+ 
+    SDL_DestroyRenderer(renderer)
+    SDL_DestroyWindow(window)
     SDL_Quit()
 
     print("If no other errors other than those said to ignore, then tests passed.")
