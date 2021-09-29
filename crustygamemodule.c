@@ -873,6 +873,14 @@ static int crustygame_exec(PyObject* m) {
     PyObject *argtypes_tuple = NULL;
     PyObject *SDL_m = NULL;
 
+    /* import sdl2 to get the literal pointer types needed for type checks. */
+    /* This has to happen early otherwise weirdness happens that I don't
+     * understand and stuff crashes. */
+    SDL_m = PyImport_ImportModule("sdl2");
+    if(SDL_m == NULL) {
+        goto error;
+    }
+
     /* Make an exception used for problems returned by the library. */
     state->CrustyException = PyErr_NewException("crustygame.CrustyException", NULL, NULL);
     if (PyModule_AddObject(m, "CrustyException", state->CrustyException) < 0) {
@@ -881,9 +889,6 @@ static int crustygame_exec(PyObject* m) {
 
     /* heap allocate the new types and store them in the module state */
     state->LayerListType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
-    /* without this, quitting crashes if the module is loaded and then pythn is
-     * quit immediately */
-    Py_XINCREF(state->LayerListType);
     if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
         goto error;
     }
@@ -962,11 +967,6 @@ static int crustygame_exec(PyObject* m) {
         goto error;
     }
 
-    /* import sdl2 and get the literal pointer types needed for type checks. */
-    SDL_m = PyImport_ImportModule("sdl2");
-    if(SDL_m == NULL) {
-        goto error;
-    }
     state->LP_SDL_Renderer = get_literal_pointer_type(SDL_m, ctypes_POINTER, "SDL_Renderer");
     if(state->LP_SDL_Renderer == NULL) {
         goto error;
