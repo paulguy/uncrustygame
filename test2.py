@@ -139,6 +139,7 @@ def main():
 
     tm1 = cg.Tilemap(ll, ts1, 4, 4)
     tm1.set_tileset(ts2)
+    SDL_RenderPresent(renderer)
 
     SDL_Quit()
 

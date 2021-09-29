@@ -44,7 +44,7 @@ typedef struct {
 } TilemapObject;
 
 /* awful hack function used to get pointers back from a ctypes object */
-uintptr_t return_ptr(void *ptr) {
+uintptr_t awful_return_ptr_hack_funct(void *ptr) {
     return((uintptr_t)ptr);
 }
 
@@ -857,6 +857,9 @@ static int crustygame_exec(PyObject* m) {
      * been referenced, yet */
     state->CrustyException = NULL;
     state->LayerListType = NULL;
+    state->TilesetType = NULL;
+    state->TilemapType = NULL;
+    state->return_ptr = NULL;
     state->LP_SDL_Renderer = NULL;
     state->LP_SDL_Texture = NULL;
     state->LP_SDL_Surface = NULL;
@@ -936,7 +939,7 @@ static int crustygame_exec(PyObject* m) {
     }
     /* get the adapter function */
     state->return_ptr = PyObject_GetAttrString(ctypes_this_module,
-                                               "return_ptr");
+                                               "awful_return_ptr_hack_funct");
     Py_XINCREF(state->return_ptr);
     if(state->return_ptr == NULL) {
         goto error;
