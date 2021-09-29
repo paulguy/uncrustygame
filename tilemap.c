@@ -411,9 +411,8 @@ int tilemap_add_tileset(LayerList *ll,
         SDL_DestroyTexture(tex);
         return(-1);
     }
-    if(SDL_RenderClear(ll->renderer) < 0) {
-        LOG_PRINTF(ll, "Failed to clear texture.\n");
-        SDL_DestroyTexture(tex2);
+    if(SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE) < 0) {
+        LOG_PRINTF(ll, "Failed to set blend mode.\n");
         SDL_DestroyTexture(tex);
         return(-1);
     }
