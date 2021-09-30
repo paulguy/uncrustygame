@@ -420,7 +420,7 @@ int create_color_box(ColorBox *cboxes, int pTileset,
         cbox->x = RANDRANGE(0, cboxes->wWidth - cbox->w * cboxes->scale);
         if(rand() % 2 == 0) {
             cbox->dir = DIR_DOWN;
-            cbox->y = -(cbox[i].h) * cboxes->scale - cbox->shadowOffset;
+            cbox->y = -(cbox->h) * cboxes->scale - cbox->shadowOffset;
         } else {
             cbox->dir = DIR_UP;
             cbox->y = cboxes->wHeight;
