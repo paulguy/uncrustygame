@@ -193,14 +193,14 @@ def main():
 
     ts1 = ll.Tileset("cdemo/font.bmp", 8, 8)
     tm1 = ll.Tilemap(ts1, 8, 8)
-    tm1.map(2, 2, 4, 4, 3, array.array('u', "tseta sisiht"))
-    tm1.attr_flags(2, 2, 0, 4, 3, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
-    tm1.attr_colormod(2, 2, 4, 4, 3, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red, green, blue)))
+    tm1.map(2, 2, 5, 5, 2, array.array('u', "oediV DVD "))
+    tm1.attr_flags(2, 2, 0, 5, 2, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
+    tm1.attr_colormod(2, 2, 4, 5, 2, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red)))
     tm1.update(0, 0, 8, 8)
     l1 = cg.Layer(ll, tm1);
-    l1.window(32, 24)
+    l1.window(40, 16)
     l1.scroll_pos(16, 16)
-    l1.rotation_center(16, 12)
+    l1.rotation_center(20, 8)
     l1.rotation(180)
     l1.colormod(transparent_rg)
     l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
@@ -213,8 +213,8 @@ def main():
 
     x = 0.0
     y = 0.0
-    x2 = -16.0
-    y2 = -12.0
+    x2 = -20.0
+    y2 = -8.0
     xspeed = random.uniform(0.0, 480.0)
     yspeed = random.uniform(0.0, 480.0)
     x2speed = random.uniform(0.0, 64.0)
@@ -230,7 +230,7 @@ def main():
         while SDL_PollEvent(event):
             if event.type == SDL_QUIT or event.type == SDL_KEYDOWN:
                 running = False
-        
+
         thisTime = time.monotonic()
         timetaken = thisTime - lastTime
         x = x + (xspeed * timetaken)
@@ -267,25 +267,25 @@ def main():
             y = 0
 
         x2 = x2 + (x2speed * timetaken)
-        if x2 > 64 - 16:
+        if x2 > 64 - 20:
             x2speed = random.uniform(-64.0, 0.0)
             if y2speed > 0.0:
                 y2speed = random.uniform(0.0, 64.0)
             else:
                 y2speed = random.uniform(-64.0, 0.0)
-            x2 = 64 - 16
+            x2 = 64 - 20
             if blendmode == cg.TILEMAP_BLENDMODE_ADD:
                 blendmode = cg.TILEMAP_BLENDMODE_SUB
             else:
                 blendmode = cg.TILEMAP_BLENDMODE_ADD
             l1.blendmode(blendmode)
-        elif x2 < -16:
+        elif x2 < -20:
             x2speed = random.uniform(0.0, 64.0)
             if y2speed > 0.0:
                 y2speed = random.uniform(0.0, 64.0)
             else:
                 y2speed = random.uniform(-64.0, 0.0)
-            x2 = -16
+            x2 = -20
             if blendmode == cg.TILEMAP_BLENDMODE_ADD:
                 blendmode = cg.TILEMAP_BLENDMODE_SUB
             else:
@@ -293,30 +293,38 @@ def main():
             l1.blendmode(blendmode)
 
         y2 = y2 + (y2speed * timetaken)
-        if y2 > 64 - 12:
+        if y2 > 64 - 8:
             y2speed = random.uniform(-64.0, 0.0)
             if x2speed > 0.0:
                 x2speed = random.uniform(0.0, 64.0)
             else:
                 x2speed = random.uniform(-64.0, 0.0)
-            y2 = 64 - 12
+            y2 = 64 - 8
             if blendmode == cg.TILEMAP_BLENDMODE_ADD:
                 blendmode = cg.TILEMAP_BLENDMODE_SUB
             else:
                 blendmode = cg.TILEMAP_BLENDMODE_ADD
             l1.blendmode(blendmode)
-        elif y2 < -12:
+        elif y2 < -8:
             y2speed = random.uniform(0.0, 64.0)
             if x2speed > 0.0:
                 x2speed = random.uniform(0.0, 64.0)
             else:
                 x2speed = random.uniform(-64.0, 0.0)
-            y2 = -12
+            y2 = -8
             if blendmode == cg.TILEMAP_BLENDMODE_ADD:
                 blendmode = cg.TILEMAP_BLENDMODE_SUB
             else:
                 blendmode = cg.TILEMAP_BLENDMODE_ADD
             l1.blendmode(blendmode)
+
+        if xspeed == 0.0 and yspeed == 0.0:
+            xspeed = random.uniform(-480.0, 480.0)
+            yspeed = random.uniform(-480.0, 480.0)
+
+        if x2speed == 0.0 and y2speed == 0.0:
+            x2speed = random.uniform(-64.0, 64.0)
+            y2speed = random.uniform(-64.0, 64.0)
 
         colorrad = colorrad + (math.pi * timetaken)
         if colorrad >= math.pi * 2:
