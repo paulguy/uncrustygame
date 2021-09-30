@@ -2,6 +2,8 @@ from sdl2 import *
 import crustygame as cg
 import array
 import time
+import random
+import math
 
 def _driver_key(info):
     info = info[1]
@@ -107,10 +109,30 @@ def clear_frame(ll, r, g, b):
         raise(Exception())
 
 def make_color(r, g, b, a):
-    return((r << cg.TILEMAP_RSHIFT) |
-           (g << cg.TILEMAP_GSHIFT) |
-           (b << cg.TILEMAP_BSHIFT) |
-           (a << cg.TILEMAP_ASHIFT))
+    return((int(r) << cg.TILEMAP_RSHIFT) |
+           (int(g) << cg.TILEMAP_GSHIFT) |
+           (int(b) << cg.TILEMAP_BSHIFT) |
+           (int(a) << cg.TILEMAP_ASHIFT))
+
+def color_from_rad(rad, cmin, cmax):
+    if rad >= 0 and rad < (math.pi * 2 / 6):
+        rad = (rad * (1 / (math.pi * 2 / 6)) * (cmax - cmin)) + cmin
+        return make_color(cmax, rad, cmin, 255)
+    elif rad >= (math.pi * 2 / 6) and rad < (math.pi * 2 / 6 * 2):
+        rad = cmax - ((rad - (math.pi * 2 / 6)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin))
+        return make_color(rad, cmax, cmin, 255)
+    elif rad >= (math.pi * 2 / 6 * 2) and rad < (math.pi * 2 / 6 * 3):
+        rad = ((rad - (math.pi * 2 / 6 * 2)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin)) + cmin
+        return make_color(cmin, cmax, rad, 255)
+    elif rad >= (math.pi * 2 / 6 * 3) and rad < (math.pi * 2 / 6 * 4):
+        rad = cmax - ((rad - (math.pi * 2 / 6 * 3)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin))
+        return make_color(cmin, rad, cmax, 255)
+    elif rad >= (math.pi * 2 / 6 * 4) and rad < (math.pi * 2 / 6 * 5):
+        rad = ((rad - (math.pi * 2 / 6 * 4)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin)) + cmin
+        return make_color(rad, cmin, cmax, 255)
+
+    rad = cmax - ((rad - (math.pi * 2 / 6 * 5)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin))
+    return make_color(cmax, cmin, rad, 255)
 
 def log_cb_return(string, priv):
     print("tilemap.h output, ignore: {}".format(string), end='')
@@ -178,21 +200,27 @@ def main():
     l1 = cg.Layer(ll, tm1);
     l1.window(32, 24)
     l1.scroll_pos(16, 16)
-    l1.pos(16, 16)
     l1.rotation_center(16, 12)
     l1.rotation(180)
     l1.colormod(transparent_rg)
     l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
     ts2 = ll.Tileset(64, 64, sdl_blue, 64, 64)
-    ll.target_tileset(ts2)
-    l1.draw()
-    ll.target_tileset(None)
     tm2 = ts2.Tilemap(1, 1)
-    tm2.update(0, 0, 1, 1)
     l2 = tm2.Layer()
-    l2.pos(100, 100)
     l2.scale(4.0, 4.0)
-    l2.draw()
+
+    random.seed(None)
+
+    x = 0.0
+    y = 0.0
+    x2 = -16.0
+    y2 = -12.0
+    xspeed = random.uniform(0.0, 480.0)
+    yspeed = random.uniform(0.0, 480.0)
+    x2speed = random.uniform(0.0, 64.0)
+    y2speed = random.uniform(0.0, 64.0)
+    blendmode = cg.TILEMAP_BLENDMODE_ADD
+    colorrad = 0.0
 
     running = True
     lastTime = time.monotonic()
@@ -204,13 +232,108 @@ def main():
                 running = False
         
         thisTime = time.monotonic()
+        timetaken = thisTime - lastTime
+        x = x + (xspeed * timetaken)
+        if x > (640 - (64 * 4.0)):
+            xspeed = random.uniform(-480.0, 0.0)
+            if yspeed > 0.0:
+                yspeed = random.uniform(0.0, 480.0)
+            else:
+                yspeed = random.uniform(-480.0, 0.0)
+            x = 640 - (64 * 4.0)
+        elif x < 0:
+            xspeed = random.uniform(0.0, 480.0)
+            if yspeed > 0.0:
+                yspeed = random.uniform(0.0, 480.0)
+            else:
+                yspeed = random.uniform(-480.0, 0.0)
+            x = 0
+
+        y = y + (yspeed * timetaken)
+        if y > (480 - (64 * 4.0)):
+            y = 480 - (64 * 4.0)
+            yspeed = random.uniform(-480.0, 0.0)
+            if xspeed > 0.0:
+                xspeed = random.uniform(0.0, 480.0)
+            else:
+                xspeed = random.uniform(-480.0, 0.0)
+            y = 480 - (64 * 4.0)
+        elif y < 0:
+            yspeed = random.uniform(0.0, 480.0)
+            if xspeed > 0.0:
+                xspeed = random.uniform(0.0, 480.0)
+            else:
+                xspeed = random.uniform(-480.0, 0.0)
+            y = 0
+
+        x2 = x2 + (x2speed * timetaken)
+        if x2 > 64 - 16:
+            x2speed = random.uniform(-64.0, 0.0)
+            if y2speed > 0.0:
+                y2speed = random.uniform(0.0, 64.0)
+            else:
+                y2speed = random.uniform(-64.0, 0.0)
+            x2 = 64 - 16
+            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
+                blendmode = cg.TILEMAP_BLENDMODE_SUB
+            else:
+                blendmode = cg.TILEMAP_BLENDMODE_ADD
+            l1.blendmode(blendmode)
+        elif x2 < -16:
+            x2speed = random.uniform(0.0, 64.0)
+            if y2speed > 0.0:
+                y2speed = random.uniform(0.0, 64.0)
+            else:
+                y2speed = random.uniform(-64.0, 0.0)
+            x2 = -16
+            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
+                blendmode = cg.TILEMAP_BLENDMODE_SUB
+            else:
+                blendmode = cg.TILEMAP_BLENDMODE_ADD
+            l1.blendmode(blendmode)
+
+        y2 = y2 + (y2speed * timetaken)
+        if y2 > 64 - 12:
+            y2speed = random.uniform(-64.0, 0.0)
+            if x2speed > 0.0:
+                x2speed = random.uniform(0.0, 64.0)
+            else:
+                x2speed = random.uniform(-64.0, 0.0)
+            y2 = 64 - 12
+            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
+                blendmode = cg.TILEMAP_BLENDMODE_SUB
+            else:
+                blendmode = cg.TILEMAP_BLENDMODE_ADD
+            l1.blendmode(blendmode)
+        elif y2 < -12:
+            y2speed = random.uniform(0.0, 64.0)
+            if x2speed > 0.0:
+                x2speed = random.uniform(0.0, 64.0)
+            else:
+                x2speed = random.uniform(-64.0, 0.0)
+            y2 = -12
+            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
+                blendmode = cg.TILEMAP_BLENDMODE_SUB
+            else:
+                blendmode = cg.TILEMAP_BLENDMODE_ADD
+            l1.blendmode(blendmode)
+
+        colorrad = colorrad + (math.pi * timetaken)
+        if colorrad >= math.pi * 2:
+            colorrad = colorrad - (math.pi * 2)
+        l1.colormod(color_from_rad(colorrad, 0, 255))
 
         clear_frame(ll, 32, 128, 192)
+        l1.pos(int(x2), int(y2))
+        l2.pos(int(x), int(y))
+        ll.target_tileset(ts2)
+        l1.draw()
+        ll.target_tileset(None)
+        tm2.update(0, 0, 1, 1)
         l2.draw()
-        # stuff here
+        SDL_RenderPresent(renderer)
 
         lastTime = thisTime
-        SDL_RenderPresent(renderer)
  
     SDL_DestroyRenderer(renderer)
     SDL_DestroyWindow(window)
