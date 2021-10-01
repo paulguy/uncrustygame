@@ -4,6 +4,7 @@
 #include <Python.h>
 
 #include "tilemap.h"
+#include "synth.h"
 
 typedef struct {
     PyObject *CrustyException;
@@ -11,6 +12,9 @@ typedef struct {
     PyTypeObject *TilesetType;
     PyTypeObject *TilemapType;
     PyTypeObject *LayerType;
+    PyTypeObject *SynthType;
+    PyTypeObject *BufferType;
+    PyTypeObject *PlayerType;
 
     /* ctypes callable which will point to the function a bit further down */
     PyObject *return_ptr;
@@ -22,10 +26,14 @@ typedef struct {
 } crustygame_state;
 
 typedef struct {
+    PyObject *cb;
+    PyObject *priv;
+} CrustyCallback;
+
+typedef struct {
     PyObject_HEAD
     LayerList *ll;
-    PyObject *log_cb;
-    PyObject *log_priv;
+    CrustyCallback log;
     /* for the refernce */
     PyObject *py_renderer;
     SDL_Renderer *renderer;
@@ -50,6 +58,34 @@ typedef struct {
     TilemapObject *tm;
     int layer;
 } LayerObject;
+
+typedef struct BufferObject_s BufferObject;
+
+typedef struct {
+    PyObject_HEAD
+    Synth *s;
+    CrustyCallback synth_frame;
+    CrustyCallback log;
+    int channels;
+    BufferObject **outputBuffers;
+} SynthObject;
+
+typedef struct BufferObject_s {
+    PyObject_HEAD
+    SynthObject *s;
+    int buffer;
+} BufferObject;
+
+typedef struct {
+    PyObject_HEAD
+    SynthObject *s;
+    BufferObject *inBuffer;
+    BufferObject *outBuffer;
+    BufferObject *volBuffer;
+    BufferObject *phaseBuffer;
+    BufferObject *speedBuffer;
+    int player;
+} PlayerObject;
 
 /* awful hack function used to get pointers back from a ctypes object */
 uintptr_t awful_return_ptr_hack_funct(void *ptr) {
@@ -91,12 +127,12 @@ static PyObject *get_symbol_from_string(PyObject *m, const char *str) {
 /* used for unwrapping the real log_cb and log_priv and calling the
  * user-supplied callable, on behalf of the generic C-side function which calls
  * this method */
-static void log_cb_adapter(LayerListObject *self, const char *str) {
+static void cb_adapter(CrustyCallback *cb, const char *str) {
     PyObject *arglist;
     PyObject *result;
 
-    arglist = Py_BuildValue("sO", str, self->log_priv);
-    result = PyObject_CallObject(self->log_cb, arglist);
+    arglist = Py_BuildValue("sO", str, cb->priv);
+    result = PyObject_CallObject(cb->cb, arglist);
     Py_DECREF(arglist);
     /* don't check the result because this is called by C code anyway and it
      * is void */
@@ -137,15 +173,15 @@ static PyObject *LayerList_new(PyTypeObject *type, PyObject *args, PyObject *kwd
     }
     /* just have it be do-nothing until it's properly initialize */
     self->ll = NULL;
+    self->py_renderer = NULL;
+    self->log.cb = NULL;
+    self->log.priv = NULL;
 
     return((PyObject *)self);
 }
 
 static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds) {
     unsigned int format;
-    self->py_renderer = NULL;
-    self->log_cb = NULL;
-    self->log_priv = NULL;
 
     if(self->ll != NULL) {
         PyErr_SetString(PyExc_TypeError, "LayerList already initialized");
@@ -159,19 +195,19 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
     if(!PyArg_ParseTuple(args, "OIOO",
                          &(self->py_renderer),
                          &format,
-                         &(self->log_cb),
-                         &(self->log_priv))) {
+                         &(self->log.cb),
+                         &(self->log.priv))) {
         return(-1);
     }
     Py_XINCREF(self->py_renderer);
-    Py_XINCREF(self->log_cb);
-    Py_XINCREF(self->log_priv);
+    Py_XINCREF(self->log.cb);
+    Py_XINCREF(self->log.priv);
 
     if(!PyObject_TypeCheck(self->py_renderer, state->LP_SDL_Renderer)) {
         PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
         goto error;
     }
-    if(!PyCallable_Check(self->log_cb)) {
+    if(!PyCallable_Check(self->log.cb)) {
         PyErr_SetString(PyExc_TypeError, "log_cb must be callable");
         goto error;
     }
@@ -183,8 +219,8 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
 
     self->ll = layerlist_new((SDL_Renderer *)(self->renderer),
                              format,
-                             (log_cb_return_t)log_cb_adapter,
-                             self);
+                             (log_cb_return_t)cb_adapter,
+                             &(self->log));
     if(self->ll == NULL) {
         PyErr_SetString(state->CrustyException, "layerlist_new returned an error");
         goto error;
@@ -193,8 +229,8 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
     return(0);
 
 error:
-    Py_CLEAR(self->log_priv);
-    Py_CLEAR(self->log_cb);
+    Py_CLEAR(self->log.priv);
+    Py_CLEAR(self->log.cb);
     Py_CLEAR(self->py_renderer);
     return(-1);
 }
@@ -203,8 +239,8 @@ static void LayerList_dealloc(LayerListObject *self) {
     if(self->ll != NULL) {
         layerlist_free(self->ll);
     }
-    Py_XDECREF(self->log_priv);
-    Py_XDECREF(self->log_cb);
+    Py_XDECREF(self->log.priv);
+    Py_XDECREF(self->log.cb);
     Py_XDECREF(self->py_renderer);
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
@@ -316,7 +352,7 @@ static PyObject *LayerList_LL_Tileset(LayerListObject *self,
     if(arglist == NULL) {
         return(NULL);
     }
-    tileset = PyObject_CallObject(state->TilesetType, arglist);
+    tileset = PyObject_CallObject((PyObject *)(state->TilesetType), arglist);
     Py_DECREF(arglist);
     if(tileset == NULL) {
         return(NULL);
@@ -348,7 +384,7 @@ static PyObject *LayerList_LL_Tilemap(LayerListObject *self,
     if(arglist == NULL) {
         return(NULL);
     }
-    tilemap = PyObject_CallObject(state->TilemapType, arglist);
+    tilemap = PyObject_CallObject((PyObject *)(state->TilemapType), arglist);
     Py_DECREF(arglist);
     if(tilemap == NULL) {
         return(NULL);
@@ -430,7 +466,7 @@ static PyObject *Tileset_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     }
     self->ll = NULL;
     self->tileset = -1;
- 
+
     return((PyObject *)self);
 }
 
@@ -565,7 +601,7 @@ static PyObject *LayerList_TS_Tilemap(TilesetObject *self,
     PyObject *tilemap;
 
     if(self->ll == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
         return(NULL);
     }
 
@@ -580,7 +616,7 @@ static PyObject *LayerList_TS_Tilemap(TilesetObject *self,
     if(arglist == NULL) {
         return(NULL);
     }
-    tilemap = PyObject_CallObject(state->TilemapType, arglist);
+    tilemap = PyObject_CallObject((PyObject *)(state->TilemapType), arglist);
     Py_DECREF(arglist);
     if(tilemap == NULL) {
         return(NULL);
@@ -625,7 +661,7 @@ static PyObject *Tilemap_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->ll = NULL;
     self->ts = NULL;
     self->tilemap = -1;
- 
+
     return((PyObject *)self);
 }
 
@@ -670,9 +706,9 @@ error:
 static void Tilemap_dealloc(TilemapObject *self) {
     if(self->tilemap >= 0) {
         tilemap_free_tilemap(self->ll->ll, self->tilemap);
-        Py_DECREF(self->ll);
     }
     Py_XDECREF(self->ts);
+    Py_XDECREF(self->ll);
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
@@ -814,7 +850,7 @@ static PyObject *Tilemap_set_attr_flags(TilemapObject *self,
     if(PyObject_GetBuffer(args[5], &buf, PyBUF_CONTIG_RO) < 0) {
         return(NULL);
     }
-    
+
     if(tilemap_set_tilemap_attr_flags(self->ll->ll,
                                       self->tilemap,
                                       x, y, pitch, w, h,
@@ -872,7 +908,7 @@ static PyObject *Tilemap_set_attr_colormod(TilemapObject *self,
     if(PyObject_GetBuffer(args[5], &buf, PyBUF_CONTIG_RO) < 0) {
         return(NULL);
     }
-    
+
     if(tilemap_set_tilemap_attr_colormod(self->ll->ll,
                                          self->tilemap,
                                          x, y, pitch, w, h,
@@ -921,7 +957,7 @@ static PyObject *Tilemap_update(TilemapObject *self,
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-    
+
     if(tilemap_update_tilemap(self->ll->ll, self->tilemap, x, y, w, h) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_update_tilemap failed");
         return(NULL);
@@ -939,7 +975,7 @@ static PyObject *LayerList_TM_Layer(TilemapObject *self,
     PyObject *layer;
 
     if(self->ll == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "this LayerList is not initialized");
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
         return(NULL);
     }
 
@@ -949,7 +985,7 @@ static PyObject *LayerList_TM_Layer(TilemapObject *self,
     if(arglist == NULL) {
         return(NULL);
     }
-    layer = PyObject_CallObject(state->LayerType, arglist);
+    layer = PyObject_CallObject((PyObject *)(state->LayerType), arglist);
     Py_DECREF(arglist);
     if(layer == NULL) {
         return(NULL);
@@ -1019,7 +1055,7 @@ static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     self->ll = NULL;
     self->tm = NULL;
     self->layer = -1;
- 
+
     return((PyObject *)self);
 }
 
@@ -1062,9 +1098,9 @@ error:
 static void Layer_dealloc(LayerObject *self) {
     if(self->layer >= 0) {
         tilemap_free_layer(self->ll->ll, self->layer);
-        Py_DECREF(self->ll);
     }
     Py_XDECREF(self->tm);
+    Py_XDECREF(self->ll);
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
@@ -1094,7 +1130,7 @@ static PyObject *Tilemap_set_layer_pos(LayerObject *self,
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_pos(self->ll->ll, self->layer, x, y) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_pos failed");
         return(NULL);
@@ -1129,7 +1165,7 @@ static PyObject *Tilemap_set_layer_window(LayerObject *self,
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_window(self->ll->ll, self->layer, w, h) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_window failed");
         return(NULL);
@@ -1164,7 +1200,7 @@ static PyObject *Tilemap_set_layer_scroll_pos(LayerObject *self,
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_scroll_pos(self->ll->ll, self->layer, x, y) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_scroll_pos failed");
         return(NULL);
@@ -1199,7 +1235,7 @@ static PyObject *Tilemap_set_layer_scale(LayerObject *self,
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_scale(self->ll->ll, self->layer, x, y) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_scale failed");
         return(NULL);
@@ -1234,7 +1270,7 @@ static PyObject *Tilemap_set_layer_rotation_center(LayerObject *self,
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_rotation_center(self->ll->ll, self->layer, x, y) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_rotation_center failed");
         return(NULL);
@@ -1258,14 +1294,14 @@ static PyObject *Tilemap_set_layer_rotation(LayerObject *self,
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
     if(nargs < 1) {
-        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
     rot = PyFloat_AsDouble(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-  
+
     if(tilemap_set_layer_rotation(self->ll->ll, self->layer, rot) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_rotation failed");
         return(NULL);
@@ -1289,14 +1325,14 @@ static PyObject *Tilemap_set_layer_colormod(LayerObject *self,
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
     if(nargs < 1) {
-        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
     colormod = PyLong_AsUnsignedLong(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_colormod(self->ll->ll, self->layer, colormod) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_colormod failed");
         return(NULL);
@@ -1320,14 +1356,14 @@ static PyObject *Tilemap_set_layer_blendmode(LayerObject *self,
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
     if(nargs < 1) {
-        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
     blendmode = PyLong_AsLong(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
-   
+
     if(tilemap_set_layer_blendmode(self->ll->ll, self->layer, blendmode) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_blendmode failed");
         return(NULL);
@@ -1422,6 +1458,768 @@ static PyType_Spec LayerSpec = {
     .slots = LayerSlots
 };
 
+static PyObject *Synth_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    SynthObject *self;
+
+    self = (SynthObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    /* just have it be do-nothing until it's properly initialize */
+    self->s = NULL;
+    self->log.cb = NULL;
+    self->log.priv = NULL;
+    self->synth_frame.cb = NULL;
+    self->synth_frame.priv = NULL;
+    self->channels = 0;
+    self->outputBuffers = NULL;
+
+    return((PyObject *)self);
+}
+
+static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
+    unsigned int rate;
+    unsigned int channels;
+    PyObject *arglist;
+    int i;
+
+    if(self->s != NULL) {
+        PyErr_SetString(PyExc_TypeError, "Synth already initialized");
+        return(-1);
+    }
+
+    /* docs say this init isn't called if the class is instantiated as some
+     * other type.  Not sure the consequences there... */
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OOOOII",
+                         &(self->synth_frame.cb),
+                         &(self->synth_frame.priv),
+                         &(self->log.cb),
+                         &(self->log.priv),
+                         &rate, &channels)) {
+        return(-1);
+    }
+    Py_XINCREF(self->log.cb);
+    Py_XINCREF(self->log.priv);
+    Py_XINCREF(self->synth_frame.cb);
+    Py_XINCREF(self->synth_frame.priv);
+
+    if(!PyCallable_Check(self->log.cb)) {
+        PyErr_SetString(PyExc_TypeError, "log_cb must be callable");
+        goto error;
+    }
+    if(!PyCallable_Check(self->synth_frame.cb)) {
+        PyErr_SetString(PyExc_TypeError, "synth_frame_cb must be callable");
+        goto error;
+    }
+
+    self->s = synth_new((synth_frame_cb_t)cb_adapter,
+                        &(self->log),
+                        (log_cb_return_t)cb_adapter,
+                        &(self->synth_frame),
+                        rate, channels);
+    if(self->s == NULL) {
+        PyErr_SetString(state->CrustyException, "synth_new returned an error");
+        goto error;
+    }
+
+    /* create output buffer objects for keeping track of them on this side */
+    self->channels = synth_get_channels(self->s);
+    if(self->channels < 1) {
+        PyErr_SetString(state->CrustyException, "synth_get_channels returned an error");
+        goto error;
+    }
+
+    self->outputBuffers = malloc(sizeof(BufferObject *) * self->channels);
+    if(self->outputBuffers == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "couldn't allocate memory for output buffer objects");
+        goto error;
+    }
+    for(i = 0; i < self->channels; i++) {
+        self->outputBuffers[i] = NULL;
+    }
+    for(i = 0; i < self->channels; i++) {
+        arglist = Py_BuildValue("OiI", self, SYNTH_TYPE_F32, i);
+        if(arglist == NULL) {
+            goto error;
+        }
+        self->outputBuffers[i] = (BufferObject *)PyObject_CallObject((PyObject *)(state->BufferType), arglist);
+        Py_DECREF(arglist);
+        if(self->outputBuffers[i] == NULL) {
+            goto error;
+        }
+    }
+
+    return(0);
+
+error:
+    if(self->outputBuffers != NULL) {
+        for(i = 0; i < self->channels; i++) {
+            if(self->outputBuffers[i] != NULL) {
+                Py_CLEAR(self->outputBuffers[i]);
+            }
+        }
+        free(self->outputBuffers);
+        self->outputBuffers = NULL;
+    }
+    Py_CLEAR(self->synth_frame.priv);
+    Py_CLEAR(self->synth_frame.cb);
+    Py_CLEAR(self->log.priv);
+    Py_CLEAR(self->log.cb);
+    return(-1);
+}
+
+static void Synth_dealloc(SynthObject *self) {
+    int i;
+
+    if(self->outputBuffers != NULL) {
+        for(i = 0; i < self->channels; i++) {
+            if(self->outputBuffers[i] != NULL) {
+                Py_CLEAR(self->outputBuffers[i]);
+            }
+        }
+        free(self->outputBuffers);
+        self->outputBuffers = NULL;
+    }
+    if(self->s != NULL) {
+        synth_free(self->s);
+    }
+    Py_XDECREF(self->synth_frame.priv);
+    Py_XDECREF(self->synth_frame.cb);
+    Py_XDECREF(self->log.priv);
+    Py_XDECREF(self->log.cb);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Synth_print_full_stats(SynthObject *self,
+                                        PyTypeObject *defining_class,
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs,
+                                        PyObject *kwnames) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    synth_print_full_stats(self->s);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_enabled(SynthObject *self,
+                                   PyTypeObject *defining_class,
+                                   PyObject *const *args,
+                                   Py_ssize_t nargs,
+                                   PyObject *kwnames) {
+   int enabled;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    enabled = PyObject_RichCompareBool(args[0], Py_True, Py_EQ);
+    if(enabled < 0) {
+        return(NULL);
+    }
+
+    if(synth_set_enabled(self->s, enabled) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_enabled failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_get_samples_needed(SynthObject *self,
+                                          PyTypeObject *defining_class,
+                                          PyObject *const *args,
+                                          Py_ssize_t nargs,
+                                          PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_get_samples_needed(self->s);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_get_samples_needed failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_get_rate(SynthObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_get_rate(self->s);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_get_rate failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_get_channels(SynthObject *self,
+                                    PyTypeObject *defining_class,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwnames) {
+    int i, j;
+    PyObject *ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    ret = PyTuple_New(self->channels);
+    if(ret == NULL) {
+        return(NULL);
+    }
+    /* increase the reference count to the objects about to be returned */
+    for(i = 0; i < self->channels; i++) {
+        Py_INCREF(self->outputBuffers[i]);
+    }
+    for(i = 0; i < self->channels; i++) {
+        if(PyTuple_SetItem(ret, i, (PyObject *)(self->outputBuffers[i])) < 0) {
+            for(j = 0; j < self->channels; j++) {
+                Py_DECREF(self->outputBuffers[j]);
+            }
+            Py_DECREF(ret);
+            return(NULL);
+        }
+    }
+
+    return(ret);
+}
+
+static PyObject *Synth_get_fragment_size(SynthObject *self,
+                                         PyTypeObject *defining_class,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs,
+                                         PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_get_fragment_size(self->s);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_get_fragment_size failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_has_underrun(SynthObject *self,
+                                    PyTypeObject *defining_class,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_has_underrun(self->s);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_has_underrun failed");
+        return(NULL);
+    }
+
+    return(PyBool_FromLong(ret));
+}
+
+
+static PyObject *Synth_frame(SynthObject *self,
+                             PyTypeObject *defining_class,
+                             PyObject *const *args,
+                             Py_ssize_t nargs,
+                             PyObject *kwnames) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(synth_frame(self->s) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_frame failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_fragments(SynthObject *self,
+                                     PyTypeObject *defining_class,
+                                     PyObject *const *args,
+                                     Py_ssize_t nargs,
+                                     PyObject *kwnames) {
+    long fragments;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    fragments = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_fragments(self->s, fragments) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_fragments failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef Synth_methods[] = {
+    /*
+    {
+        "buffer_from_wav",
+        (PyCMethod) Synth_buffer_from_wav,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Helper function to take a path to a wave file and return a synth buffer."},
+    */
+    {
+        "print_full_stats",
+        (PyCMethod) Synth_print_full_stats,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Output information about the provided Synth structure."},
+    {
+        "enabled",
+        (PyCMethod) Synth_set_enabled,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the enabled state of the synth."},
+    {
+        "samples_needed",
+        (PyCMethod) Synth_get_samples_needed,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the amount of samples necessary to top up the audio buffers."},
+    {
+        "rate",
+        (PyCMethod) Synth_get_rate,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the sample rate the audio device was initialized with."},
+    {
+        "channels",
+        (PyCMethod) Synth_get_channels,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the channel count the audio device was initialized with."},
+    {
+        "fragment_size",
+        (PyCMethod) Synth_get_fragment_size,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the fragment size the audio device was initialized with."},
+    {
+        "has_underrun",
+        (PyCMethod) Synth_has_underrun,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Returns whether the synth has underrun."},
+    {
+        "frame",
+        (PyCMethod) Synth_frame,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Indicate that it's a good time for the frame callback to be run."},
+    {
+        "fragments",
+        (PyCMethod) Synth_set_fragments,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the number of fragments that should be buffered internally."},
+    {NULL}
+};
+
+static PyType_Slot SynthSlots[] = {
+    {Py_tp_new, Synth_new},
+    {Py_tp_init, (initproc)Synth_init},
+    {Py_tp_dealloc, (destructor)Synth_dealloc},
+    {Py_tp_methods, Synth_methods},
+    {Py_tp_traverse, heap_type_traverse},
+    {0, NULL}
+};
+
+static PyType_Spec SynthSpec = {
+    .name = "crustygame.Synth",
+    .basicsize = sizeof(SynthObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = SynthSlots
+};
+
+static PyObject *Buffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    BufferObject *self;
+
+    self = (BufferObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    /* just have it be do-nothing until it's properly initialize */
+    self->s = NULL;
+    self->buffer = -1;
+
+    return((PyObject *)self);
+}
+
+static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
+    unsigned int type;
+    PyObject *data;
+    Py_buffer buf;
+    unsigned int size;
+
+    if(self->s != NULL) {
+        PyErr_SetString(PyExc_TypeError, "Buffer already initialized");
+        return(-1);
+    }
+
+    /* docs say this init isn't called if the class is instantiated as some
+     * other type.  Not sure the consequences there... */
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OIO",
+                         &(self->s),
+                         &type,
+                         &data)) {
+        return(-1);
+    }
+    Py_XINCREF(self->s);
+    Py_XINCREF(data);
+    if(!PyObject_TypeCheck(self->s, state->SynthType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Synth");
+        goto error;
+    }
+
+    /* for setting up output buffers */
+    if(PyLong_Check(data)) {
+        self->buffer = PyLong_AsLong(data);
+    } else {
+        if(PyObject_GetBuffer(data, &buf, PyBUF_CONTIG_RO) < 0) {
+            goto error;
+        }
+
+        /* length in samples */
+        switch(type) {
+            case SYNTH_TYPE_U8:
+                size = buf.len;
+                break;
+            case SYNTH_TYPE_S16:
+                size = buf.len / sizeof(int16_t);
+                break;
+            case SYNTH_TYPE_F32:
+                size = buf.len / sizeof(float);
+                break;
+            case SYNTH_TYPE_F64:
+                size = buf.len / sizeof(double);
+                break;
+            default:
+                PyErr_SetString(PyExc_ValueError, "Invalid buffer type.");
+                PyBuffer_Release(&buf);
+                goto error;
+        }
+
+        self->buffer = synth_add_buffer(self->s->s, type, buf.buf, size);
+        if(self->buffer < 0) {
+            PyErr_SetString(state->CrustyException, "synth_add_buffer returned an error");
+            PyBuffer_Release(&buf);
+            goto error;
+        }
+        PyBuffer_Release(&buf);
+    }
+
+    Py_XDECREF(data);
+    return(0);
+
+error:
+    Py_XDECREF(data);
+    Py_CLEAR(self->s);
+    return(-1);
+}
+
+static void Buffer_dealloc(BufferObject *self) {
+    if(self->buffer >= self->s->channels) {
+        synth_free_buffer(self->s->s, self->buffer);
+    }
+    Py_XDECREF(self->s);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Synth_get_size(BufferObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_buffer_get_size(self->s->s, self->buffer);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_buffer_get_size failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_silence_buffer(BufferObject *self,
+                                      PyTypeObject *defining_class,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs,
+                                      PyObject *kwnames) {
+    unsigned int start;
+    unsigned int length;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        return(NULL);
+    }
+    start = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    length = PyLong_AsLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_silence_buffer(self->s->s, self->buffer, start, length) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_silence_buffer failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef Buffer_methods[] = {
+    {
+        "size",
+        (PyCMethod) Synth_get_size,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the size in samples of a buffer."},
+    {
+        "silence",
+        (PyCMethod) Synth_silence_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Silence a buffer which contains audio."},
+    {NULL}
+};
+
+static PyType_Slot BufferSlots[] = {
+    {Py_tp_new, Buffer_new},
+    {Py_tp_init, (initproc)Buffer_init},
+    {Py_tp_dealloc, (destructor)Buffer_dealloc},
+    {Py_tp_methods, Buffer_methods},
+    {Py_tp_traverse, heap_type_traverse},
+    {0, NULL}
+};
+
+static PyType_Spec BufferSpec = {
+    .name = "crustygame.Buffer",
+    .basicsize = sizeof(BufferObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = BufferSlots
+};
+
+static PyObject *Player_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    PlayerObject *self;
+
+    self = (PlayerObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    /* just have it be do-nothing until it's properly initialize */
+    self->s = NULL;
+    self->inBuffer = NULL;
+    self->outBuffer = NULL;
+    self->volBuffer = NULL;
+    self->phaseBuffer = NULL;
+    self->speedBuffer = NULL;
+    self->player = -1;
+
+    return((PyObject *)self);
+}
+
+static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
+    BufferObject *buffer = NULL;
+
+    if(self->s != NULL) {
+        PyErr_SetString(PyExc_TypeError, "Player already initialized");
+        return(-1);
+    }
+
+    /* docs say this init isn't called if the class is instantiated as some
+     * other type.  Not sure the consequences there... */
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OO",
+                         &(self->s),
+                         &buffer)) {
+        return(-1);
+    }
+    Py_XINCREF(self->s);
+    Py_XINCREF(buffer);
+    if(!PyObject_TypeCheck(self->s, state->SynthType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Synth");
+        goto error;
+    }
+    if(!PyObject_TypeCheck(buffer, state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        goto error;
+    }
+    /* reflect all the buffers which are referenced internally */
+    self->inBuffer = buffer;
+    Py_XINCREF(self->inBuffer);
+    self->outBuffer = self->s->outputBuffers[0];
+    Py_XINCREF(self->outBuffer);
+    self->volBuffer = buffer;
+    Py_XINCREF(self->volBuffer);
+    self->phaseBuffer = buffer;
+    Py_XINCREF(self->phaseBuffer);
+    self->speedBuffer = buffer;
+    Py_XINCREF(self->speedBuffer);
+    Py_CLEAR(buffer);
+
+    self->player = synth_add_player(self->s->s, self->inBuffer->buffer);
+    if(self->player < 0) {
+        PyErr_SetString(state->CrustyException, "synth_add_player returned an error");
+        goto error;
+    }
+
+    return(0);
+
+error:
+    Py_CLEAR(self->speedBuffer);
+    Py_CLEAR(self->phaseBuffer);
+    Py_CLEAR(self->volBuffer);
+    Py_CLEAR(self->outBuffer);
+    Py_CLEAR(self->inBuffer);
+    Py_CLEAR(buffer);
+    Py_CLEAR(self->s);
+    return(-1);
+}
+
+static void Player_dealloc(PlayerObject *self) {
+    if(self->player >= 0) {
+        synth_free_player(self->s->s, self->player);
+    }
+    Py_XDECREF(self->speedBuffer);
+    Py_XDECREF(self->phaseBuffer);
+    Py_XDECREF(self->volBuffer);
+    Py_XDECREF(self->outBuffer);
+    Py_XDECREF(self->inBuffer);
+    Py_XDECREF(self->s);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Synth_set_player_input_buffer(PlayerObject *self,
+                                               PyTypeObject *defining_class,
+                                               PyObject *const *args,
+                                               Py_ssize_t nargs,
+                                               PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_player_input_buffer(self->s->s, self->player, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_input_buffer failed");
+        return(NULL);
+    }
+    Py_DECREF(self->inBuffer);
+    self->inBuffer = buffer;
+    Py_INCREF(self->inBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef Player_methods[] = {
+    {
+        "input",
+        (PyCMethod) Synth_set_player_input_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the input buffer for the player."},
+    {NULL}
+};
+
+static PyType_Slot PlayerSlots[] = {
+    {Py_tp_new, Player_new},
+    {Py_tp_init, (initproc)Player_init},
+    {Py_tp_dealloc, (destructor)Player_dealloc},
+    {Py_tp_methods, Player_methods},
+    {Py_tp_traverse, heap_type_traverse},
+    {0, NULL}
+};
+
+static PyType_Spec PlayerSpec = {
+    .name = "crustygame.Player",
+    .basicsize = sizeof(PlayerObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = PlayerSlots
+};
+
+
 /* objects successfully returned by this function automatically have a new
  * reference because objects returned by the various PyObject_Call* functions
  * return with a new reference. */
@@ -1449,6 +2247,9 @@ static int crustygame_exec(PyObject* m) {
     state->TilesetType = NULL;
     state->TilemapType = NULL;
     state->LayerType = NULL;
+    state->SynthType = NULL;
+    state->BufferType = NULL;
+    state->PlayerType = NULL;
     state->return_ptr = NULL;
     state->LP_SDL_Renderer = NULL;
     state->LP_SDL_Texture = NULL;
@@ -1462,38 +2263,6 @@ static int crustygame_exec(PyObject* m) {
     PyObject *ctypes_this_module = NULL;
     PyObject *argtypes_tuple = NULL;
     PyObject *SDL_m = NULL;
-
-    /* import sdl2 to get the literal pointer types needed for type checks. */
-    /* This has to happen early otherwise weirdness happens that I don't
-     * understand and stuff crashes. */
-    SDL_m = PyImport_ImportModule("sdl2");
-    if(SDL_m == NULL) {
-        goto error;
-    }
-
-    /* Make an exception used for problems returned by the library. */
-    state->CrustyException = PyErr_NewException("crustygame.CrustyException", NULL, NULL);
-    if (PyModule_AddObject(m, "CrustyException", state->CrustyException) < 0) {
-        goto error;
-    }
-
-    /* heap allocate the new types and store them in the module state */
-    state->LayerListType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
-    if(PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
-        goto error;
-    }
-    state->TilesetType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &TilesetSpec, NULL);
-    if(PyModule_AddObject(m, "Tileset", (PyObject *)state->TilesetType) < 0) {
-        goto error;
-    }
-    state->TilemapType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &TilemapSpec, NULL);
-    if(PyModule_AddObject(m, "Tilemap", (PyObject *)state->TilemapType) < 0) {
-        goto error;
-    }
-    state->LayerType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerSpec, NULL);
-    if(PyModule_AddObject(m, "Layer", (PyObject *)state->LayerType) < 0) {
-        goto error;
-    }
 
     /* import ctypes for its POINTER() method which produces, and importantly
      * internally caches the literal pointer type of a ctypes defined structure
@@ -1561,6 +2330,12 @@ static int crustygame_exec(PyObject* m) {
         goto error;
     }
 
+    /* import sdl2 to get the literal pointer types needed for type checks. */
+    SDL_m = PyImport_ImportModule("sdl2");
+    if(SDL_m == NULL) {
+        goto error;
+    }
+
     state->LP_SDL_Renderer = get_literal_pointer_type(SDL_m, ctypes_POINTER, "SDL_Renderer");
     if(state->LP_SDL_Renderer == NULL) {
         goto error;
@@ -1571,6 +2346,54 @@ static int crustygame_exec(PyObject* m) {
     }
     state->LP_SDL_Surface = get_literal_pointer_type(SDL_m, ctypes_POINTER, "SDL_Surface");
     if(state->LP_SDL_Surface == NULL) {
+        goto error;
+    }
+
+    /* Make an exception used for problems returned by the library. */
+    state->CrustyException = PyErr_NewException("crustygame.CrustyException", NULL, NULL);
+    if (PyModule_AddObject(m, "CrustyException", state->CrustyException) < 0) {
+        goto error;
+    }
+
+    /* heap allocate the new types and store them in the module state */
+    /* Can't find any example of anybody using PyTypeFromModuleAndSpec and the
+     * documentation says it returns a New reference but by the time the free
+     * function is called, the types have a reference count of 0, so it would
+     * seem that it doesn't return a reference, at least not in the wya i think
+     * that means. */
+    state->LayerListType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerListSpec, NULL);
+    Py_XINCREF(state->LayerListType);
+    if(state->LayerListType == NULL || PyModule_AddObject(m, "LayerList", (PyObject *)state->LayerListType) < 0) {
+        goto error;
+    }
+    state->TilesetType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &TilesetSpec, NULL);
+    Py_XINCREF(state->TilesetType);
+    if(state->TilesetType == NULL || PyModule_AddObject(m, "Tileset", (PyObject *)state->TilesetType) < 0) {
+        goto error;
+    }
+    state->TilemapType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &TilemapSpec, NULL);
+    Py_XINCREF(state->TilemapType);
+    if(state->TilemapType == NULL || PyModule_AddObject(m, "Tilemap", (PyObject *)state->TilemapType) < 0) {
+        goto error;
+    }
+    state->LayerType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &LayerSpec, NULL);
+    Py_XINCREF(state->LayerType);
+    if(state->LayerType == NULL || PyModule_AddObject(m, "Layer", (PyObject *)state->LayerType) < 0) {
+        goto error;
+    }
+    state->SynthType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &SynthSpec, NULL);
+    Py_XINCREF(state->SynthType);
+    if(state->SynthType == NULL || PyModule_AddObject(m, "Synth", (PyObject *)state->SynthType) < 0) {
+        goto error;
+    }
+    state->BufferType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &BufferSpec, NULL);
+    Py_XINCREF(state->BufferType);
+    if(state->BufferType == NULL || PyModule_AddObject(m, "Buffer", (PyObject *)state->BufferType) < 0) {
+        goto error;
+    }
+    state->PlayerType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &PlayerSpec, NULL);
+    Py_XINCREF(state->PlayerType);
+    if(state->PlayerType == NULL || PyModule_AddObject(m, "Player", (PyObject *)state->PlayerType) < 0) {
         goto error;
     }
 
@@ -1663,6 +2486,9 @@ error:
     Py_XDECREF(ctypes_CDLL);
     Py_XDECREF(ctypes_POINTER);
     Py_XDECREF(ctypes_m);
+    Py_CLEAR(state->PlayerType);
+    Py_CLEAR(state->BufferType);
+    Py_CLEAR(state->SynthType);
     Py_CLEAR(state->LayerType);
     Py_CLEAR(state->TilemapType);
     Py_CLEAR(state->TilesetType);
@@ -1679,6 +2505,9 @@ static void crustygame_free(void *p) {
     Py_XDECREF(state->LP_SDL_Texture);
     Py_XDECREF(state->LP_SDL_Renderer);
     Py_XDECREF(state->return_ptr);
+    Py_XDECREF(state->PlayerType);
+    Py_XDECREF(state->BufferType);
+    Py_XDECREF(state->SynthType);
     Py_XDECREF(state->LayerType);
     Py_XDECREF(state->TilemapType);
     Py_XDECREF(state->TilesetType);
