@@ -15,6 +15,7 @@ typedef struct {
     PyTypeObject *SynthType;
     PyTypeObject *BufferType;
     PyTypeObject *PlayerType;
+    PyTypeObject *FilterType;
 
     /* ctypes callable which will point to the function a bit further down */
     PyObject *return_ptr;
@@ -86,6 +87,17 @@ typedef struct {
     BufferObject *speedBuffer;
     int player;
 } PlayerObject;
+
+typedef struct {
+    PyObject_HEAD
+    SynthObject *s;
+    BufferObject *inBuffer;
+    BufferObject *filterBuffer;
+    BufferObject *sliceBuffer;
+    BufferObject *outBuffer;
+    BufferObject *volBuffer;
+    int filter;
+} FilterObject;
 
 /* awful hack function used to get pointers back from a ctypes object */
 uintptr_t awful_return_ptr_hack_funct(void *ptr) {
@@ -2193,12 +2205,597 @@ static PyObject *Synth_set_player_input_buffer(PlayerObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *Synth_set_player_input_buffer_pos(PlayerObject *self,
+                                                   PyTypeObject *defining_class,
+                                                   PyObject *const *args,
+                                                   Py_ssize_t nargs,
+                                                   PyObject *kwnames) {
+    float pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = (float)PyFloat_AsDouble(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_input_buffer_pos(self->s->s, self->player, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_input_buffer_pos failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_output_buffer(PlayerObject *self,
+                                                PyTypeObject *defining_class,
+                                                PyObject *const *args,
+                                                Py_ssize_t nargs,
+                                                PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_player_output_buffer(self->s->s, self->player, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_output_buffer failed");
+        return(NULL);
+    }
+    Py_DECREF(self->outBuffer);
+    self->outBuffer = buffer;
+    Py_INCREF(self->outBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_output_buffer_pos(PlayerObject *self,
+                                                    PyTypeObject *defining_class,
+                                                    PyObject *const *args,
+                                                    Py_ssize_t nargs,
+                                                    PyObject *kwnames) {
+    int pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_output_buffer_pos(self->s->s, self->player, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_output_buffer_pos failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_output_mode(PlayerObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_output_mode(self->s->s, self->player, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_output_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_volume_mode(PlayerObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_volume_mode(self->s->s, self->player, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_volume_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_volume(PlayerObject *self,
+                                         PyTypeObject *defining_class,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs,
+                                         PyObject *kwnames) {
+    float volume;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    volume = (float)PyFloat_AsDouble(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_volume(self->s->s, self->player, volume) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_volumefailed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_volume_source(PlayerObject *self,
+                                                 PyTypeObject *defining_class,
+                                                 PyObject *const *args,
+                                                 Py_ssize_t nargs,
+                                                 PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_player_volume_source(self->s->s, self->player, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_volume_source failed");
+        return(NULL);
+    }
+    Py_DECREF(self->volBuffer);
+    self->volBuffer = buffer;
+    Py_INCREF(self->volBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_mode(PlayerObject *self,
+                                       PyTypeObject *defining_class,
+                                       PyObject *const *args,
+                                       Py_ssize_t nargs,
+                                       PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_mode(self->s->s, self->player, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_loop_start(PlayerObject *self,
+                                             PyTypeObject *defining_class,
+                                             PyObject *const *args,
+                                             Py_ssize_t nargs,
+                                             PyObject *kwnames) {
+    unsigned int pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_loop_start(self->s->s, self->player, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_loop_start failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_loop_end(PlayerObject *self,
+                                           PyTypeObject *defining_class,
+                                           PyObject *const *args,
+                                           Py_ssize_t nargs,
+                                           PyObject *kwnames) {
+    unsigned int pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_loop_end(self->s->s, self->player, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_loop_end failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_phase_source(PlayerObject *self,
+                                               PyTypeObject *defining_class,
+                                               PyObject *const *args,
+                                               Py_ssize_t nargs,
+                                               PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_player_phase_source(self->s->s, self->player, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_phase_source failed");
+        return(NULL);
+    }
+    Py_DECREF(self->phaseBuffer);
+    self->phaseBuffer = buffer;
+    Py_INCREF(self->phaseBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_speed_mode(PlayerObject *self,
+                                             PyTypeObject *defining_class,
+                                             PyObject *const *args,
+                                             Py_ssize_t nargs,
+                                             PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_speed_mode(self->s->s, self->player, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_speed_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_speed(PlayerObject *self,
+                                        PyTypeObject *defining_class,
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs,
+                                        PyObject *kwnames) {
+    float speed;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    speed = (float)PyFloat_AsDouble(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_player_speed(self->s->s, self->player, speed) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_speed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_player_speed_source(PlayerObject *self,
+                                               PyTypeObject *defining_class,
+                                               PyObject *const *args,
+                                               Py_ssize_t nargs,
+                                               PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_player_speed_source(self->s->s, self->player, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_speed_source failed");
+        return(NULL);
+    }
+    Py_DECREF(self->speedBuffer);
+    self->speedBuffer = buffer;
+    Py_INCREF(self->speedBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_run_player(PlayerObject *self,
+                                  PyTypeObject *defining_class,
+                                  PyObject *const *args,
+                                  Py_ssize_t nargs,
+                                  PyObject *kwnames) {
+    unsigned int req;
+    int ret;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    req = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    ret = synth_run_player(self->s->s, self->player, req);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_run_player failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_player_stopped_reason(PlayerObject *self,
+                                             PyTypeObject *defining_class,
+                                             PyObject *const *args,
+                                             Py_ssize_t nargs,
+                                             PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_player_stopped_reason(self->s->s, self->player);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_player_stopped_reason failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
 static PyMethodDef Player_methods[] = {
     {
         "input",
         (PyCMethod) Synth_set_player_input_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the input buffer for the player."},
+    {
+        "input_pos",
+        (PyCMethod) Synth_set_player_input_buffer_pos,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the position in samples that the input buffer should start playing from."},
+    {
+        "output",
+        (PyCMethod) Synth_set_player_output_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set a buffer to output to."},
+    {
+        "output_poo",
+        (PyCMethod) Synth_set_player_output_buffer_pos,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the output buffer position."},
+    {
+        "output_mode",
+        (PyCMethod) Synth_set_player_output_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the output mode or operation for the player."},
+    {
+        "volume_mode",
+        (PyCMethod) Synth_set_player_volume_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the volume mode."},
+    {
+        "volume",
+        (PyCMethod) Synth_set_player_volume,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the constant player volume."},
+    {
+        "volume_source",
+        (PyCMethod) Synth_set_player_volume_source,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the player volume source."},
+    {
+        "mode",
+        (PyCMethod) Synth_set_player_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the playback mode for the player."},
+    {
+        "loop_start",
+        (PyCMethod) Synth_set_player_loop_start,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set loop start or phase source start position."},
+    {
+        "loop_end",
+        (PyCMethod) Synth_set_player_loop_end,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set loop end or phase source end position."},
+    {
+        "phase_source",
+        (PyCMethod) Synth_set_player_phase_source,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the buffer to read phase source samples from."},
+    {
+        "speed_mode",
+        (PyCMethod) Synth_set_player_speed_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the player's speed mode."},
+    {
+        "speed",
+        (PyCMethod) Synth_set_player_speed,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the constant player speed."},
+    {
+        "speed_source",
+        (PyCMethod) Synth_set_player_speed_source,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the source for playback speed."},
+    {
+        "run",
+        (PyCMethod) Synth_run_player,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Actually run the player."},
+    {
+        "stopped_reason",
+        (PyCMethod) Synth_player_stopped_reason,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Determine criteria for why the player stopped."},
     {NULL}
 };
 
@@ -2219,6 +2816,733 @@ static PyType_Spec PlayerSpec = {
     .slots = PlayerSlots
 };
 
+static PyObject *Filter_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    FilterObject *self;
+
+    self = (FilterObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    /* just have it be do-nothing until it's properly initialize */
+    self->s = NULL;
+    self->inBuffer = NULL;
+    self->filterBuffer = NULL;
+    self->sliceBuffer = NULL;
+    self->outBuffer = NULL;
+    self->volBuffer = NULL;
+    self->filter = -1;
+
+    return((PyObject *)self);
+}
+
+static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
+    BufferObject *buffer = NULL;
+    unsigned int size;
+
+    if(self->s != NULL) {
+        PyErr_SetString(PyExc_TypeError, "Filter already initialized");
+        return(-1);
+    }
+
+    /* docs say this init isn't called if the class is instantiated as some
+     * other type.  Not sure the consequences there... */
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OOI",
+                         &(self->s),
+                         &buffer,
+                         &size)) {
+        return(-1);
+    }
+    Py_XINCREF(self->s);
+    Py_XINCREF(buffer);
+    if(!PyObject_TypeCheck(self->s, state->SynthType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Synth");
+        goto error;
+    }
+    if(!PyObject_TypeCheck(buffer, state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        goto error;
+    }
+    /* reflect all the buffers which are referenced internally */
+    self->inBuffer = buffer;
+    Py_XINCREF(self->inBuffer);
+    self->filterBuffer = buffer;
+    Py_XINCREF(self->filterBuffer);
+    self->sliceBuffer = buffer;
+    Py_XINCREF(self->sliceBuffer);
+    self->outBuffer = self->s->outputBuffers[0];
+    Py_XINCREF(self->outBuffer);
+    self->volBuffer = buffer;
+    Py_XINCREF(self->volBuffer);
+    Py_CLEAR(buffer);
+
+    self->filter = synth_add_filter(self->s->s, self->inBuffer->buffer, size);
+    if(self->filter < 0) {
+        PyErr_SetString(state->CrustyException, "synth_add_filter returned an error");
+        goto error;
+    }
+
+    return(0);
+
+error:
+    Py_CLEAR(self->volBuffer);
+    Py_CLEAR(self->outBuffer);
+    Py_CLEAR(self->sliceBuffer);
+    Py_CLEAR(self->filterBuffer);
+    Py_CLEAR(self->inBuffer);
+    Py_CLEAR(buffer);
+    Py_CLEAR(self->s);
+    return(-1);
+}
+
+static void Filter_dealloc(FilterObject *self) {
+    if(self->filter >= 0) {
+        synth_free_filter(self->s->s, self->filter);
+    }
+    Py_XDECREF(self->volBuffer);
+    Py_XDECREF(self->outBuffer);
+    Py_XDECREF(self->sliceBuffer);
+    Py_XDECREF(self->filterBuffer);
+    Py_XDECREF(self->inBuffer);
+    Py_XDECREF(self->s);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Synth_reset_filter(FilterObject *self,
+                                    PyTypeObject *defining_class,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwnames) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(synth_reset_filter(self->s->s, self->filter)) {
+        PyErr_SetString(state->CrustyException, "synth_player_stopped_reason failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_input_buffer(FilterObject *self,
+                                               PyTypeObject *defining_class,
+                                               PyObject *const *args,
+                                               Py_ssize_t nargs,
+                                               PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_filter_input_buffer(self->s->s, self->filter, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_input_buffer failed");
+        return(NULL);
+    }
+    Py_DECREF(self->inBuffer);
+    self->inBuffer = buffer;
+    Py_INCREF(self->inBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_input_buffer_pos(FilterObject *self,
+                                                   PyTypeObject *defining_class,
+                                                   PyObject *const *args,
+                                                   Py_ssize_t nargs,
+                                                   PyObject *kwnames) {
+    int pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_input_buffer_pos(self->s->s, self->filter, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_input_buffer_pos failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_buffer(FilterObject *self,
+                                         PyTypeObject *defining_class,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs,
+                                         PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_filter_buffer(self->s->s, self->filter, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_buffer failed");
+        return(NULL);
+    }
+    Py_DECREF(self->filterBuffer);
+    self->filterBuffer = buffer;
+    Py_INCREF(self->filterBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_buffer_start(FilterObject *self,
+                                               PyTypeObject *defining_class,
+                                               PyObject *const *args,
+                                               Py_ssize_t nargs,
+                                               PyObject *kwnames) {
+    int pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_buffer_start(self->s->s, self->filter, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_buffer_start failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_slices(FilterObject *self,
+                                         PyTypeObject *defining_class,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs,
+                                         PyObject *kwnames) {
+    unsigned int slices;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    slices = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_slices(self->s->s, self->filter, slices) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_slices failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_mode(FilterObject *self,
+                                       PyTypeObject *defining_class,
+                                       PyObject *const *args,
+                                       Py_ssize_t nargs,
+                                       PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_mode(self->s->s, self->filter, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_slice(FilterObject *self,
+                                        PyTypeObject *defining_class,
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs,
+                                        PyObject *kwnames) {
+    int slice;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    slice = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_slice(self->s->s, self->filter, slice) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_slice failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_slice_source(FilterObject *self,
+                                               PyTypeObject *defining_class,
+                                               PyObject *const *args,
+                                               Py_ssize_t nargs,
+                                               PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_filter_slice_source(self->s->s, self->filter, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_slice_source failed");
+        return(NULL);
+    }
+    Py_DECREF(self->sliceBuffer);
+    self->sliceBuffer = buffer;
+    Py_INCREF(self->sliceBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_output_buffer(FilterObject *self,
+                                                PyTypeObject *defining_class,
+                                                PyObject *const *args,
+                                                Py_ssize_t nargs,
+                                                PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_filter_output_buffer(self->s->s, self->filter, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_output_buffer failed");
+        return(NULL);
+    }
+    Py_DECREF(self->outBuffer);
+    self->outBuffer = buffer;
+    Py_INCREF(self->outBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_output_buffer_pos(FilterObject *self,
+                                                    PyTypeObject *defining_class,
+                                                    PyObject *const *args,
+                                                    Py_ssize_t nargs,
+                                                    PyObject *kwnames) {
+    int pos;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    pos = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_output_buffer_pos(self->s->s, self->filter, pos) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_output_buffer_pos failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_output_mode(FilterObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_output_mode(self->s->s, self->filter, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_output_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_volume_mode(FilterObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    int mode;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    mode = PyLong_AsLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_volume_mode(self->s->s, self->filter, mode) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_volume_mode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_volume(FilterObject *self,
+                                         PyTypeObject *defining_class,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs,
+                                         PyObject *kwnames) {
+    float volume;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    volume = (float)PyFloat_AsDouble(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(synth_set_filter_volume(self->s->s, self->filter, volume) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_volume failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_set_filter_volume_source(FilterObject *self,
+                                                PyTypeObject *defining_class,
+                                                PyObject *const *args,
+                                                Py_ssize_t nargs,
+                                                PyObject *kwnames) {
+    BufferObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        return(NULL);
+    }
+    buffer = (BufferObject *)(args[0]);
+
+    if(synth_set_filter_volume_source(self->s->s, self->filter, buffer->buffer) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_filter_volume_source failed");
+        return(NULL);
+    }
+    Py_DECREF(self->volBuffer);
+    self->volBuffer = buffer;
+    Py_INCREF(self->volBuffer);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_run_filter(FilterObject *self,
+                                  PyTypeObject *defining_class,
+                                  PyObject *const *args,
+                                  Py_ssize_t nargs,
+                                  PyObject *kwnames) {
+    unsigned int req;
+    int ret;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    req = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    ret = synth_run_filter(self->s->s, self->filter, req);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_run_filter failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_filter_stopped_reason(FilterObject *self,
+                                             PyTypeObject *defining_class,
+                                             PyObject *const *args,
+                                             Py_ssize_t nargs,
+                                             PyObject *kwnames) {
+    unsigned int ret;
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = synth_filter_stopped_reason(self->s->s, self->filter);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "synth_filter_stopped_reason failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyMethodDef Filter_methods[] = {
+    {
+        "reset",
+        (PyCMethod) Synth_reset_filter,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Reset the filter accumulation state."},
+    {
+        "input",
+        (PyCMethod) Synth_set_filter_input_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the buffer to apply a filter to."},
+    {
+        "input_pos",
+        (PyCMethod) Synth_set_filter_input_buffer_pos,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the starting position on processing the input buffer"},
+    {
+        "filter",
+        (PyCMethod) Synth_set_filter_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the buffer containing the filter kernel(s) this filter should use."},
+    {
+        "filter_start",
+        (PyCMethod) Synth_set_filter_buffer_start,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the position in the buffer where kernel(s) should start to be referenced from."},
+    {
+        "slices",
+        (PyCMethod) Synth_set_filter_slices,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the number of consecutive filter kernels starting from the start position which are in the filter buffer."},
+    {
+        "mode",
+        (PyCMethod) Synth_set_filter_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set whether the filter slice is a constant value or whether a buffer should be read to determine which slice should be used per input sample."},
+    {
+        "slice",
+        (PyCMethod) Synth_set_filter_slice,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the filter slice value to use in constant more or the first slice in slice buffer source mode."},
+    {
+        "slice_source",
+        (PyCMethod) Synth_set_filter_slice_source,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Provide the source buffer for slices."},
+    {
+        "output",
+        (PyCMethod) Synth_set_filter_output_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the buffer to be output to."},
+    {
+        "output_pos",
+        (PyCMethod) Synth_set_filter_output_buffer_pos,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the buffer output position."},
+    {
+        "output_mode",
+        (PyCMethod) Synth_set_filter_output_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the filter's output mode."},
+    {
+        "volume_mode",
+        (PyCMethod) Synth_set_filter_volume_mode,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the filter's volume mode."},
+    {
+        "volume",
+        (PyCMethod) Synth_set_filter_volume,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the filter's volume."},
+    {
+        "volume_source",
+        (PyCMethod) Synth_set_filter_volume_source,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set the filter's volume source."},
+    {
+        "run",
+        (PyCMethod) Synth_run_filter,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Run the filter for a certain number of samples."},
+    {
+        "stopped_reason",
+        (PyCMethod) Synth_filter_stopped_reason,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Determine criteria for why the filter stopped."},
+    {NULL}
+};
+
+static PyType_Slot FilterSlots[] = {
+    {Py_tp_new, Filter_new},
+    {Py_tp_init, (initproc)Filter_init},
+    {Py_tp_dealloc, (destructor)Filter_dealloc},
+    {Py_tp_methods, Filter_methods},
+    {Py_tp_traverse, heap_type_traverse},
+    {0, NULL}
+};
+
+static PyType_Spec FilterSpec = {
+    .name = "crustygame.Filter",
+    .basicsize = sizeof(FilterObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = FilterSlots
+};
 
 /* objects successfully returned by this function automatically have a new
  * reference because objects returned by the various PyObject_Call* functions
@@ -2396,6 +3720,11 @@ static int crustygame_exec(PyObject* m) {
     if(state->PlayerType == NULL || PyModule_AddObject(m, "Player", (PyObject *)state->PlayerType) < 0) {
         goto error;
     }
+    state->FilterType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &FilterSpec, NULL);
+    Py_XINCREF(state->FilterType);
+    if(state->FilterType == NULL || PyModule_AddObject(m, "Filter", (PyObject *)state->FilterType) < 0) {
+        goto error;
+    }
 
     if(PyModule_AddIntMacro(m, TILEMAP_HFLIP_MASK) < 0) {
         goto error;
@@ -2457,6 +3786,69 @@ static int crustygame_exec(PyObject* m) {
     if(PyModule_AddIntMacro(m, TILEMAP_AMASK) < 0) {
         goto error;
     }
+    if(PyModule_AddIntMacro(m, SYNTH_TYPE_INVALID) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_TYPE_U8) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_TYPE_S16) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_TYPE_F32) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_TYPE_F64) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_ENABLED) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_RUNNING) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_OUTPUT_REPLACE) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_OUTPUT_ADD) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_AUTO_CONSTANT) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_AUTO_SOURCE) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_MODE_ONCE) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_MODE_LOOP) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_MODE_PHASE_SOURCE) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED_OUTBUFFER) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED_INBUFFER) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED_VOLBUFFER) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED_SPEEDBUFFER) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED_PHASEBUFFER) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_STOPPED_SLICEBUFFER) < 0) {
+        goto error;
+    }
 
     Py_DECREF(SDL_m);
     Py_DECREF(argtypes_tuple);
@@ -2486,6 +3878,7 @@ error:
     Py_XDECREF(ctypes_CDLL);
     Py_XDECREF(ctypes_POINTER);
     Py_XDECREF(ctypes_m);
+    Py_CLEAR(state->FilterType);
     Py_CLEAR(state->PlayerType);
     Py_CLEAR(state->BufferType);
     Py_CLEAR(state->SynthType);
@@ -2505,6 +3898,7 @@ static void crustygame_free(void *p) {
     Py_XDECREF(state->LP_SDL_Texture);
     Py_XDECREF(state->LP_SDL_Renderer);
     Py_XDECREF(state->return_ptr);
+    Py_XDECREF(state->FilterType);
     Py_XDECREF(state->PlayerType);
     Py_XDECREF(state->BufferType);
     Py_XDECREF(state->SynthType);
