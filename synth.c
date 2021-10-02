@@ -1948,6 +1948,10 @@ int synth_add_filter(Synth *s,
         return(-1);
     }
 
+    if(size == 0) {
+        size = get_buffer_size(s, filterBuffer);
+    }
+
     if(get_buffer_size(s, filterBuffer) < (int)size) {
         LOG_PRINTF(s, "Input buffer isn't large enough for filter size.");
         return(-1);

@@ -75,6 +75,7 @@ typedef struct BufferObject_s {
     PyObject_HEAD
     SynthObject *s;
     int buffer;
+    unsigned int rate;
 } BufferObject;
 
 typedef struct {
@@ -139,11 +140,23 @@ static PyObject *get_symbol_from_string(PyObject *m, const char *str) {
 /* used for unwrapping the real log_cb and log_priv and calling the
  * user-supplied callable, on behalf of the generic C-side function which calls
  * this method */
-static void cb_adapter(CrustyCallback *cb, const char *str) {
+static void log_cb_adapter(CrustyCallback *cb, const char *str) {
     PyObject *arglist;
     PyObject *result;
 
-    arglist = Py_BuildValue("sO", str, cb->priv);
+    arglist = Py_BuildValue("Os", cb->priv, str);
+    result = PyObject_CallObject(cb->cb, arglist);
+    Py_DECREF(arglist);
+    /* don't check the result because this is called by C code anyway and it
+     * is void */
+    Py_XDECREF(result);
+}
+
+static void synth_cb_adapter(CrustyCallback *cb, Synth *s) {
+    PyObject *arglist;
+    PyObject *result;
+
+    arglist = Py_BuildValue("(O)", cb->priv);
     result = PyObject_CallObject(cb->cb, arglist);
     Py_DECREF(arglist);
     /* don't check the result because this is called by C code anyway and it
@@ -231,7 +244,7 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
 
     self->ll = layerlist_new((SDL_Renderer *)(self->renderer),
                              format,
-                             (log_cb_return_t)cb_adapter,
+                             (log_cb_return_t)log_cb_adapter,
                              &(self->log));
     if(self->ll == NULL) {
         PyErr_SetString(state->CrustyException, "layerlist_new returned an error");
@@ -1526,9 +1539,9 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    self->s = synth_new((synth_frame_cb_t)cb_adapter,
+    self->s = synth_new((synth_frame_cb_t)synth_cb_adapter,
                         &(self->log),
-                        (log_cb_return_t)cb_adapter,
+                        (log_cb_return_t)log_cb_adapter,
                         &(self->synth_frame),
                         rate, channels);
     if(self->s == NULL) {
@@ -1552,7 +1565,7 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         self->outputBuffers[i] = NULL;
     }
     for(i = 0; i < self->channels; i++) {
-        arglist = Py_BuildValue("OiI", self, SYNTH_TYPE_F32, i);
+        arglist = Py_BuildValue("OiII", self, SYNTH_TYPE_F32, i, 0);
         if(arglist == NULL) {
             goto error;
         }
@@ -1823,14 +1836,42 @@ static PyObject *Synth_set_fragments(SynthObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *Synth_buffer(SynthObject *self,
+                              PyTypeObject *defining_class,
+                              PyObject *const *args,
+                              Py_ssize_t nargs,
+                              PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *buffer;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs == 1) {
+        arglist = PyTuple_Pack(2, self, args[0]);
+    } else if(nargs == 3) {
+        arglist = PyTuple_Pack(4, self, args[0], args[1], args[2]);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "this function needs 1 or 3 arguments");
+        return(NULL);
+    }
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    buffer = PyObject_CallObject((PyObject *)(state->BufferType), arglist);
+    Py_DECREF(arglist);
+    if(buffer == NULL) {
+        return(NULL);
+    }
+
+    return(buffer);
+}
+
 static PyMethodDef Synth_methods[] = {
-    /*
-    {
-        "buffer_from_wav",
-        (PyCMethod) Synth_buffer_from_wav,
-        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Helper function to take a path to a wave file and return a synth buffer."},
-    */
     {
         "print_full_stats",
         (PyCMethod) Synth_print_full_stats,
@@ -1842,7 +1883,7 @@ static PyMethodDef Synth_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the enabled state of the synth."},
     {
-        "samples_needed",
+        "needed",
         (PyCMethod) Synth_get_samples_needed,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Get the amount of samples necessary to top up the audio buffers."},
@@ -1855,14 +1896,14 @@ static PyMethodDef Synth_methods[] = {
         "channels",
         (PyCMethod) Synth_get_channels,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the channel count the audio device was initialized with."},
+        "Get the output channel objects for this Synth as a tuple."},
     {
         "fragment_size",
         (PyCMethod) Synth_get_fragment_size,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Get the fragment size the audio device was initialized with."},
     {
-        "has_underrun",
+        "underrun",
         (PyCMethod) Synth_has_underrun,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Returns whether the synth has underrun."},
@@ -1876,6 +1917,11 @@ static PyMethodDef Synth_methods[] = {
         (PyCMethod) Synth_set_fragments,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the number of fragments that should be buffered internally."},
+    {
+        "buffer",
+        (PyCMethod) Synth_buffer,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience function to create a buffer from this Synth."},
     {NULL}
 };
 
@@ -1906,15 +1952,19 @@ static PyObject *Buffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) 
     /* just have it be do-nothing until it's properly initialize */
     self->s = NULL;
     self->buffer = -1;
+    self->rate = 0;
 
     return((PyObject *)self);
 }
 
 static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
     unsigned int type;
-    PyObject *data;
-    Py_buffer buf;
-    unsigned int size;
+    const char *filename;
+    PyObject *data = NULL;
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    unsigned int size = 0;
+    PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
         PyErr_SetString(PyExc_TypeError, "Buffer already initialized");
@@ -1925,12 +1975,32 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OIO",
+    if(!PyArg_ParseTuple(args, "OIOI",
                          &(self->s),
                          &type,
-                         &data)) {
-        return(-1);
+                         &data,
+                         &size)) {
+        PyErr_Fetch(&etype, &evalue, &etraceback);
+        Py_XDECREF(etype);
+        Py_XDECREF(evalue);
+        Py_XDECREF(etraceback);
+
+        if(!PyArg_ParseTuple(args, "Os",
+                            &(self->s),
+                            &filename)) {
+            goto error;
+        } else {
+            Py_XINCREF(self->s);
+            self->buffer = synth_buffer_from_wav(self->s->s, filename, &(self->rate));
+            if(self->buffer < 0) {
+                PyErr_SetString(state->CrustyException, "synth_buffer_from_wav returned an error");
+                goto error;
+            }
+
+            return(0);
+        }
     }
+
     Py_XINCREF(self->s);
     Py_XINCREF(data);
     if(!PyObject_TypeCheck(self->s, state->SynthType)) {
@@ -1938,54 +2008,97 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    /* for setting up output buffers */
+    self->rate = synth_get_rate(self->s->s);
     if(PyLong_Check(data)) {
+        /* for setting up output buffers */
         self->buffer = PyLong_AsLong(data);
-    } else {
-        if(PyObject_GetBuffer(data, &buf, PyBUF_CONTIG_RO) < 0) {
-            goto error;
-        }
-
-        /* length in samples */
-        switch(type) {
-            case SYNTH_TYPE_U8:
-                size = buf.len;
-                break;
-            case SYNTH_TYPE_S16:
-                size = buf.len / sizeof(int16_t);
-                break;
-            case SYNTH_TYPE_F32:
-                size = buf.len / sizeof(float);
-                break;
-            case SYNTH_TYPE_F64:
-                size = buf.len / sizeof(double);
-                break;
-            default:
-                PyErr_SetString(PyExc_ValueError, "Invalid buffer type.");
-                PyBuffer_Release(&buf);
-                goto error;
-        }
-
-        self->buffer = synth_add_buffer(self->s->s, type, buf.buf, size);
+    } else if(data == Py_None) {
+        /* silence buffers */
+        self->buffer = synth_add_buffer(self->s->s, type, NULL, size);
         if(self->buffer < 0) {
             PyErr_SetString(state->CrustyException, "synth_add_buffer returned an error");
-            PyBuffer_Release(&buf);
             goto error;
         }
-        PyBuffer_Release(&buf);
+    } else {
+        buf = &bufmem;
+        if(PyObject_GetBuffer(data, buf, PyBUF_CONTIG_RO) < 0) {
+            goto error;
+        }
+
+        if(size == 0) {
+            /* length in samples */
+            switch(type) {
+                case SYNTH_TYPE_U8:
+                    size = buf->len;
+                    break;
+                case SYNTH_TYPE_S16:
+                    size = buf->len / sizeof(int16_t);
+                    break;
+                case SYNTH_TYPE_F32:
+                    size = buf->len / sizeof(float);
+                    break;
+                case SYNTH_TYPE_F64:
+                    size = buf->len / sizeof(double);
+                    break;
+                default:
+                    PyErr_SetString(PyExc_ValueError, "Invalid buffer type.");
+                    goto error;
+            }
+        } else {
+            switch(type) {
+                case SYNTH_TYPE_U8:
+                    if(size > buf->len) {
+                        PyErr_SetString(PyExc_ValueError, "size larger than buffer");
+                        goto error;
+                    }
+                    break;
+                case SYNTH_TYPE_S16:
+                    if(size > buf->len / sizeof(int16_t)) {
+                        PyErr_SetString(PyExc_ValueError, "size larger than buffer");
+                        goto error;
+                    }
+                    break;
+                case SYNTH_TYPE_F32:
+                    if(size > buf->len / sizeof(float)) {
+                        PyErr_SetString(PyExc_ValueError, "size larger than buffer");
+                        goto error;
+                    }
+                    break;
+                case SYNTH_TYPE_F64:
+                    if(size > buf->len / sizeof(double)) {
+                        PyErr_SetString(PyExc_ValueError, "size larger than buffer");
+                        goto error;
+                    }
+                    break;
+                default:
+                    PyErr_SetString(PyExc_ValueError, "Invalid buffer type.");
+                    goto error;
+            }
+        }
+
+        self->buffer = synth_add_buffer(self->s->s, type, buf->buf, size);
+        if(self->buffer < 0) {
+            PyErr_SetString(state->CrustyException, "synth_add_buffer returned an error");
+            goto error;
+        }
+
+        PyBuffer_Release(buf);
     }
 
     Py_XDECREF(data);
     return(0);
 
 error:
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
     Py_XDECREF(data);
     Py_CLEAR(self->s);
     return(-1);
 }
 
 static void Buffer_dealloc(BufferObject *self) {
-    if(self->buffer >= self->s->channels) {
+    if(self->s != NULL && self->buffer >= self->s->channels) {
         synth_free_buffer(self->s->s, self->buffer);
     }
     Py_XDECREF(self->s);
@@ -2012,6 +2125,19 @@ static PyObject *Synth_get_size(BufferObject *self,
     }
 
     return(PyLong_FromLong(ret));
+}
+
+static PyObject *Synth_buffer_get_rate(BufferObject *self,
+                                       PyTypeObject *defining_class,
+                                       PyObject *const *args,
+                                       Py_ssize_t nargs,
+                                       PyObject *kwnames) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(self->rate));
 }
 
 static PyObject *Synth_silence_buffer(BufferObject *self,
@@ -2048,6 +2174,66 @@ static PyObject *Synth_silence_buffer(BufferObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *Synth_B_player(BufferObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *player;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    arglist = PyTuple_Pack(2, self->s, self);
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    player = PyObject_CallObject((PyObject *)(state->PlayerType), arglist);
+    Py_DECREF(arglist);
+    if(player == NULL) {
+        return(NULL);
+    }
+
+    return(player);
+}
+
+static PyObject *Synth_B_filter(BufferObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *filter;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs >= 1) {
+        arglist = PyTuple_Pack(3, self->s, self, args[0]);
+    } else {
+        arglist = PyTuple_Pack(2, self->s, self);
+    }
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    filter = PyObject_CallObject((PyObject *)(state->FilterType), arglist);
+    Py_DECREF(arglist);
+    if(filter == NULL) {
+        return(NULL);
+    }
+
+    return(filter);
+}
+
 static PyMethodDef Buffer_methods[] = {
     {
         "size",
@@ -2055,10 +2241,25 @@ static PyMethodDef Buffer_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Get the size in samples of a buffer."},
     {
+        "rate",
+        (PyCMethod) Synth_buffer_get_rate,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the sample rate of the buffer if loaded from a wav, otherwise, just the Synth's rate."},
+    {
         "silence",
         (PyCMethod) Synth_silence_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Silence a buffer which contains audio."},
+    {
+        "player",
+        (PyCMethod) Synth_B_player,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience function to make a player from this buffer."},
+    {
+        "filter",
+        (PyCMethod) Synth_B_filter,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Convenience function to make a filter from this buffer."},
     {NULL}
 };
 
@@ -2466,7 +2667,7 @@ static PyObject *Synth_set_player_loop_start(PlayerObject *self,
                                              PyObject *const *args,
                                              Py_ssize_t nargs,
                                              PyObject *kwnames) {
-    unsigned int pos;
+    int pos;
 
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
@@ -2479,7 +2680,7 @@ static PyObject *Synth_set_player_loop_start(PlayerObject *self,
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
-    pos = PyLong_AsUnsignedLong(args[0]);
+    pos = PyLong_AsLong(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
@@ -2497,7 +2698,7 @@ static PyObject *Synth_set_player_loop_end(PlayerObject *self,
                                            PyObject *const *args,
                                            Py_ssize_t nargs,
                                            PyObject *kwnames) {
-    unsigned int pos;
+    int pos;
 
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
@@ -2510,7 +2711,7 @@ static PyObject *Synth_set_player_loop_end(PlayerObject *self,
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
-    pos = PyLong_AsUnsignedLong(args[0]);
+    pos = PyLong_AsLong(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
@@ -2727,7 +2928,7 @@ static PyMethodDef Player_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set a buffer to output to."},
     {
-        "output_poo",
+        "output_pos",
         (PyCMethod) Synth_set_player_output_buffer_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the output buffer position."},
@@ -2838,6 +3039,7 @@ static PyObject *Filter_new(PyTypeObject *type, PyObject *args, PyObject *kwds) 
 static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
     BufferObject *buffer = NULL;
     unsigned int size;
+    PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
         PyErr_SetString(PyExc_TypeError, "Filter already initialized");
@@ -2852,8 +3054,20 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
                          &(self->s),
                          &buffer,
                          &size)) {
-        return(-1);
+        PyErr_Fetch(&etype, &evalue, &etraceback);
+        Py_XDECREF(etype);
+        Py_XDECREF(evalue);
+        Py_XDECREF(etraceback);
+
+        if(!PyArg_ParseTuple(args, "OO",
+                             &(self->s),
+                             &buffer)) {
+            goto error;
+        } else {
+            size = 0;
+        }
     }
+
     Py_XINCREF(self->s);
     Py_XINCREF(buffer);
     if(!PyObject_TypeCheck(self->s, state->SynthType)) {
@@ -3574,6 +3788,7 @@ static int crustygame_exec(PyObject* m) {
     state->SynthType = NULL;
     state->BufferType = NULL;
     state->PlayerType = NULL;
+    state->FilterType = NULL;
     state->return_ptr = NULL;
     state->LP_SDL_Renderer = NULL;
     state->LP_SDL_Texture = NULL;

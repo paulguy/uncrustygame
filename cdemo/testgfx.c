@@ -565,7 +565,6 @@ int update_color_boxes(ColorBox *cboxes) {
 int draw_color_boxes(ColorBox *cboxes) {
     unsigned int i;
     ColorBoxItem *cbox;
-    SDL_Renderer *renderer = layerlist_get_renderer(cboxes->ll);
 
     for(i = 0; i < cboxes->count; i++) {
         if(cboxes->cbox[i].tilemap == -1) {
@@ -574,6 +573,7 @@ int draw_color_boxes(ColorBox *cboxes) {
         cbox = &(cboxes->cbox[i]);
 
 #ifdef OPAQUE_COLOR_BOXES
+        SDL_Renderer *renderer = layerlist_get_renderer(cboxes->ll);
         SDL_Rect rect;
 
         rect.w = cbox->w * cboxes->scale;

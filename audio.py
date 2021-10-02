@@ -1,5 +1,5 @@
 import array
-import pycrustygame as cg
+import crustygame as cg
 import sequencer as seq
 
 CHANNEL_TYPE_SILENCE = "silence"
@@ -471,7 +471,7 @@ class AudioSequencer():
                 buf += self._channels
             b = self._buffer[buf]
             player[8] = b
-            p.input_buffer(b[2])
+            p.input(b[2])
         if status[1] != None:
             pos = status[1]
             # make -1 be the real last sample
@@ -487,7 +487,7 @@ class AudioSequencer():
                 buf += self._channels
             b = self._buffer[buf]
             player[9] = b
-            p.output_buffer(b[2])
+            p.output(b[2])
         if status[3] != None:
             pos = status[3]
             if pos < 0:
@@ -573,7 +573,7 @@ class AudioSequencer():
                 buf -= self._seqChannels
                 buf += self._channels
             b = self._buffer[buf]
-            f.input_buffer(b[2])
+            f.input(b[2])
         if status[1] != None:
             pos = status[1]
             if pos < 0:
@@ -588,7 +588,7 @@ class AudioSequencer():
                 buf += self._channels
             b = self._buffer[buf]
             flt[7] = b
-            f.output_buffer(b[2])
+            f.output(b[2])
         if status[3] != None:
             pos = status[3]
             if pos < 0:
@@ -602,7 +602,7 @@ class AudioSequencer():
                 buf -= self._seqChannels
                 buf += self._channels
             b = self._buffer[buf]
-            f.filter_buffer(b[2])
+            f.filter(b[2])
         if status[5] != None:
             f.filter_start(status[5])
         if status[6] != None:
@@ -662,12 +662,13 @@ class AudioSequencer():
     def _load(self, s):
         if self._loaded:
             raise Exception("Already loaded")
-        rate = s.rate
+        rate = s.rate()
         self._samplesms = int(rate / 1000)
-        self._channels = s.channels
+        channels = s.channels()
+        self._channels = len(channels)
         if self._channels < self._seqChannels:
             raise Exception("Not enough output channels to play sequence")
-        newbuffer = [[None, rate, b] for b in s.output_buffers()]
+        newbuffer = [[None, rate, b] for b in channels]
         newbuffer.extend(self._buffer)
         self._buffer = newbuffer
         for buffer in self._buffer:
@@ -677,17 +678,15 @@ class AudioSequencer():
             elif isinstance(buffer[0], int):
                 # silent buffer
                 length = buffer[0] * self._samplesms
-                buffer[1] = rate
                 buffer[2] = s.buffer(cg.SYNTH_TYPE_F32, None, length)
             elif isinstance(buffer[0], str):
                 # filename
-                b, r = s.buffer_from_wav(buffer[0])
-                buffer[1] = r
+                b = s.buffer(buffer[0])
                 buffer[2] = b
             elif isinstance(buffer[0], cg.Buffer):
                 # external buffer
-                buffer[1] = rate
                 buffer[2] = buffer[0]
+            buffer[1] = buffer[2].rate()
         print(self._buffer)
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
@@ -706,7 +705,7 @@ class AudioSequencer():
                 inbuf -= self._seqChannels
                 inbuf += self._channels
                 b = self._buffer[inbuf][2]
-                player = [s.player(b), 0, None, None, None, None, None, None, None, None, 0]
+                player = [b.player(), 0, None, None, None, None, None, None, None, None, 0]
                 self._update_player(player, initial[channel[0]])
                 player[1] = 0
                 self._localChannels.append(player)
@@ -715,7 +714,7 @@ class AudioSequencer():
                 filterbuf -= self._seqChannels
                 filterbuf += self._channels
                 b = self._buffer[filterbuf][2]
-                flt = [s.filter(b, initial[channel[0]][20]), 0, None, None, None, None, None, None, 0]
+                flt = [b.filter(initial[channel[0]][20]), 0, None, None, None, None, None, None, 0]
                 self._update_filter(flt, initial[channel[0]])
                 flt[1] = 0
                 self._localChannels.append(flt)
@@ -737,14 +736,10 @@ class AudioSequencer():
     def _unload(self):
         if not self._loaded:
             raise Exception("Already not loaded")
-        for chan in self._localChannels:
-            if not isinstance(chan[0], list):
-                chan[0] = None
         del self._localChannels
         self._buffer = self._buffer[self._channels:]
         for buffer in self._buffer:
-            if not isinstance(buffer[0], cg.Buffer):
-                buffer[2] = None
+            buffer[2] = None
         self._loaded = False
 
     def reset(self):
@@ -970,9 +965,8 @@ class AudioSequencer():
         self._outpos = 0
 
 
-@cg.SYNTH_FRAME_CB_T
 def audio_system_frame(priv, s):
-    return priv[1]._frame_cb()
+    return priv._frame_cb()
 
 class AudioSystem():
     def __init__(self, log_cb_return, log_cb_priv, rate, channels, trace=False):
@@ -980,8 +974,8 @@ class AudioSystem():
                            log_cb_return, log_cb_priv,
                            rate, channels)
         self._sequences = list()
-        self._samplesms = int(self._s.rate / 1000)
-        self._fragment_size = self._s.fragment_size
+        self._samplesms = int(self._s.rate() / 1000)
+        self._fragment_size = self._s.fragment_size()
         self._fragments = 0
         self._inc_fragments()
         self._error = None
@@ -1000,11 +994,11 @@ class AudioSystem():
 
     @property
     def rate(self):
-        return self._s.rate
+        return self._s.rate()
 
     @property
     def channels(self):
-        return self._s.channels
+        return self._s.channels()
 
     def buffer(self, audioType, data, size):
         return self._s.buffer(audioType, data, size)
@@ -1016,14 +1010,14 @@ class AudioSystem():
 
     def _frame_cb(self):
         try:
-            if self._s.underrun:
+            if self._s.underrun():
                 self._inc_fragments()
-                self._s.enabled(1)
+                self._s.enabled(True)
                 # s.enabled() will eventually call this function again so when it
                 # finally returns back to here, just return again
                 return 0
 
-            needed = int(self._s.needed / self._samplesms)
+            needed = int(self._s.needed() / self._samplesms)
             if self._trace and len(self._sequences) > 0:
                 print("=== Audio Callback {} ===".format(needed))
             if needed > 0:
