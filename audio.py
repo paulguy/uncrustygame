@@ -781,6 +781,7 @@ class AudioSequencer():
         # make a full DAW, but rather a simple tracker, so don't do it that way
         i = 0
         for channel in self._localChannels:
+            lastgot = -1
             if isinstance(channel[0], cg.Player):
                 time = reqtime
                 if line != None and line[i] != None:
@@ -796,6 +797,12 @@ class AudioSequencer():
                     if self._trace:
                         print("{} +{}".format(i, got))
                     if got == 0:
+                        if lastgot == 0:
+                            # heuristic to recover from a condition stuck in a
+                            # loop that doesn't stop, might be heavy-handed but
+                            # i guess we'll see
+                            channel[1] = 0
+                            break
                         changed = False
                         reason = channel[0].stop_reason()
                         if self._trace:
@@ -847,6 +854,7 @@ class AudioSequencer():
                         if not changed:
                             channel[1] = 0
                             break
+                    lastgot = got
                     time -= got
                     channel[1] -= got
                 self._advance_player_pos(channel, time, needed)
@@ -865,6 +873,9 @@ class AudioSequencer():
                     if self._trace:
                         print("{} +{}".format(i, got))
                     if got == 0:
+                        if lastgot == 0:
+                            channel[1] = 0
+                            break
                         changed = False
                         reason = channel[0].stop_reason()
                         if self._trace:
@@ -909,6 +920,7 @@ class AudioSequencer():
                         if not changed:
                             channel[1] = 0
                             break
+                    lastgot = got
                     time -= got
                     channel[1] -= got
                 self._advance_filter_pos(channel, time, needed)
@@ -1011,7 +1023,6 @@ class AudioSystem():
     def _frame_cb(self):
         try:
             if self._s.underrun():
-                print("asdf")
                 self._inc_fragments()
                 self._s.enabled(True)
                 # s.enabled() will eventually call this function again so when it

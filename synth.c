@@ -1399,6 +1399,9 @@ int synth_set_player_speed(Synth *s,
     if(p == NULL) {
         return(-1);
     }
+    if(speed == -0.0) {
+        speed = 0.0;
+    }
     p->speed = speed;
 
     return(0);
