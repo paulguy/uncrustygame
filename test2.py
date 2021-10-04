@@ -260,7 +260,7 @@ def scale_filter(filt, start, count):
 
 
 def log_cb_return(priv, string):
-    print("tilemap.h output, ignore: {}".format(string))
+    print(string, end='')
 
 def main():
     try:
@@ -587,7 +587,6 @@ def main():
     SDL_DestroyWindow(window)
     SDL_Quit()
 
-    print("If no other errors other than those said to ignore, then tests passed.")
 
 if __name__ == "__main__":
     main()

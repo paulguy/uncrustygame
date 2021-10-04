@@ -152,16 +152,18 @@ static void log_cb_adapter(CrustyCallback *cb, const char *str) {
     Py_XDECREF(result);
 }
 
-static void synth_cb_adapter(CrustyCallback *cb, Synth *s) {
+static int synth_cb_adapter(CrustyCallback *cb, Synth *s) {
     PyObject *arglist;
     PyObject *result;
+    int ret;
 
     arglist = Py_BuildValue("(O)", cb->priv);
     result = PyObject_CallObject(cb->cb, arglist);
     Py_DECREF(arglist);
-    /* don't check the result because this is called by C code anyway and it
-     * is void */
-    Py_XDECREF(result);
+    ret = PyLong_AsLong(result);
+    Py_DECREF(result);
+
+    return(ret);
 }
 
 /* pass a ctype LP_* type object through ctypes and have it return an intptr_t
@@ -1540,9 +1542,9 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
     }
 
     self->s = synth_new((synth_frame_cb_t)synth_cb_adapter,
-                        &(self->log),
-                        (log_cb_return_t)log_cb_adapter,
                         &(self->synth_frame),
+                        (log_cb_return_t)log_cb_adapter,
+                        &(self->log),
                         rate, channels);
     if(self->s == NULL) {
         PyErr_SetString(state->CrustyException, "synth_new returned an error");
@@ -2993,7 +2995,7 @@ static PyMethodDef Player_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Actually run the player."},
     {
-        "stopped_reason",
+        "stop_reason",
         (PyCMethod) Synth_player_stopped_reason,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Determine criteria for why the player stopped."},
@@ -3734,7 +3736,7 @@ static PyMethodDef Filter_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Run the filter for a certain number of samples."},
     {
-        "stopped_reason",
+        "stop_reason",
         (PyCMethod) Synth_filter_stopped_reason,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Determine criteria for why the filter stopped."},

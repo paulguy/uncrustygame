@@ -965,7 +965,7 @@ class AudioSequencer():
         self._outpos = 0
 
 
-def audio_system_frame(priv, s):
+def audio_system_frame(priv):
     return priv._frame_cb()
 
 class AudioSystem():
@@ -1011,6 +1011,7 @@ class AudioSystem():
     def _frame_cb(self):
         try:
             if self._s.underrun():
+                print("asdf")
                 self._inc_fragments()
                 self._s.enabled(True)
                 # s.enabled() will eventually call this function again so when it
