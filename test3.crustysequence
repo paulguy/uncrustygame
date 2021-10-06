@@ -1,26 +1,187 @@
 CrustyTracker
 2 2
 macro MAXDIVTIME=1000
-macro OUTBUF=2
-buffer MAXDIVTIME
-macro SQRBUF=3
+macro SQRBUF=2
 buffer triangle.wav
-macro SLOPEBUF=4
+macro SLOPEBUF=3
 buffer external
-macro ENVBUF=5
+macro ENV1BUF=4
 buffer MAXDIVTIME
+macro OUT1BUF=5
+buffer MAXDIVTIME
+macro ENV2BUF=6
+buffer MAXDIVTIME
+macro OUT2BUF=7
+buffer MAXDIVTIME
+macro ENV3BUF=8
+buffer MAXDIVTIME
+macro OUT3BUF=9
+buffer MAXDIVTIME
+macro ENV4BUF=10
+buffer MAXDIVTIME
+macro OUT4BUF=11
+buffer MAXDIVTIME
+macro ENV5BUF=12
+buffer MAXDIVTIME
+macro OUT5BUF=13
+buffer MAXDIVTIME
+macro ENV6BUF=14
+buffer MAXDIVTIME
+macro OUT6BUF=15
+buffer MAXDIVTIME
+;string 1
+channel player
+channel player
+channel player
+channel player
+;string 2
+channel player
+channel player
+channel player
+channel player
+;string 3
+channel player
+channel player
+channel player
+channel player
+;string 4
+channel player
+channel player
+channel player
+channel player
+;string 5
+channel player
+channel player
+channel player
+channel player
+;string 6
 channel player
 channel player
 channel player
 channel player
 sequence
-250 | GEN_ENV_CHANNEL SLOPEBUF ENVBUF | TONE_ENV_CHANNEL SQRBUF ENVBUF OUTBUF | MONO_TO_STEREO_CHAN OUTBUF
-1
-6
-0 | START_ENV 0.1 8.0 100 1.0 400 0.0 1000 | PLAY_TONE A 1500 | MONO_MIX 1500
-|
-|
-0 | REL_ENV 1.0 1000 | 0 | 0 | 0
-|
-|
-0
+250 | GEN_ENV_CHANNEL SLOPEBUF ENV1BUF | TONE_ENV_CHANNEL SQRBUF ENV1BUF OUT1BUF | MONO_TO_STEREO_CHAN OUT1BUF | GEN_ENV_CHANNEL SLOPEBUF ENV2BUF | TONE_ENV_CHANNEL SQRBUF ENV2BUF OUT2BUF | MONO_TO_STEREO_CHAN OUT2BUF | GEN_ENV_CHANNEL SLOPEBUF ENV3BUF | TONE_ENV_CHANNEL SQRBUF ENV3BUF OUT3BUF | MONO_TO_STEREO_CHAN OUT3BUF | GEN_ENV_CHANNEL SLOPEBUF ENV4BUF | TONE_ENV_CHANNEL SQRBUF ENV4BUF OUT4BUF | MONO_TO_STEREO_CHAN OUT4BUF | GEN_ENV_CHANNEL SLOPEBUF ENV5BUF | TONE_ENV_CHANNEL SQRBUF ENV5BUF OUT5BUF | MONO_TO_STEREO_CHAN OUT5BUF | GEN_ENV_CHANNEL SLOPEBUF ENV6BUF | TONE_ENV_CHANNEL SQRBUF ENV6BUF OUT6BUF | MONO_TO_STEREO_CHAN OUT6BUF
+3
+39
+1 20 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#2 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE A#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#4 1251 | MONO_MIX 1251
+1 500 |
+1 20 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#2 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE A#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#4 1251 | MONO_MIX 1251
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE A#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#2 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 500 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE A#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#2 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE G#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F4 1251 | MONO_MIX 1251
+1 500 |
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 1000 |
+25
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 500 |
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 250 |
+1 750 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+55
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 500 |
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 1000 |
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+1 250 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 500 |
+1 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#4 1251 | MONO_MIX 1251
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE B3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+1 250 |
+1 20 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#2 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE A#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE D#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#3 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE C#4 1251 | MONO_MIX 1251 | 0 | 0 | 0 | 0
+0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | START_ENV 0.1 1000.0 1 2.0 250 1.0 1000 | PLAY_TONE F#4 1251 | MONO_MIX 1251
+1 5000 |
+0 1 1 2
