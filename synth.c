@@ -1554,13 +1554,13 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float inPos = pl->inPos;
         unsigned int is = get_buffer_size(syn, pl->inBuffer);
         float speed = pl->speed;
-        float loopLen = pl->loopEnd - pl->loopStart;
+        float loopLen = pl->loopEnd - pl->loopStart + 1;
         if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
                 /* can't do this without branching that I know of, not sure
                  * if it matters.. */
-                if(inPos > pl->loopEnd && speed > 0.0) {
+                if(inPos >= pl->loopEnd + 1 && speed > 0.0) {
                     inPos -= loopLen;
                 } else if(inPos < pl->loopStart && speed < 0.0) {
                     inPos += loopLen;
@@ -1575,7 +1575,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
-                if(inPos > pl->loopEnd && speed > 0.0) {
+                if(inPos >= pl->loopEnd + 1 && speed > 0.0) {
                     inPos -= loopLen;
                 } else if(inPos < pl->loopStart && speed < 0.0) {
                     inPos += loopLen;
@@ -1593,7 +1593,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
             if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
-                    if(inPos > pl->loopEnd && speed > 0.0) {
+                    if(inPos >= pl->loopEnd + 1 && speed > 0.0) {
                         inPos -= loopLen;
                     } else if(inPos < pl->loopStart && speed < 0.0) {
                         inPos += loopLen;
@@ -1608,7 +1608,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 }
             } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
                 for(samples = 0; samples < todo; samples++) {
-                    if(inPos > pl->loopEnd && speed > 0.0) {
+                    if(inPos >= pl->loopEnd + 1 && speed > 0.0) {
                         inPos -= loopLen;
                     } else if(inPos < pl->loopStart && speed < 0.0) {
                         inPos += loopLen;
@@ -1633,11 +1633,11 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
-        float loopLen = pl->loopEnd - pl->loopStart;
+        float loopLen = pl->loopEnd - pl->loopStart + 1;
         if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {
             for(samples = 0; samples < todo; samples++) {
-                if(inPos > pl->loopEnd) {
+                if(inPos >= pl->loopEnd + 1) {
                     inPos -= loopLen;
                 } else if(inPos < pl->loopStart) {
                     inPos += loopLen;
@@ -1653,7 +1653,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
                   pl->outOp == SYNTH_OUTPUT_ADD) {
             for(samples = 0; samples < todo; samples++) {
-                if(inPos > pl->loopEnd) {
+                if(inPos >= pl->loopEnd + 1) {
                     inPos -= loopLen;
                 } else if(inPos < pl->loopStart) {
                     inPos += loopLen;
@@ -1672,7 +1672,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
             if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
                 for(samples = 0; samples < todo; samples++) {
-                    if(inPos > pl->loopEnd) {
+                    if(inPos >= pl->loopEnd + 1) {
                         inPos -= loopLen;
                     } else if(inPos < pl->loopStart) {
                         inPos += loopLen;
@@ -1688,7 +1688,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 }
             } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
                 for(samples = 0; samples < todo; samples++) {
-                    if(inPos > pl->loopEnd) {
+                    if(inPos >= pl->loopEnd + 1) {
                         inPos -= loopLen;
                     } else if(inPos < pl->loopStart) {
                         inPos += loopLen;
@@ -1710,7 +1710,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
     } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
         float *p = get_buffer_data(syn, pl->phaseBuffer);
         int phasePos = pl->phasePos;
-        float loopLen = pl->loopEnd - pl->loopStart;
+        float loopLen = pl->loopEnd - pl->loopStart + 1;
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
         if(pl->volMode == SYNTH_AUTO_CONSTANT &&
            pl->outOp == SYNTH_OUTPUT_REPLACE) {

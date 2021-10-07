@@ -527,9 +527,19 @@ class AudioSequencer():
             b = self._buffer[buf]
             p.phase_source(b[2])
         if status[12] != None:
-            p.loop_start(status[12])
+            pos = status[12]
+            if pos < 0:
+                pos = (pos * self._samplesms) + (self._samplesms - 1)
+            else:
+                pos = pos * self._samplesms
+            p.loop_start(pos)
         if status[13] != None:
-            p.loop_end(status[13])
+            pos = status[13]
+            if pos < 0:
+                pos = (pos * self._samplesms) + (self._samplesms - 1)
+            else:
+                pos = pos * self._samplesms
+            p.loop_end(pos)
         if status[14] != None:
             p.mode(status[14])
         if status[15] != None:
