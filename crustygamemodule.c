@@ -1505,10 +1505,13 @@ static PyObject *Synth_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
+    const char *filename = NULL;
     unsigned int rate;
+    SynthImportType format;
     unsigned int channels;
     PyObject *arglist;
     int i;
+    PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
         PyErr_SetString(PyExc_TypeError, "Synth already initialized");
@@ -1518,6 +1521,19 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
     /* docs say this init isn't called if the class is instantiated as some
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "sOOOOIIi",
+                         &filename,
+                         &(self->synth_frame.cb),
+                         &(self->synth_frame.priv),
+                         &(self->log.cb),
+                         &(self->log.priv),
+                         &rate, &channels, &format)) {
+        PyErr_Fetch(&etype, &evalue, &etraceback);
+        Py_XDECREF(etype);
+        Py_XDECREF(evalue);
+        Py_XDECREF(etraceback);
+    }
 
     if(!PyArg_ParseTuple(args, "OOOOII",
                          &(self->synth_frame.cb),
@@ -1541,11 +1557,20 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    self->s = synth_new((synth_frame_cb_t)synth_cb_adapter,
-                        &(self->synth_frame),
-                        (log_cb_return_t)log_cb_adapter,
-                        &(self->log),
-                        rate, channels);
+    if(filename == NULL) {
+        self->s = synth_new((synth_frame_cb_t)synth_cb_adapter,
+                            &(self->synth_frame),
+                            (log_cb_return_t)log_cb_adapter,
+                            &(self->log),
+                            rate, channels);
+    } else {
+        self->s = synth_new_wavout(filename,
+                                   (synth_frame_cb_t)synth_cb_adapter,
+                                   &(self->synth_frame),
+                                   (log_cb_return_t)log_cb_adapter,
+                                   &(self->log),
+                                   rate, channels, format);
+    }
     if(self->s == NULL) {
         PyErr_SetString(state->CrustyException, "synth_new returned an error");
         goto error;
@@ -1619,6 +1644,57 @@ static void Synth_dealloc(SynthObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
+static PyObject *Synth_open_wav(SynthObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    const char *filename;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    filename = PyUnicode_AsUTF8(args[0]);
+    if(filename == NULL) {
+        return(NULL);
+    }
+
+    if(synth_open_wav(self->s, filename) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_open_wave failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *Synth_close_wav(SynthObject *self,
+                                 PyTypeObject *defining_class,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs,
+                                 PyObject *kwnames) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(synth_close_wav(self->s) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_close_wave failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
 static PyObject *Synth_print_full_stats(SynthObject *self,
                                         PyTypeObject *defining_class,
                                         PyObject *const *args,
@@ -1639,7 +1715,7 @@ static PyObject *Synth_set_enabled(SynthObject *self,
                                    PyObject *const *args,
                                    Py_ssize_t nargs,
                                    PyObject *kwnames) {
-   int enabled;
+    int enabled;
 
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
@@ -1879,6 +1955,16 @@ static PyMethodDef Synth_methods[] = {
         (PyCMethod) Synth_print_full_stats,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Output information about the provided Synth structure."},
+    {
+        "open_wav",
+        (PyCMethod) Synth_open_wav,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Open a WAV file for output on a currently running synthesizer."},
+    {
+        "close_wav",
+        (PyCMethod) Synth_close_wav,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Close an open WAV file."},
     {
         "enabled",
         (PyCMethod) Synth_set_enabled,

@@ -156,12 +156,57 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
                  unsigned int rate,
                  unsigned int channels);
 /*
+ * Create a new synth structure, but without any audio output, just output to a
+ * WAV file.  In this case, it doesn't need to be started (doing so is a no-op,
+ * with a warning) and synth_frame will instead return the amount of samples
+ * written, or 0 if none could be written, and still -1 on error.
+ * Some method of determining completion will have to be determined by the
+ * library user.
+ * filename         output filename
+ * synth_frame_cb   as above
+ * synth_frame_priv as above
+ * log_cb           as above
+ * log_priv         as above
+ * rate             The rate which the synth will run at and the format of the
+ *                  output WAV file
+ * format           the format, supported formats are:
+ *                  SYNTH_TYPE_U8
+ *                  SYNTH_TYPE_S16
+ *                  SYNTH_TYPE_F32
+ * channels         Count of channels which the synth will output to and be
+ *                  written to the file.
+ * return           the new Synth structure
+ */
+Synth *synth_new_wavout(const char *filename,
+                        synth_frame_cb_t synth_frame_cb,
+                        void *synth_frame_priv,
+                        log_cb_return_t log_cb,
+                        void *log_priv,
+                        unsigned int rate,
+                        unsigned int channels,
+                        SynthImportType format);
+/*
  * Stop the synth, free any buffers created by it and close the associated
  * SDL_audio device.
  *
  * s        The Synth structure.
  */
 void synth_free(Synth *s);
+/*
+ * Open a WAV file for output on a currently running synthesizer, for recording
+ * the output to a file as it's output.
+ * s        the Synth structure
+ * filename the file to open
+ * return   0 on success, -1 on error
+ */
+int synth_open_wav(Synth *s, const char *filename);
+/*
+ * Close an open WAV file.  When done, synth_free() should be called, though.
+ * s        the Synth structure
+ * return   0 on successn -1 on error (although the file will likely have been
+ *          closed, but the header might be incomplete.)
+ */
+int synth_close_wav(Synth *s);
 /*
  * Get the sample rate the audio device was initialized with, may be different
  * from what was requested.
@@ -220,7 +265,8 @@ int synth_set_enabled(Synth *s, int enabled);
  * in the frame callback being called once or many times or not at all.
  *
  * s        the Synth structure
- * return   0 on success, -1 on failure, including frame callback failures
+ * return   0 on success, -1 on failure, including frame callback failures,
+ *          >0 during WAV-only mode to indicate amount of samples output
  */
 int synth_frame(Synth *s);
 /*

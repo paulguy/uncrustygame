@@ -126,6 +126,11 @@ struct Synth_s {
     SynthFilter *filter;
     unsigned int filtersmem;
 
+    FILE *out;
+    SynthImportType format;
+    unsigned int written;
+    Uint8 *outbuf;
+
     log_cb_return_t log_cb;
     void *log_priv;
 };
@@ -481,9 +486,29 @@ void do_synth_audio_cb(Synth *s, Uint8 *stream, unsigned int todo) {
             memset(bufs[i], s->silence, todo * sizeof(float));
         }
     }
+
+    if(s->out != NULL) {
+        unsigned int towrite;
+        switch(SDL_AUDIO_BITSIZE(s->converter.dst_format)) {
+            case 32:
+                towrite = todo * s->channels * sizeof(float);
+                break;
+            case 16:
+                towrite = todo * s->channels * sizeof(int16_t);
+                break;
+            default:
+                towrite = todo * s->channels * sizeof(uint8_t);
+        }
+
+        if(fwrite(stream, towrite, 1, s->out) < towrite) {
+            LOG_PRINTF(s, "Failed to write audio.\n");
+            fclose(s->out);
+        }
+        s->written += towrite;
+    }
 }
 
-void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
+static void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
     Synth *s = (Synth *)userdata;
     unsigned int available = get_samples_available(s);
     unsigned int todo;
@@ -560,32 +585,42 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
     /* probably impossible, but there are cases where at least one output
      * buffer is assumed, so I guess make it clear that there must be at least
      * 1. */
-    if(desired.channels < 1) {
+    if(obtained.channels < 1) {
         LOG_PRINTF(s, "No channels?\n");
         SDL_CloseAudioDevice(s->audiodev);
         free(s);
         return(NULL);
     }
 
-    if(SDL_AUDIO_BITSIZE(obtained.format) != 32 &&
-       SDL_AUDIO_BITSIZE(obtained.format) != 16 &&
-       SDL_AUDIO_BITSIZE(obtained.format) != 8) {
-        LOG_PRINTF(s, "Unsupported format size: %d.\n",
-                        SDL_AUDIO_BITSIZE(obtained.format));
-        SDL_CloseAudioDevice(s->audiodev);
-        free(s);
-        return(NULL);
+    switch(SDL_AUDIO_BITSIZE(obtained.format)) {
+        case 32:
+            if(!SDL_AUDIO_ISFLOAT(obtained.format)) {
+                LOG_PRINTF(s, "32 bit integer output format isn't supported.\n");
+                SDL_CloseAudioDevice(s->audiodev);
+                free(s);
+                return(NULL);
+            }
+            s->format = SYNTH_TYPE_F32;
+            break;
+        case 16:
+            s->format = SYNTH_TYPE_S16;
+            break;
+        case 8:
+            s->format = SYNTH_TYPE_U8;
+            break;
+        default:
+            LOG_PRINTF(s, "Unsupported format size: %d.\n",
+                            SDL_AUDIO_BITSIZE(obtained.format));
+            SDL_CloseAudioDevice(s->audiodev);
+            free(s);
+            return(NULL);
     }
 
     /* just use the obtained spec for frequency but try to convert the format.
      * Specify mono because the buffers are separate until the end. */
     if(SDL_BuildAudioCVT(&(s->converter),
-                         desired.format,
-                         1,
-                         obtained.freq,
-                         obtained.format,
-                         1,
-                         obtained.freq) < 0) {
+                         desired.format,  1, obtained.freq,
+                         obtained.format, 1, obtained.freq) < 0) {
         LOG_PRINTF(s, "Can't create audio output converter.\n");
         SDL_CloseAudioDevice(s->audiodev);
         free(s);
@@ -594,35 +629,129 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
 
     /* create converters now for allowing import later */
     if(SDL_BuildAudioCVT(&(s->U8toF32),
-                         AUDIO_U8,
-                         1,
-                         obtained.freq,
-                         AUDIO_F32SYS,
-                         1,
-                         obtained.freq) < 0) {
+                         AUDIO_U8,    1, obtained.freq,
+                         AUDIO_F32SYS, 1, obtained.freq) < 0) {
         LOG_PRINTF(s, "Failed to build U8 import converter.\n");
         SDL_CloseAudioDevice(s->audiodev);
         free(s);
         return(NULL);
     }
     if(SDL_BuildAudioCVT(&(s->S16toF32),
-                         AUDIO_S16SYS,
-                         1,
-                         obtained.freq,
-                         AUDIO_F32SYS,
-                         1,
-                         obtained.freq) < 0) {
+                         AUDIO_S16SYS, 1, obtained.freq,
+                         AUDIO_F32SYS, 1, obtained.freq) < 0) {
         LOG_PRINTF(s, "Failed to build S16 import converter.\n");
         SDL_CloseAudioDevice(s->audiodev);
         free(s);
         return(NULL);
     }
 
+    s->out = NULL;
+    s->outbuf = NULL;
     s->rate = obtained.freq;
     s->fragmentsize = obtained.samples;
     s->fragments = 0;
     s->channels = obtained.channels;
     s->silence = obtained.silence;
+    /* Won't know what size to allocate to them until the user has set a number of fragments */
+    s->channelbuffer = NULL;
+    s->buffer = NULL;
+    s->buffersmem = 0;
+    s->player = NULL;
+    s->playersmem = 0;
+    s->filter = NULL;
+    s->filtersmem = 0;
+    s->underrun = 0;
+    s->state = SYNTH_STOPPED;
+    s->synth_frame_cb = synth_frame_cb;
+    s->synth_frame_priv = synth_frame_priv;
+
+    return(s);
+}
+
+Synth *synth_new_wavout(const char *filename,
+                        synth_frame_cb_t synth_frame_cb,
+                        void *synth_frame_priv,
+                        log_cb_return_t log_cb,
+                        void *log_priv,
+                        unsigned int rate,
+                        unsigned int channels,
+                        SynthImportType format) {
+    SDL_AudioFormat sdlFormat;
+    Synth *s;
+
+    s = malloc(sizeof(Synth));
+    if(s == NULL) {
+        log_cb(log_priv, "Failed to allocate synth.\n");
+        return(NULL);
+    }
+
+    s->log_cb = log_cb;
+    s->log_priv = log_priv;
+
+    if(channels < 1) {
+        LOG_PRINTF(s, "No channels?\n");
+        free(s);
+        return(NULL);
+    }
+
+    /* specify little endian because this is for WAV output */
+    switch(format) {
+        case SYNTH_TYPE_U8:
+            sdlFormat = AUDIO_U8;
+            s->silence = 127;
+            break;
+        case SYNTH_TYPE_S16:
+            sdlFormat = AUDIO_S16LSB;
+            s->silence = 0;
+            break;
+        case SYNTH_TYPE_F32:
+            sdlFormat = AUDIO_F32LSB;
+            s->silence = 0;
+            break;
+        default:
+            LOG_PRINTF(s, "Unsupported format.\n");
+            free(s);
+            return(NULL);
+    }
+    s->format = format;
+
+    /* just use the obtained spec for frequency but try to convert the format.
+     * Specify mono because the buffers are separate until the end. */
+    if(SDL_BuildAudioCVT(&(s->converter),
+                         AUDIO_F32SYS, 1, rate,
+                         sdlFormat,    1, rate) < 0) {
+        LOG_PRINTF(s, "Can't create audio output converter.\n");
+        free(s);
+        return(NULL);
+    }
+
+    /* create converters now for allowing import later */
+    if(SDL_BuildAudioCVT(&(s->U8toF32),
+                         AUDIO_U8,     1, rate,
+                         AUDIO_F32SYS, 1, rate) < 0) {
+        LOG_PRINTF(s, "Failed to build U8 import converter.\n");
+        free(s);
+        return(NULL);
+    }
+    if(SDL_BuildAudioCVT(&(s->S16toF32),
+                         AUDIO_S16SYS, 1, rate,
+                         AUDIO_F32SYS, 1, rate) < 0) {
+        LOG_PRINTF(s, "Failed to build S16 import converter.\n");
+        free(s);
+        return(NULL);
+    }
+
+    if(synth_open_wav(s, filename) < 0) {
+        free(s);
+        return(NULL);
+    }
+
+    s->audiodev = -1;
+    s->outbuf = NULL;
+    s->rate = rate;
+    s->fragmentsize = DEFAULT_FRAGMENT_SIZE;
+    s->fragments = 0;
+    s->channels = channels;
     /* Won't know what size to allocate to them until the user has set a number of fragments */
     s->channelbuffer = NULL;
     s->buffer = NULL;
@@ -666,8 +795,176 @@ void synth_free(Synth *s) {
         free(s->filter);
     }
 
+    if(s->out != NULL) {
+        synth_close_wav(s);
+    }
+
+    if(s->outbuf != NULL) {
+        free(s->outbuf);
+    }
+
     free(s);
 }
+
+static const char RIFF[] = {'R', 'I', 'F', 'F'};
+static const int32_t RIFF_INIT_SIZE = 0;
+static const unsigned int RIFF_HEADER_PCM_SIZE = 36;
+static const unsigned int RIFF_HEADER_FLOAT_SIZE = 50;
+static const unsigned int RIFF_SIZE_POS = 4;
+static const char WAVE[] = {'W', 'A', 'V', 'E'};
+static const char WAVE_fmt[] = {'f', 'm', 't', ' '};
+static const uint16_t WAVE_fmt_PCM_LEN = 16;
+static const uint16_t WAVE_fmt_FLOAT_LEN = 18;
+static const uint16_t WAVE_PCM_TYPE = 1;
+static const uint16_t WAVE_FLOAT_TYPE = 3;
+static const uint16_t WAVE_FLOAT_EXTENSION_LEN = 0;
+static const char WAVE_fact[] = {'f', 'a', 'c', 't'};
+static const uint32_t WAVE_fact_LEN = 4;
+static const unsigned int WAVE_fact_SIZE_POS = 46;
+static const char WAVE_data[] = {'d', 'a', 't', 'a'};
+static const unsigned int WAVE_data_SIZE_PCM_POS = 40;
+static const unsigned int WAVE_data_SIZE_FLOAT_POS = 54;
+
+#define WAVE_WRITE_FIELD(NAME) \
+    if(fwrite(NAME, sizeof(NAME), 1, s->out) < sizeof(NAME)) { \
+        LOG_PRINTF(s, "Failed to write field NAME.\n"); \
+        fclose(s->out); \
+        s->out = NULL; \
+        return(-1); \
+    }
+
+#define WAVE_WRITE_FIELD_PTR(NAME) \
+    if(fwrite(&(NAME), sizeof(NAME), 1, s->out) < sizeof(NAME)) { \
+        LOG_PRINTF(s, "Failed to write field NAME.\n"); \
+        fclose(s->out); \
+        s->out = NULL; \
+        return(-1); \
+    }
+
+int synth_open_wav(Synth *s, const char *filename) {
+    uint16_t formatbits;
+    uint16_t bytespersample;
+    uint32_t bytespersecond;
+    int formatbytes;
+
+    if(s->out != NULL) {
+        LOG_PRINTF(s, "Synth already has a wav file open\n");
+        return(-1);
+    }
+
+    switch(s->format) {
+        case SYNTH_TYPE_U8:
+            formatbytes = sizeof(uint8_t);
+            break;
+        case SYNTH_TYPE_S16:
+            formatbytes = sizeof(int16_t);
+            break;
+        case SYNTH_TYPE_F32:
+            formatbytes = sizeof(float);
+            break;
+        default:
+            LOG_PRINTF(s, "Unsupported WAV output format.\n");
+            return(-1);
+    }
+    formatbits = formatbytes * 8;
+    bytespersample = formatbytes * s->channels;
+    bytespersecond = bytespersample * s->rate;
+
+    s->out = fopen(filename, "wb");
+    if(s->out == NULL) {
+        LOG_PRINTF(s, "Failed to open %s for writing.\n", filename);
+        return(-1);
+    }
+
+    WAVE_WRITE_FIELD(RIFF)
+    WAVE_WRITE_FIELD_PTR(RIFF_INIT_SIZE)
+    WAVE_WRITE_FIELD(WAVE)
+    WAVE_WRITE_FIELD(WAVE_fmt)
+    if(s->format == SYNTH_TYPE_F32) {
+        WAVE_WRITE_FIELD_PTR(WAVE_fmt_FLOAT_LEN)
+        WAVE_WRITE_FIELD_PTR(WAVE_FLOAT_TYPE)
+    } else {
+        WAVE_WRITE_FIELD_PTR(WAVE_fmt_PCM_LEN)
+        WAVE_WRITE_FIELD_PTR(WAVE_PCM_TYPE)
+    }
+    WAVE_WRITE_FIELD_PTR(s->channels)
+    WAVE_WRITE_FIELD_PTR(s->rate)
+    WAVE_WRITE_FIELD_PTR(bytespersecond)
+    WAVE_WRITE_FIELD_PTR(bytespersample)
+    WAVE_WRITE_FIELD_PTR(formatbits)
+    if(s->format == SYNTH_TYPE_F32) {
+        WAVE_WRITE_FIELD_PTR(WAVE_FLOAT_EXTENSION_LEN);
+        WAVE_WRITE_FIELD(WAVE_fact);
+        WAVE_WRITE_FIELD_PTR(WAVE_fact_LEN);
+        WAVE_WRITE_FIELD_PTR(RIFF_INIT_SIZE);
+    }
+    WAVE_WRITE_FIELD(WAVE_data);
+    WAVE_WRITE_FIELD_PTR(RIFF_INIT_SIZE);
+
+    if(s->audiodev < 0) {
+        if(s->fragments == 0) {
+            LOG_PRINTF(s, "Fragments must be set first.\n");
+            fclose(s->out);
+            s->out = NULL;
+            return(-1);
+        }
+
+        s->outbuf = malloc(formatbytes * s->fragments * s->fragmentsize);
+        if(s->outbuf == NULL) {
+            LOG_PRINTF(s, "Failed to allocate file output buffer.\n");
+            fclose(s->out);
+            s->out = NULL;
+            return(-1);
+        }
+    }
+
+    s->written = 0;
+    return(0);
+}
+
+#define WAVE_SEEK_POS(POS) \
+    if(fseek(s->out, POS, SEEK_SET) < 0) { \
+        LOG_PRINTF(s, "Failed to seek to field NAME.\n"); \
+        fclose(s->out); \
+        s->out = NULL; \
+        return(-1); \
+    }
+
+int synth_close_wav(Synth *s) {
+    uint32_t riffsize;
+
+    WAVE_SEEK_POS(RIFF_SIZE_POS)
+
+    if(s->format == SYNTH_TYPE_F32) {
+        riffsize = RIFF_HEADER_FLOAT_SIZE + s->written;
+    } else {
+        riffsize = RIFF_HEADER_PCM_SIZE + s->written;
+    }
+    WAVE_WRITE_FIELD_PTR(riffsize);
+
+    if(s->format == SYNTH_TYPE_F32) {
+        WAVE_SEEK_POS(WAVE_fact_SIZE_POS)
+        WAVE_WRITE_FIELD_PTR(s->written)
+        WAVE_SEEK_POS(WAVE_data_SIZE_FLOAT_POS)
+        WAVE_WRITE_FIELD_PTR(s->written)
+    } else {
+        WAVE_SEEK_POS(WAVE_data_SIZE_PCM_POS)
+        WAVE_WRITE_FIELD_PTR(s->written)
+    }
+
+    if(s->audiodev < 0) {
+        free(s->outbuf);
+        s->outbuf = NULL;
+    }
+    fclose(s->out);
+    s->out = NULL;
+
+    return(0);
+}
+
+#undef WAVE_SEEK_POS
+#undef WAVE_WRITE_FIELD_PTR
+#undef WAVE_WRITE_FIELD
 
 unsigned int synth_get_rate(Synth *s) {
     return(s->rate);
@@ -691,6 +988,11 @@ int synth_has_underrun(Synth *s) {
 }
 
 int synth_set_enabled(Synth *s, int enabled) {
+    if(s->audiodev < 0) {
+        LOG_PRINTF(s, "Audio doesn't need to be enabled for wave output only mode.\n");
+        return(0);
+    }
+
     if(enabled == 0) {
         SDL_PauseAudioDevice(s->audiodev, 1);
         s->state = SYNTH_STOPPED;
@@ -716,36 +1018,59 @@ int synth_frame(Synth *s) {
     unsigned int needed;
     int got;
 
-    if(s->state == SYNTH_ENABLED) {
-        /* signaled to start.  Reset everything, fill the buffer up then start
-         * the audio, so there's something to be consumed right away. */
-        /* Audio is stopped here, so no need to lock */
+    if(s->audiodev < 0) {
+        if(s->out == NULL) {
+            LOG_PRINTF(s, "No WAV file is opened, either due to error or being closed.\n");
+            return(-1);
+        }
+        if(s->outbuf == NULL) {
+            LOG_PRINTF(s, "Set a number of fragments first.\n");
+            return(-1);
+        }
+
         got = s->synth_frame_cb(s->synth_frame_priv, s);
         if(got < 0) {
             return(-1);
         }
-        add_samples(s, got);
-        s->state = SYNTH_RUNNING;
-        SDL_PauseAudioDevice(s->audiodev, 0);
-    } else if(s->state == SYNTH_RUNNING) {
-        needed = synth_get_samples_needed(s);
-        if(needed > 0) {
-            SDL_LockAudioDevice(s->audiodev);
+
+        do_synth_audio_cb(s, s->outbuf, got);
+        /* file will be closed on error */
+        if(s->out == NULL) {
+            return(-1);
+        }
+
+        return(got);
+    } else {
+        if(s->state == SYNTH_ENABLED) {
+            /* signaled to start.  Reset everything, fill the buffer up then start
+             * the audio, so there's something to be consumed right away. */
+            /* Audio is stopped here, so no need to lock */
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
-                SDL_UnlockAudioDevice(s->audiodev);
                 return(-1);
             }
             add_samples(s, got);
-            SDL_UnlockAudioDevice(s->audiodev);
+            s->state = SYNTH_RUNNING;
+            SDL_PauseAudioDevice(s->audiodev, 0);
+        } else if(s->state == SYNTH_RUNNING) {
+            needed = synth_get_samples_needed(s);
+            if(needed > 0) {
+                SDL_LockAudioDevice(s->audiodev);
+                got = s->synth_frame_cb(s->synth_frame_priv, s);
+                if(got < 0) {
+                    SDL_UnlockAudioDevice(s->audiodev);
+                    return(-1);
+                }
+                add_samples(s, got);
+                SDL_UnlockAudioDevice(s->audiodev);
+            }
         }
     }
 
     return(0);
 }
 
-int synth_set_fragments(Synth *s,
-                        unsigned int fragments) {
+int synth_set_fragments(Synth *s, unsigned int fragments) {
     int i;
 
     if(fragments == 0) {
@@ -796,6 +1121,36 @@ int synth_set_fragments(Synth *s,
         memset(s->channelbuffer[i].data,
                0,
                sizeof(float) * s->buffersize);
+    }
+
+    if(s->outbuf != NULL) {
+        unsigned int formatbytes;
+        switch(s->format) {
+            case SYNTH_TYPE_U8:
+                formatbytes = sizeof(uint8_t);
+                break;
+            case SYNTH_TYPE_S16:
+                formatbytes = sizeof(int16_t);
+                break;
+            case SYNTH_TYPE_F32:
+                formatbytes = sizeof(float);
+                break;
+            default:
+                LOG_PRINTF(s, "Unsupported WAV output format.\n");
+                return(-1);
+        }
+
+        free(s->outbuf);
+        s->outbuf = malloc(formatbytes * s->fragments * s->fragmentsize);
+        if(s->outbuf == NULL) {
+            LOG_PRINTF(s, "Failed to allocate file output buffer.\n");
+            for(i = 0; i < (int)s->channels; i++) {
+                free(s->channelbuffer[i].data);
+            }
+            free(s->channelbuffer);
+            s->fragments = 0;
+            return(-1);
+        }
     }
 
     return(0);

@@ -2,6 +2,10 @@ import array
 import crustygame as cg
 import sequencer as seq
 
+#TODO: Add tag for limiting the max request size at a time.
+#TODO: Add WAV output.
+#TODO: Add tag for multipart files.
+
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
 CHANNEL_TYPE_FILTER = "filter"
