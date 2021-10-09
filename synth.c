@@ -500,9 +500,9 @@ void do_synth_audio_cb(Synth *s, Uint8 *stream, unsigned int todo) {
                 towrite = todo * s->channels * sizeof(uint8_t);
         }
 
-        if(fwrite(stream, towrite, 1, s->out) < towrite) {
-            LOG_PRINTF(s, "Failed to write audio.\n");
+        if(fwrite(stream, towrite, 1, s->out) < 1) {
             fclose(s->out);
+            s->out = NULL;
         }
         s->written += towrite;
     }
@@ -813,8 +813,8 @@ static const unsigned int RIFF_HEADER_FLOAT_SIZE = 50;
 static const unsigned int RIFF_SIZE_POS = 4;
 static const char WAVE[] = {'W', 'A', 'V', 'E'};
 static const char WAVE_fmt[] = {'f', 'm', 't', ' '};
-static const uint16_t WAVE_fmt_PCM_LEN = 16;
-static const uint16_t WAVE_fmt_FLOAT_LEN = 18;
+static const uint32_t WAVE_fmt_PCM_LEN = 16;
+static const uint32_t WAVE_fmt_FLOAT_LEN = 18;
 static const uint16_t WAVE_PCM_TYPE = 1;
 static const uint16_t WAVE_FLOAT_TYPE = 3;
 static const uint16_t WAVE_FLOAT_EXTENSION_LEN = 0;
@@ -826,19 +826,15 @@ static const unsigned int WAVE_data_SIZE_PCM_POS = 40;
 static const unsigned int WAVE_data_SIZE_FLOAT_POS = 54;
 
 #define WAVE_WRITE_FIELD(NAME) \
-    if(fwrite(NAME, sizeof(NAME), 1, s->out) < sizeof(NAME)) { \
-        LOG_PRINTF(s, "Failed to write field NAME.\n"); \
-        fclose(s->out); \
-        s->out = NULL; \
-        return(-1); \
+    if(fwrite(NAME, sizeof(NAME), 1, s->out) < 1) { \
+        LOG_PRINTF(s, "Failed to write field "#NAME".\n"); \
+        goto error; \
     }
 
 #define WAVE_WRITE_FIELD_PTR(NAME) \
-    if(fwrite(&(NAME), sizeof(NAME), 1, s->out) < sizeof(NAME)) { \
-        LOG_PRINTF(s, "Failed to write field NAME.\n"); \
-        fclose(s->out); \
-        s->out = NULL; \
-        return(-1); \
+    if(fwrite(&(NAME), sizeof(NAME), 1, s->out) < 1) { \
+        LOG_PRINTF(s, "Failed to write field "#NAME".\n"); \
+        goto error; \
     }
 
 int synth_open_wav(Synth *s, const char *filename) {
@@ -846,6 +842,7 @@ int synth_open_wav(Synth *s, const char *filename) {
     uint16_t bytespersample;
     uint32_t bytespersecond;
     int formatbytes;
+    uint16_t channels;
 
     if(s->out != NULL) {
         LOG_PRINTF(s, "Synth already has a wav file open\n");
@@ -869,11 +866,16 @@ int synth_open_wav(Synth *s, const char *filename) {
     formatbits = formatbytes * 8;
     bytespersample = formatbytes * s->channels;
     bytespersecond = bytespersample * s->rate;
+    channels = s->channels;
 
     s->out = fopen(filename, "wb");
     if(s->out == NULL) {
         LOG_PRINTF(s, "Failed to open %s for writing.\n", filename);
         return(-1);
+    }
+
+    if(s->audiodev >= 0) {
+        SDL_LockAudioDevice(s->audiodev);
     }
 
     WAVE_WRITE_FIELD(RIFF)
@@ -887,7 +889,7 @@ int synth_open_wav(Synth *s, const char *filename) {
         WAVE_WRITE_FIELD_PTR(WAVE_fmt_PCM_LEN)
         WAVE_WRITE_FIELD_PTR(WAVE_PCM_TYPE)
     }
-    WAVE_WRITE_FIELD_PTR(s->channels)
+    WAVE_WRITE_FIELD_PTR(channels)
     WAVE_WRITE_FIELD_PTR(s->rate)
     WAVE_WRITE_FIELD_PTR(bytespersecond)
     WAVE_WRITE_FIELD_PTR(bytespersample)
@@ -919,19 +921,34 @@ int synth_open_wav(Synth *s, const char *filename) {
     }
 
     s->written = 0;
+
+    if(s->audiodev >= 0) {
+        SDL_UnlockAudioDevice(s->audiodev);
+    }
     return(0);
+
+error:
+    fclose(s->out);
+    s->out = NULL;
+
+    if(s->audiodev >= 0) {
+        SDL_UnlockAudioDevice(s->audiodev);
+    }
+    return(-1);
 }
 
 #define WAVE_SEEK_POS(POS) \
     if(fseek(s->out, POS, SEEK_SET) < 0) { \
         LOG_PRINTF(s, "Failed to seek to field NAME.\n"); \
-        fclose(s->out); \
-        s->out = NULL; \
-        return(-1); \
+        goto error; \
     }
 
 int synth_close_wav(Synth *s) {
     uint32_t riffsize;
+
+    if(s->audiodev >= 0) {
+        SDL_LockAudioDevice(s->audiodev);
+    }
 
     WAVE_SEEK_POS(RIFF_SIZE_POS)
 
@@ -959,7 +976,18 @@ int synth_close_wav(Synth *s) {
     fclose(s->out);
     s->out = NULL;
 
+    if(s->audiodev >= 0) {
+        SDL_UnlockAudioDevice(s->audiodev);
+    }
     return(0);
+error:
+    fclose(s->out);
+    s->out = NULL;
+
+    if(s->audiodev >= 0) {
+        SDL_UnlockAudioDevice(s->audiodev);
+    }
+    return(-1);
 }
 
 #undef WAVE_SEEK_POS

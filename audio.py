@@ -1084,6 +1084,12 @@ class AudioSystem():
     def enabled(self, enabled):
         self._s.enabled(enabled)
 
+    def open_wav(self, filename):
+        self._s.open_wav(filename)
+
+    def close_wav(self):
+        self._s.close_wav()
+
     def frame(self):
         try:
             self._s.frame()

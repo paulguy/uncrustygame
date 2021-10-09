@@ -11,6 +11,7 @@ from traceback import print_tb
 from sys import argv
 
 DEFAULT_SEQ = "test3.crustysequence"
+DEFAULT_WAV = "output.wav"
 START = 40
 SLICES = 2000
 
@@ -387,6 +388,7 @@ def main():
 
     aud.enabled(True)
 
+    wavout = False
     seq = None
     running = True
     playing = True
@@ -468,6 +470,13 @@ def main():
                     aud.enabled(False)
                 elif event.key.keysym.sym == SDLK_i:
                     aud.print_full_stats()
+                elif event.key.keysym.sym == SDLK_w:
+                    if wavout:
+                        aud.close_wav()
+                        wavout = False
+                    else:
+                        aud.open_wav("output.wav")
+                        wavout = True
 
         x = x + (xspeed * timetaken)
         if x > (640 - (64 * 4.0)):
