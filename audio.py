@@ -36,7 +36,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(self, file, startLine=0, trace=False):
+    def __init__(self, file, startLine=0, trace=False, macros=None):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -49,6 +49,12 @@ class MacroReader():
         self._macros = list()
         self._line = None
         self._lines = startLine
+
+        if macros != None:
+            try:
+                self._macros.extend(macros._macros)
+            except AttributeError:
+                self.add_macros(macros)
 
     def print_macros(self):
         print(self._macros)
@@ -246,6 +252,15 @@ class AudioSequencer():
                         self._channel.append(CHANNEL_TYPE_FILTER)
                     else:
                         raise Exception("Invalid channel type: {}".format(channel))
+                elif linetype == 'include':
+                    with open(line, 'r') as macrofile:
+                        macrofile = MacroReader(macrofile, trace=True, macros=infile)
+                        try:
+                            macros = read_macros(macrofile)
+                        except Exception as e:
+                            print("Error reading macros from {} on line {}.".format(macrofile.name, macrofile.curline))
+                            raise e
+                        infile.add_macros(macros)
                 else:
                     raise Exception("Invalid line type {}".format(linetype))
             if self._trace:

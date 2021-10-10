@@ -16,7 +16,7 @@
                 <ul>
                     <li><a href="#header-statements">Header Statement Types</a></li>
                 </ul>
-                <li><a href="#macro">Macro Block</a></li>
+                <li><a href="#macro">Macro Statement</a></li>
                 <ul>
                     <li><a href="#default-macros">Default Macros</a></li>
                     <ul>
@@ -25,15 +25,16 @@
                         <li><a href="#player-modes">Player Modes</a></li>
                     </ul>
                 </ul>
-                <li><a href="#tags">Tags Block</a></li>
+                <li><a href="#includes">Include Statement</a></li>
+                <li><a href="#tags">Tag Statement</a></li>
                 <ul>
                     <li><a href="#meaningful-tags">Meaningful Tags</a></li>
                 </ul>
-                <li><a href="#buffers">Buffers Block</a></li>
+                <li><a href="#buffers">Buffer Statement</a></li>
                 <ul>
                     <li><a href="#buffer-types">Buffer Types</a></li>
                 </ul>
-                <li><a href="#channels">Channels Block</a></li>
+                <li><a href="#channels">Channel Statement</a></li>
                 <ul>
                     <li><a href="#channel-types">Channel Types</a></li>
                 </ul>
@@ -167,6 +168,10 @@
                     <td>This mode will allow the position fetched from the input buffer to be based on another buffer.  The way this works is that the loop start and loop end will correspond to 0.0 and 1.0 from the phase source buffer.</td>
             </tbody>
         </table>
+        <h3 id="includes">Include Statement</h3>
+        <p>Related to macro statements:</p>
+        <code>include &lt;filemane&gt;</code>
+        <p>statements can be used to include a set of macros from a file named by filename.  Any previous macros defined will be evaluated within the included file.</p>
         <h3 id="tags">Tag Statement</h3>
         <p>Tags are</p>
         <code>tag &lt;name&gt;=&lt;value&gt;</code>
@@ -187,6 +192,10 @@
                 <tr>
                     <td>init</td>
                     <td>Pattern executed once on load for maybe generating samples and other things.  Won't output to any sort of time base so don't have this write to any output buffers.</td>
+                </tr>
+                <tr>
+                    <td>max-request</td>
+                    <td>Define how much audio should be requested from a sequence at once.  This is useful for not overfilling intermediate buffers while running the sequence.  This can be done by setting a intermediate buffer size as a macro, then setting this tag and defining buffers with that value.</td>
                 </tr>
             </tbody>
         </table>
