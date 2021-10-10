@@ -2,10 +2,6 @@ import array
 import crustygame as cg
 import sequencer as seq
 
-#TODO: Add tag for limiting the max request size at a time.
-#TODO: Add WAV output.
-#TODO: Add tag for multipart files.
-
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
 CHANNEL_TYPE_FILTER = "filter"
@@ -257,6 +253,11 @@ class AudioSequencer():
                 print(self._tag)
                 print(self._buffer)
                 print(self._channel)
+            self._maxreq = 2 ** 31
+            try:
+                self._maxreq = int(self._tag['max-request'])
+            except KeyError:
+                pass
             seqDesc = seq.SequenceDescription()
             silenceDesc = seqDesc.add_row_description()
             # output buffer 0x4
@@ -959,7 +960,7 @@ class AudioSequencer():
                 time = 0
                 try:
                     # try run for some absurd amount of time
-                    time, line = self._seq.advance(2 ** 31)
+                    time, line = self._seq.advance(self._maxreq)
                 except seq.SequenceEnded:
                     break
                 self._run_channels(time, line)
@@ -971,13 +972,17 @@ class AudioSequencer():
             self._run_channels(0, line)
         else:
             while needed > 0:
+                get = min(needed, self._maxreq)
                 try:
-                    time, line = self._seq.advance(needed)
+                    time, line = self._seq.advance(get)
                 except seq.SequenceEnded:
                     self._ended = True
                     break
                 self._run_channels(time * self._samplesms, line, needed * self._samplesms)
                 needed -= time
+
+    def get_tag(self, name):
+        return self._tag[name]
 
     def _reset_output_positions(self):
         # reset output channel positions to 0

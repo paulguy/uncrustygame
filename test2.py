@@ -403,17 +403,20 @@ def main():
             print("Sequence raised error")
             aud.print_full_stats()
             if seq != None:
-                aud.del_sequence(seq)
+                for s in seq:
+                    aud.del_sequence(s)
                 seq = None
             _, exc = aud.error
             print_tb(exc.__traceback__)
             print(exc)
             aud.enabled(True)
 
-        if seq != None and seq.ended:
-            aud.del_sequence(seq)
-            seq = None
-            print("Sequence ended")
+        if seq != None:
+            for s in seq:
+                if s.ended:
+                    aud.del_sequence(s)
+                    seq.remove(s)
+                    print("Sequence ended")
 
         event = SDL_Event()
 
@@ -426,8 +429,9 @@ def main():
                     running = False
                 elif event.key.keysym.sym == SDLK_p:
                     if seq != None:
-                        aud.del_sequence(seq)
-                        seq = None
+                        for s in seq:
+                            aud.del_sequence(s)
+                            seq = None
                     macros = None
                     with open("macros.txt", 'r') as macrofile:
                         macrofile = audio.MacroReader(macrofile, trace=True)
@@ -442,24 +446,53 @@ def main():
                                        ("FILTER_SLICES", (), str(SLICES - START))))
                         print(macros)
                         aud.enabled(False)
+                        # load first sequence
                         try:
                             with open(seqname, "r") as seqfile:
-                                seq = audio.AudioSequencer(seqfile,
-                                    [envslope, benddownslope, bendupslope, noise, filt],
-                                    macros, trace=True)
+                                seq = [audio.AudioSequencer(seqfile,
+                                       [envslope, benddownslope, bendupslope, noise, filt],
+                                       macros, trace=True)]
                         except Exception as e:
                             aud.print_full_stats()
                             print_tb(e.__traceback__)
                             print(e)
-                        if seq != None:
+                        # if it didn't fail, try to see if there are more parts
+                        if seq[0] != None:
+                            parts = ()
                             try:
-                                aud.add_sequence(seq, enabled=True)
-                            except Exception as e:
-                                aud.print_full_stats()
-                                print_tb(e.__traceback__)
-                                print(e)
-                                seq = None
-                        aud.enabled(True)
+                                parts = seq[0].get_tag('part-files').split(';')
+                            except KeyError:
+                                pass
+                            if len(parts) > 0:
+                                # try loading all the parts
+                                for part in parts:
+                                    try:
+                                        with open(part, "r") as seqfile:
+                                            seq.append(audio.AudioSequencer(seqfile,
+                                                       [envslope, benddownslope, bendupslope, noise, filt],
+                                                       macros, trace=True))
+                                    except Exception as e:
+                                        aud.print_full_stats()
+                                        print_tb(e.__traceback__)
+                                        print(e) 
+                                        seq = None
+                                        break
+                        # if loading all the parts succeeds, try adding them
+                        # all to the audio context
+                        if seq != None:
+                            for s in seq:
+                                try:
+                                    aud.add_sequence(s, enabled=True)
+                                except Exception as e:
+                                    print("Adding sequences failed, ignore warnings about attempt to remove.")
+                                    for s in seq:
+                                        aud.del_sequence(s)
+                                    aud.print_full_stats()
+                                    print_tb(e.__traceback__)
+                                    print(e)
+                                    seq = None
+                                    break
+                    aud.enabled(True)
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         aud.del_sequence(seq)
@@ -590,7 +623,9 @@ def main():
 
     aud.enabled(False)
     if seq != None:
-        aud.del_sequence(seq)
+        for s in seq:
+            aud.del_sequence(s)
+        seq = None
 
     SDL_DestroyRenderer(renderer)
     SDL_DestroyWindow(window)
