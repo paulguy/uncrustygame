@@ -1090,7 +1090,7 @@ class AudioSystem():
         for item in enumerate(self._sequences):
             if item[1][0] == seq:
                 item[1][0]._unload()
-                del self._sequences[item[0]]
+                self._sequences.remove(item[1])
                 return
         print("WARNING: Attempt to remove sequence not added.")
 

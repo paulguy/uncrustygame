@@ -417,6 +417,8 @@ def main():
                     aud.del_sequence(s)
                     seq.remove(s)
                     print("Sequence ended")
+            if len(seq) == 0:
+                seq = None
 
         event = SDL_Event()
 
@@ -428,11 +430,10 @@ def main():
                 if event.key.keysym.sym == SDLK_q:
                     running = False
                 elif event.key.keysym.sym == SDLK_p:
-                    aud.enabled(False)
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
-                            seq = None
+                        seq = None
                     macros = (("FILTER_SIZE", (), str(flen)),
                               ("FILTER_SLICES", (), str(SLICES - START)))
                     # load first sequence
@@ -483,10 +484,10 @@ def main():
                                 print(e)
                                 seq = None
                                 break
-                    aud.enabled(True)
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
-                        aud.del_sequence(seq)
+                        for s in seq:
+                            aud.del_sequence(s)
                         seq = None
                 elif event.key.keysym.sym == SDLK_r:
                     aud.enabled(True)
