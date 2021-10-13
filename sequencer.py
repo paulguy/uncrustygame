@@ -91,7 +91,7 @@ class Sequencer():
                 # changeMask bits are left to right so logically reversed from
                 # their actual bit number
                 changed = changeMask & (1 << ((len(desc) - 1) - i))
-                if not changed:
+                if changed == 0:
                     row.append(None)
                     continue
 
@@ -147,16 +147,24 @@ class Sequencer():
                 fullRow.append(newrow)
                 for i in range(1, self._desc.columns):
                     fullRow.append(EMPTY_ROW)
-        elif len(structs) == self._desc.columns:
-            for i in range(self._desc.columns):
+        else:
+            for i in range(len(structs)):
                 columnDesc = self._desc._column[i]
                 rowDesc = self._desc._rowdesc[columnDesc]
                 split = structs[i].split()
+                if not initial and int(split[0]) < 0:
+                    if len(split) > 1:
+                        raise Exception("negative column with extra values")
+                    for j in range(-int(split[0])):
+                        fullRow.append(EMPTY_ROW)
+                    continue
                 pos, newrow = self._read_row(split, rowDesc, initial=initial)
                 if len(split) > pos:
                     raise Exception("too many values in column ({} > {})".format(len(split), pos))
                 fullRow.append(newrow)
-        else:
+
+        if len(fullRow) != self._desc.columns:
+            print(fullRow)
             raise Exception("wrong number of columns in file ({} != {})".format(len(structs), self._desc.columns))
 
         return fullRow
