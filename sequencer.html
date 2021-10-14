@@ -258,6 +258,17 @@
         <p>Each line may contain all columns, separated by '|' (pipe), so if a sequence has 4 channels, it'll be like:</p>
         <code>channel 1|channel 2|channel 3|channel 4</code>
         <p>Or the line may contain only global paramters which just contains that column ended with only a pipe, of the line can be completely blank with just a pipe.</p>
+        <p>Consecutive 0 columns can be crunched down to a single column by putting a negative value for the amount of 0 columns there are to be in a row.</p>
+        <code>       Some Examples
+━━━━━━━━━━━━━━┯━━━━━━━━━━━━
+original      │ replacement
+──────────────┼────────────
+0             │ -1
+0 | 0         │ -2
+0 | 0 | 0     │ -3
+0 | 0 | 0 | 0 │ -4
+            ···</code>
+        <p>0 and -1 are equivalent so as to not be silly and confusing.</p>
         <p>Extra space between fields and around the '|'s doesn't matter, except a macro must have a space after the last argument, if it takes arguments.</p>
         <p>There are 2 formats of line in a sequence.  The initial state line.  This appears once and is the first line in the sequence block.  it must have every parameter defined.  A sequence line.  These can specify any number of parameters, or none at all.  The parameters list must start with a bitfield describing which parameters follow after, even if it's 0, for none.</p>
         <p>Each column is processed in full for the amount of time or until that column can produce no more data.  Columns are processed from left to right.</p>
