@@ -2,6 +2,8 @@ import array
 import crustygame as cg
 import sequencer as seq
 
+TODO: Add events to the silence channel type and make it operate in time with playback rather than as one shot.
+
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
 CHANNEL_TYPE_FILTER = "filter"

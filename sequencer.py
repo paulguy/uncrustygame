@@ -58,29 +58,51 @@ class Sequencer():
         self._curLine = 0
         self._lineTime = 0
         self._ended = False
+        self._namedRows = {}
 
-    def _add_row(self, newrow):
+    def _add_row(self, newrow, desc):
         for row in range(len(self._row)):
             found = True
-            if len(self._row[row]) == len(newrow):
-                for item in range(len(newrow)):
-                    if self._row[row][item] != newrow[item]:
-                        found = False
-                        break
+            if len(self._row[row]) - 1 == len(newrow):
+                if self._row[row][-1] == desc:
+                    for item in range(len(newrow)):
+                        if self._row[row][item] != newrow[item]:
+                            found = False
+                            break
             else:
                 continue
             if found:
                 return row
+        newrow.append(desc)
         self._row.append(newrow)
         return len(self._row) - 1
 
-    def _read_row(self, struct, desc, initial=False):
+    def _read_row(self, struct, descnum, initial=False):
+        desc = self._desc._rowdesc[descnum]
+
         pos = 0
         changeMask = None
+        save = None
         if not initial:
             if len(struct) == 0:
                 return 0, EMPTY_ROW
-            changeMask = int(struct[0], base=16)
+            first = struct[0]
+            # check to see if this is referencing a saved row
+            if first[0] == '=':
+                return 1, first[1:]
+            # check to see if this row is to be saved
+            try:
+                equals = first.index('=')
+                save = first[equals+1:]
+                first = first[:equals]
+            except ValueError:
+                save = None
+            if save != None:
+                if len(save) == 0:
+                    raise ValueError("Empty row name.")
+                if save.isnumeric():
+                    raise ValueError("Numeric row name.")
+            changeMask = int(first, base=16)
             if changeMask == 0:
                 return 1, EMPTY_ROW
             pos += 1
@@ -105,10 +127,9 @@ class Sequencer():
                 elif desc[i] == FIELD_TYPE_STR:
                     row.append(struct[pos])
                 elif isinstance(desc[i], int):
-                    rowDesc = self._desc._rowdesc[desc[i]]
                     # pass False because an initial row argument may be an empty
                     # row
-                    adv, newrow = self._read_row(struct[pos:], rowDesc, initial=False)
+                    adv, newrow = self._read_row(struct[pos:], desc[i], initial=False)
                     row.append(newrow)
                     pos += adv
                     continue
@@ -124,7 +145,10 @@ class Sequencer():
                 print(" Descriptor Item: {}".format(i))
                 raise e
 
-        return pos, self._add_row(row)
+        rownum = self._add_row(row, descnum)
+        if save != None:
+            self._namedRows[save] = rownum
+        return pos, rownum
 
     def _read_line(self, file, initial=False):
         structs = file.readline().split('|')
@@ -150,15 +174,19 @@ class Sequencer():
         else:
             for i in range(len(structs)):
                 columnDesc = self._desc._column[i]
-                rowDesc = self._desc._rowdesc[columnDesc]
                 split = structs[i].split()
-                if not initial and int(split[0]) < 0:
+                first = 0
+                try:
+                    first = int(split[0])
+                except ValueError:
+                    pass
+                if not initial and first < 0:
                     if len(split) > 1:
                         raise Exception("negative column with extra values")
                     for j in range(-int(split[0])):
                         fullRow.append(EMPTY_ROW)
                     continue
-                pos, newrow = self._read_row(split, rowDesc, initial=initial)
+                pos, newrow = self._read_row(split, columnDesc, initial=initial)
                 if len(split) > pos:
                     raise Exception("too many values in column ({} > {})".format(len(split), pos))
                 fullRow.append(newrow)
@@ -168,6 +196,14 @@ class Sequencer():
             raise Exception("wrong number of columns in file ({} != {})".format(len(structs), self._desc.columns))
 
         return fullRow
+
+    def _fix_rows(self):
+        for row in self._row:
+            desc = self._desc._rowdesc[row[-1]]
+            for i in len(desc):
+                if isinstance(desc[i], int) and \
+                   isinstance(row[i], str):
+                    row[i] = self._namedRows[row[i]]
 
     def _read_file(self, file):
         self._row = list()
@@ -182,6 +218,7 @@ class Sequencer():
             for j in range(patlen):
                 pattern.append(self._read_line(file))
             self._pattern.append(pattern)
+        self._fix_rows()
         print(self._row)
 
         ordersData = file.readline().split()
