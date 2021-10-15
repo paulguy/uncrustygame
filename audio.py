@@ -2,7 +2,7 @@ import array
 import crustygame as cg
 import sequencer as seq
 
-TODO: Add events to the silence channel type and make it operate in time with playback rather than as one shot.
+#TODO: Add events to the silence channel type and make it operate in time with playback rather than as one shot.
 
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
@@ -570,32 +570,32 @@ class AudioSequencer():
             if status[16] == seq.EMPTY_ROW:
                 player[2] = None
             else:
-                player[2] = status[16]
+                player[2] = self._seq.get_row(status[16])
         if status[17] != None:
             if status[17] == seq.EMPTY_ROW:
                 player[3] = None
             else:
-                player[3] = status[17]
+                player[3] = self._seq.get_row(status[17])
         if status[18] != None:
             if status[18] == seq.EMPTY_ROW:
                 player[4] = None
             else:
-                player[4] = status[18]
+                player[4] = self._seq.get_row(status[18])
         if status[19] != None:
             if status[19] == seq.EMPTY_ROW:
                 player[5] = None
             else:
-                player[5] = status[19]
+                player[5] = self._seq.get_row(status[19])
         if status[20] != None:
             if status[20] == seq.EMPTY_ROW:
                 player[6] = None
             else:
-                player[6] = status[20]
+                player[6] = self._seq.get_row(status[20])
         if status[21] != None:
             if status[21] == seq.EMPTY_ROW:
                 player[7] = None
             else:
-                player[7] = status[21]
+                player[7] = self._seq.get_row(status[21])
 
     def _update_filter(self, flt, status):
         f = flt[0]
@@ -669,27 +669,27 @@ class AudioSequencer():
             if status[15] == seq.EMPTY_ROW:
                 flt[2] = None
             else:
-                flt[2] = status[15]
+                flt[2] = self._seq.get_row(status[15])
         if status[16] != None:
             if status[16] == seq.EMPTY_ROW:
                 flt[3] = None
             else:
-                flt[3] = status[16]
+                flt[3] = self._seq.get_row(status[16])
         if status[17] != None:
             if status[17] == seq.EMPTY_ROW:
                 flt[4] = None
             else:
-                flt[4] = status[17]
+                flt[4] = self._seq.get_row(status[17])
         if status[18] != None:
             if status[18] == seq.EMPTY_ROW:
                 flt[5] = None
             else:
-                flt[5] = status[18]
+                flt[5] = self._seq.get_row(status[18])
         if status[19] != None:
             if status[18] == seq.EMPTY_ROW:
                 flt[6] = None
             else:
-                flt[6] = status[19]
+                flt[6] = self._seq.get_row(status[19])
 
     def _load(self, s):
         if self._loaded:

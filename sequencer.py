@@ -1,13 +1,13 @@
 from sys import stdout
 import copy
 
-FIELD_TYPE_INT = "int"
-FIELD_TYPE_HEX = "hex"
-FIELD_TYPE_FLOAT = "float"
-FIELD_TYPE_STR = "str"
-FIELD_TYPE_ROW = "row"
+FIELD_TYPE_INT = object()
+FIELD_TYPE_HEX = object()
+FIELD_TYPE_FLOAT = object()
+FIELD_TYPE_STR = object()
+FIELD_TYPE_ROW = object()
 
-EMPTY_ROW = "empty-row"
+EMPTY_ROW = object()
 
 class SequenceEnded(Exception):
     pass
@@ -58,22 +58,20 @@ class Sequencer():
         self._curLine = 0
         self._lineTime = 0
         self._ended = False
-        self._namedRows = {}
 
-    def _add_row(self, newrow, desc):
+    def _add_row(self, newrow, descnum):
+        desc = self._desc._rowdesc[descnum]
         for row in range(len(self._row)):
-            found = True
-            if len(self._row[row]) - 1 == len(newrow):
-                if self._row[row][-1] == desc:
+            if self._row[row][-1] == descnum:
+                if len(newrow) == len(desc):
+                    found = True
                     for item in range(len(newrow)):
                         if self._row[row][item] != newrow[item]:
                             found = False
                             break
-            else:
-                continue
-            if found:
-                return row
-        newrow.append(desc)
+                    if found:
+                        return row
+        newrow.append(descnum)
         self._row.append(newrow)
         return len(self._row) - 1
 
@@ -163,9 +161,8 @@ class Sequencer():
             else:
                 # line with only global changes "~~~ |"
                 columnDesc = self._desc._column[0]
-                rowDesc = self._desc._rowdesc[columnDesc]
                 split = structs[0].split()
-                pos, newrow = self._read_row(split, rowDesc)
+                pos, newrow = self._read_row(split, columnDesc)
                 if len(split) > pos:
                     raise Exception("too many values in column ({} > {})".format(len(split), pos))
                 fullRow.append(newrow)
@@ -200,13 +197,14 @@ class Sequencer():
     def _fix_rows(self):
         for row in self._row:
             desc = self._desc._rowdesc[row[-1]]
-            for i in len(desc):
+            for i in range(len(desc)):
                 if isinstance(desc[i], int) and \
                    isinstance(row[i], str):
                     row[i] = self._namedRows[row[i]]
 
     def _read_file(self, file):
         self._row = list()
+        self._namedRows = {}
         self._pattern = list()
         self._order = list()
         self._initial = self._read_line(file, initial=True)
@@ -228,7 +226,9 @@ class Sequencer():
                 raise IndexError("order refers to pattern out of range")
             self._order.append(int(item))
 
-    def _write_row(self, file, row, desc, initial):
+    def _write_row(self, file, row, initial):
+        desc = self._desc._rowdesc[row[-1]]
+
         changeMask = 0
         if not initial:
             changeBit = 1 << len(desc)
@@ -259,9 +259,7 @@ class Sequencer():
             initial = True
 
         for row in range(len(line)):
-            columnDesc = self._desc._column[row]
-            desc = self._desc._rowdesc[columnDesc]
-            self._write_row(file, self._row[line[row]], desc, initial)
+            self._write_row(file, self._row[line[row]], initial)
 
             if row != len(line) - 1:
                 print("| ", end='', file=file)
@@ -284,28 +282,17 @@ class Sequencer():
             print("{} ".format(order), end='', file=file)
         print(file=file)
 
-    def _get_row(self, desc, row):
-        newRow = list()
-        for i in range(len(desc)):
-            if isinstance(desc[i], int):
-                if row[i] == None:
-                    newRow.append(None)
-                elif row[i] == EMPTY_ROW:
-                    newRow.append(EMPTY_ROW)
-                else:
-                    newRow.append(self._get_row(self._desc._rowdesc[desc[i]], self._row[row[i]]))
-            else:
-                newRow.append(row[i])
-        return newRow
+    def get_row(self, rownum):
+        return self._row[rownum]
 
     def _get_line(self, line):
         newLine = list()
         for i in range(len(line)):
-            desc = self._desc._rowdesc[self._desc._column[i]]
             if line[i] == EMPTY_ROW:
                 newLine.append(None)
             else:
-                newLine.append(self._get_row(desc, self._row[line[i]]))
+                newLine.append(self._row[line[i]])
+        print(newLine)
         return newLine
 
     def set_pattern(self, pattern):
