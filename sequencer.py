@@ -1,6 +1,8 @@
 from sys import stdout
 import copy
 
+#TODO: store channel number with named (or all?) parameter lists and allow calling named parameters on other channels to affect the original channel.
+
 FIELD_TYPE_INT = object()
 FIELD_TYPE_HEX = object()
 FIELD_TYPE_FLOAT = object()
@@ -145,6 +147,8 @@ class Sequencer():
 
         rownum = self._add_row(row, descnum)
         if save != None:
+            if save is in self._namedRows:
+                raise ValueError("Duplicate named row definition: {}".format(save))
             self._namedRows[save] = rownum
         return pos, rownum
 
