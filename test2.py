@@ -226,7 +226,7 @@ def create_filter(freqs, amps, cycles, rate, filt=None):
     length = 0.0
     for i in range(len(freqs)):
         phase.append(0.0)
-        thislength = rate / freqs[i] * (cycles[i] - 0.25)
+        thislength = rate / freqs[i] * cycles[i]
         step.append(TWOPI / (rate / freqs[i]))
         maxval.append(cycles[i] * TWOPI)
         if thislength > length:
@@ -239,15 +239,16 @@ def create_filter(freqs, amps, cycles, rate, filt=None):
     else:
         filt = array.array('f', repeat(0.0, length))
 
-    for i in range(length):
-        for j in range(len(freqs)):
+    for j in range(len(freqs)):
+        filt[0] = 0.0
+        phase[j] = step[j]
+        for i in range(1, length):
             if phase[j] >= maxval[j]:
-                continue
-            else:
-                filt[i] += math.cos(phase[j]) / \
-                           (phase[j] / TWOPI + 1.0) * \
-                           amps[j]
-                phase[j] += step[j]
+                break
+            filt[i] += math.sin(phase[j]) / \
+                       (phase[j] / TWOPI) * \
+                       amps[j]
+            phase[j] += step[j]
 
     return filt, length
 
@@ -382,9 +383,7 @@ def main():
     #filt = array.array('f', (1.0, 0.0))
     #flen = 2
     #fscale = 1.0
-    filt = aud.buffer(cg.SYNTH_TYPE_F32,
-                      array.array('f', filt),
-                      flen * (SLICES - START))
+    filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, flen * (SLICES - START))
 
     aud.enabled(True)
 

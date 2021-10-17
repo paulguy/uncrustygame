@@ -147,13 +147,16 @@ class Sequencer():
 
         rownum = self._add_row(row, descnum)
         if save != None:
-            if save is in self._namedRows:
+            if save in self._namedRows:
                 raise ValueError("Duplicate named row definition: {}".format(save))
             self._namedRows[save] = rownum
         return pos, rownum
 
     def _read_line(self, file, initial=False):
-        structs = file.readline().split('|')
+        try:
+            structs = file.readline().split('|')
+        except:
+            raise Exception("Unexpected end of file or error reading file.")
 
         fullRow = list()
         # allow global only or totally empty lines
@@ -173,8 +176,9 @@ class Sequencer():
                 for i in range(1, self._desc.columns):
                     fullRow.append(EMPTY_ROW)
         else:
+            skip = 0
             for i in range(len(structs)):
-                columnDesc = self._desc._column[i]
+                columnDesc = self._desc._column[i + skip]
                 split = structs[i].split()
                 first = 0
                 try:
@@ -184,8 +188,12 @@ class Sequencer():
                 if not initial and first < 0:
                     if len(split) > 1:
                         raise Exception("negative column with extra values")
-                    for j in range(-int(split[0])):
+                    first = -first
+                    if i + skip + first - 1 >= len(self._desc._column):
+                        raise Exception("skipped columns would go beyond column range")
+                    for j in range(first):
                         fullRow.append(EMPTY_ROW)
+                    skip += first - 1
                     continue
                 pos, newrow = self._read_row(split, columnDesc, initial=initial)
                 if len(split) > pos:
@@ -213,9 +221,15 @@ class Sequencer():
         self._order = list()
         self._initial = self._read_line(file, initial=True)
 
-        patterns = int(file.readline())
+        try:
+            patterns = int(file.readline())
+        except:
+            raise Exception("Unexpected end of file or error reading file.")
         for i in range(patterns):
-            patlen = int(file.readline())
+            try:
+                patlen = int(file.readline())
+            except:
+                raise Exception("Unexpected end of file or error reading file.")
             pattern = list()
             for j in range(patlen):
                 pattern.append(self._read_line(file))
@@ -223,7 +237,10 @@ class Sequencer():
         self._fix_rows()
         print(self._row)
 
-        ordersData = file.readline().split()
+        try:
+            ordersData = file.readline().split()
+        except:
+            raise Exception("Unexpected end of file or error reading file.")
         for item in ordersData:
             order = int(item)
             if order < 0 or order > len(self._pattern) - 1:
@@ -287,7 +304,7 @@ class Sequencer():
         print(file=file)
 
     def get_row(self, rownum):
-        return self._row[rownum]
+        return self._row[rownum][:-1]
 
     def _get_line(self, line):
         newLine = list()
@@ -295,8 +312,7 @@ class Sequencer():
             if line[i] == EMPTY_ROW:
                 newLine.append(None)
             else:
-                newLine.append(self._row[line[i]])
-        print(newLine)
+                newLine.append(self._row[line[i]][:-1])
         return newLine
 
     def set_pattern(self, pattern):

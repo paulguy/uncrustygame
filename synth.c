@@ -1581,7 +1581,12 @@ int synth_set_player_output_buffer_pos(Synth *s,
     if(outPos < 0) {
         outPos = bufsize + outPos;
     }
-    if(outPos < 0 || (unsigned int)outPos >= bufsize) {
+    /* if bufsize == 0, that means it's an output buffer which is full, allow
+     * setting the output position to 0 in this case, because it's a reasonable
+     * thing to want to do at runtime, and it's hopefully impossible to create
+     * an issue doing this since a full buffer won't be overfilled anyway.
+     * Normal buffers can't have a bufsize of 0. */
+    if(outPos < 0 || ((unsigned int)outPos >= bufsize && bufsize > 0 && outPos > 0)) {
         LOG_PRINTF(s, "Player %u output position past end of buffer (%u > %u).\n", index, outPos, bufsize);
         return(-1);
     }
@@ -2613,8 +2618,9 @@ int synth_set_filter_output_buffer_pos(Synth *s,
     if(outPos < 0) {
         outPos = bufsize + outPos;
     }
-    if(outPos < 0 || (unsigned int)outPos >= bufsize) {
-        LOG_PRINTF(s, "Output position past end of buffer.\n");
+    /* see note in synth_set_player_output_buffer_pos */
+    if(outPos < 0 || ((unsigned int)outPos >= bufsize && bufsize > 0 && outPos > 0)) {
+        LOG_PRINTF(s, "Filter %u output position past end of buffer (%u > %u).\n", index, outPos, bufsize);
         return(-1);
     }
     f->outPos = outPos;

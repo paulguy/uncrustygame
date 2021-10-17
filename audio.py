@@ -702,7 +702,7 @@ class AudioSequencer():
             else:
                 flt[5] = self._seq.get_row(status[18])
         if status[19] != None:
-            if status[18] == seq.EMPTY_ROW:
+            if status[19] == seq.EMPTY_ROW:
                 flt[6] = None
             else:
                 flt[6] = self._seq.get_row(status[19])

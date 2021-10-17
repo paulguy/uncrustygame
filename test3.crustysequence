@@ -4,319 +4,33 @@ include macros.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
 macro SQRBUF=2
-buffer triangle.wav
+buffer saw.wav
 macro SLOPEBUF=3
+buffer external
+macro BENDUPBUF=4
+buffer external
+macro BENDDNBUF=5
+buffer external
+macro NOISEBUF=6
+buffer external
+macro FILTERBUF=7
 buffer external
 macro ENV1BUF=4
 buffer MAXREQ
 macro OUT1BUF=5
 buffer MAXREQ
-macro ENV2BUF=6
-buffer MAXREQ
-macro OUT2BUF=7
-buffer MAXREQ
-macro ENV3BUF=8
-buffer MAXREQ
-macro OUT3BUF=9
-buffer MAXREQ
-macro ENV4BUF=10
-buffer MAXREQ
-macro OUT4BUF=11
-buffer MAXREQ
-macro ENV5BUF=12
-buffer MAXREQ
-macro OUT5BUF=13
-buffer MAXREQ
-macro ENV6BUF=14
-buffer MAXREQ
-macro OUT6BUF=15
-buffer MAXREQ
 ;string 1
 channel player
 channel player
+channel filter
 channel player
 channel player
-;string 2
-channel player
-channel player
-channel player
-channel player
-;string 3
-channel player
-channel player
-channel player
-channel player
-;string 4
-channel player
-channel player
-channel player
-channel player
-;string 5
-channel player
-channel player
-channel player
-channel player
-;string 6
-channel player
-channel player
-channel player
-channel player
-macro MUTEPLUCK NOTE=START_ENV 0.25 1000.0 1 110.0 9 1.0 1000 | PLAY_TONE NOTE 1010 | MONO_MIX 1010
-macro SOFTPLUCK NOTE=START_ENV 0.1 1000.0 1 2.0 250 0.65 1000 | PLAY_TONE NOTE 1251 | MONO_MIX 1251
-macro NORMPLUCK NOTE=START_ENV 0.2 1000.0 1 2.0 250 0.65 1000 | PLAY_TONE NOTE 1251 | MONO_MIX 1251
-macro HARDPLUCK NOTE=START_ENV 0.4 1000.0 1 2.0 250 0.65 1000 | PLAY_TONE NOTE 1251 | MONO_MIX 1251
-macro HAMMERON NOTE=START_ENV 0.1 10.0 100 2.0 250 0.65 1000 | PLAY_TONE NOTE 1350 | MONO_MIX 1350
+macro NORMPLUCK NOTE=START_ENV 1.0 1000.0 1 2.0 250 0.65 1000 | PLAY_TONE NOTE 1251 | 40 1251 | MONO_MIX 1251
 sequence
-250 | GEN_ENV_CHANNEL SLOPEBUF ENV1BUF | TONE_ENV_CHANNEL SQRBUF ENV1BUF OUT1BUF | MONO_TO_STEREO_CHAN OUT1BUF | GEN_ENV_CHANNEL SLOPEBUF ENV2BUF | TONE_ENV_CHANNEL SQRBUF ENV2BUF OUT2BUF | MONO_TO_STEREO_CHAN OUT2BUF | GEN_ENV_CHANNEL SLOPEBUF ENV3BUF | TONE_ENV_CHANNEL SQRBUF ENV3BUF OUT3BUF | MONO_TO_STEREO_CHAN OUT3BUF | GEN_ENV_CHANNEL SLOPEBUF ENV4BUF | TONE_ENV_CHANNEL SQRBUF ENV4BUF OUT4BUF | MONO_TO_STEREO_CHAN OUT4BUF | GEN_ENV_CHANNEL SLOPEBUF ENV5BUF | TONE_ENV_CHANNEL SQRBUF ENV5BUF OUT5BUF | MONO_TO_STEREO_CHAN OUT5BUF | GEN_ENV_CHANNEL SLOPEBUF ENV6BUF | TONE_ENV_CHANNEL SQRBUF ENV6BUF OUT6BUF | MONO_TO_STEREO_CHAN OUT6BUF
-5
-44
-1 15    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 260 |
-1 15 | -20 | MUTEPLUCK F#4
-0 |    -16 | MUTEPLUCK C#4 | -4
-0 |    -12 | MUTEPLUCK F#3 | -8
-0 |     -8 | MUTEPLUCK D#3 | -12
-0 |     -4 | MUTEPLUCK A#3 | -16
-0          | MUTEPLUCK D#2 | -20
-1 40 |
-1 15    | NORMPLUCK F#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK C#3 | -12
-0 | -12 | NORMPLUCK A#4 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | HARDPLUCK F#4
-1 260 |
-1 15 | -20 | MUTEPLUCK F#4
-0 | -16 | MUTEPLUCK C#4 | -4
-0 | -12 | MUTEPLUCK A#4 | -8
-0 | -8 | MUTEPLUCK C#3 | -12
-0 | -4 | MUTEPLUCK A#3 | -16
-0 | MUTEPLUCK F#2 | -20
-1 40 |
-1 15 | -8 | NORMPLUCK C#3 | -12
-0 |   -12 | NORMPLUCK A4  | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK F4
-1 290 |
-1 20 | -20 | MUTEPLUCK F4
-0 |    -16 | MUTEPLUCK C#4 | -4
-0 |    -12 | MUTEPLUCK A4  | -8
-0 |     -8 | MUTEPLUCK C#3 | -12
-1 15 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#4 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 400 |
-25
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 400 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 150 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK C#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 750 | -8 | HAMMERON D#3 | -12
-122
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 400 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 150 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 150 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 400 |
-1 20 | -20 | NORMPLUCK F#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 150 |
-1 20    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 880 |
-1 20    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 380 |
-1 20    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 380 |
-1 20 | -20 | NORMPLUCK F#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK A#3 | -16
-0          | NORMPLUCK D#2 | -20
-1 130 |
-1 20    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 130 |
-1 20    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 380 |
-1 20    | NORMPLUCK D#2 | -20
-0 |  -4 | NORMPLUCK A#3 | -16
-0 |  -8 | NORMPLUCK D#3 | -12
-0 | -12 | NORMPLUCK F#3 | -8
-0 | -16 | NORMPLUCK C#4 | -4
-0 | -20 | NORMPLUCK F#4
-1 130 |
-1 20 | -20 | NORMPLUCK F#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK A#3 | -16
-0          | NORMPLUCK D#2 | -20
-1 380 |
-1 20 | -20 | NORMPLUCK F#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK A#3 | -16
-0          | NORMPLUCK D#2 | -20
-1 130 |
-1 20 | -8 | NORMPLUCK C#3 | -12
-0 |   -12 | NORMPLUCK G#3 | -8
-0 |   -16 | NORMPLUCK D#4 | -4
-0 |   -20 | NORMPLUCK F4
-1 420 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 900 |
-30
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 400 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 400 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK C#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 400 |
-24
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 400 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK D#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-1 20 | -20 | NORMPLUCK D#4
-0 |    -16 | NORMPLUCK C#4 | -4
-0 |    -12 | NORMPLUCK F#3 | -8
-0 |     -8 | NORMPLUCK D#3 | -12
-0 |     -4 | NORMPLUCK B3  | -16
-1 400 |
-1 20 | -4 | NORMPLUCK B3  | -16
-0 |    -8 | NORMPLUCK C#3 | -12
-0 |   -12 | NORMPLUCK F#3 | -8
-0 |   -16 | NORMPLUCK C#4 | -4
-0 |   -20 | NORMPLUCK D#4
-1 150 |
-0 1 1 2 1 3 2 1 1 2 4
+0 | GEN_ENV_CHANNEL SLOPEBUF ENV1BUF | TONE_ENV_CHANNEL SQRBUF ENV1BUF OUT1BUF | FILTER_CHANNEL OUT1BUF FILTERBUF FILTER_SIZE OUT1BUF FILTER_SLICES ENV1BUF | MONO_TO_STEREO_CHAN OUT1BUF
+2
+1
+0 | -2 | 200 0.4 | -2
+1
+1 2000 | NORMPLUCK C3
+0 1
