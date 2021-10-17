@@ -982,10 +982,10 @@ class AudioSequencer():
                     channel[0][2].silence(channel[1], got)
                     if got == 0:
                         if lastgot == 0:
-                            channel[1] = 0
+                            channel[2] = 0
                             break
                         changed = False
-                        if channel[1] == 0:
+                        if channel[2] == 0:
                             if channel[3] != None:
                                 upd = channel[3]
                                 if self._trace:
@@ -1000,11 +1000,12 @@ class AudioSequencer():
                                 self._update_silence(channel, upd)
                                 changed = True
                         if not changed:
-                            channel[1] = 0
+                            channel[2] = 0
                             break
                     lastgot = got
                     time -= got
-                    channel[1] -= got
+                    channel[1] += got
+                    channel[2] -= got
             i += 1
 
     def run(self, needed):
