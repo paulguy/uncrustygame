@@ -277,12 +277,16 @@ class AudioSequencer():
                 pass
             seqDesc = seq.SequenceDescription()
             silenceDesc = seqDesc.add_row_description()
-            # output buffer 0x4
+            # output buffer     0x10
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-            # start         0x2
+            # start pos         0x08
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-            # length        0x1
+            # run length        0x04
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
+            # stopped requested 0x02
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_ROW, rowDesc=silenceDesc)
+            # stopped outbuffer 0x01
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_ROW, rowDesc=silenceDesc)
             playerDesc = seqDesc.add_row_description()
             # input buffer                      0x200000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
@@ -477,12 +481,24 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
+            else:
+                raise ValueError("Silence can't be applied to output channels")
             b = self._buffer[buf]
             silence[0] = b[2]
         if status[1] != None:
             silence[1] = status[1] * self._samplesms
         if status[2] != None:
             silence[2] = status[2] * self._samplesms
+        if status[3] != None:
+            if status[3] == seq.EMPTY_ROW:
+                silence[3] = None
+            else:
+                silence[3] = self._seq.get_row(status[3])
+        if status[4] != None:
+            if status[4] == seq.EMPTY_ROW:
+                silence[4] = None
+            else:
+                silence[4] = self._seq.get_row(status[4])
 
     def _update_player(self, player, status):
         p = player[0]
@@ -752,14 +768,6 @@ class AudioSequencer():
                 self._localChannels.append(flt)
         if self._trace:
             print(self._localChannels)
-        init = None
-        try:
-            init = self._tag['init']
-        except KeyError:
-            pass
-        if init != None:
-            self._seq.set_pattern(init)
-            self.run(-1)
         self._loaded = True
         self._outpos = 0
         if self._trace:
@@ -957,37 +965,59 @@ class AudioSequencer():
                     channel[1] -= got
                 self._advance_filter_pos(channel, time, needed)
             else: # silence
+                time = reqtime
                 if line != None and line[i] != None:
                     if self._trace:
                         print(i, end=' ')
                         print(line[i])
-                    self._update_silence(channel, line[i])
-                    if channel[2] > 0:
-                        channel[0][2].silence(channel[1], channel[2])
-                        channel[2] = 0
+                    self._update_filter(channel, line[i])
+                # simulate in-time synth functionality
+                while time > 0:
+                    get = time
+                    if channel[2] < get:
+                        get = channel[2]
+                    got = channel[0][2].size() - channel[1]
+                    if got < get:
+                        get = got
+                    channel[0][2].silence(channel[1], got)
+                    if got == 0:
+                        if lastgot == 0:
+                            channel[1] = 0
+                            break
+                        changed = False
+                        if channel[1] == 0:
+                            if channel[3] != None:
+                                upd = channel[3]
+                                if self._trace:
+                                    print(upd)
+                                self._update_silence(channel, upd)
+                                changed = True
+                        if get > 0:
+                            if channel[4] != None:
+                                upd = channel[4]
+                                if self._trace:
+                                    print(upd)
+                                self._update_silence(channel, upd)
+                                changed = True
+                        if not changed:
+                            channel[1] = 0
+                            break
+                    lastgot = got
+                    time -= got
+                    channel[1] -= got
             i += 1
 
     def run(self, needed):
         if self._ended:
             return
 
-        if needed < 0:
-            while True:
-                line = None
-                time = 0
-                try:
-                    # try run for some absurd amount of time
-                    time, line = self._seq.advance(self._maxreq)
-                except seq.SequenceEnded:
-                    break
-                self._run_channels(time, line)
-        elif needed == 0:
+        if needed == 0:
             try:
                 _, line = self._seq.advance(0)
             except seq.SequenceEnded:
                 self._ended = True
             self._run_channels(0, line)
-        else:
+        elif needed > 0:
             while needed > 0:
                 get = min(needed, self._maxreq)
                 try:
@@ -997,6 +1027,8 @@ class AudioSequencer():
                     break
                 self._run_channels(time * self._samplesms, line, needed * self._samplesms)
                 needed -= time
+        else:
+            raise ValueError("needed must be a positive value")
 
     def get_tag(self, name):
         return self._tag[name]

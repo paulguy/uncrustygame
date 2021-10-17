@@ -292,19 +292,29 @@ original      │ replacement
             </thead>
             <tbody>
                 <tr>
-                    <td>4</td>
+                    <td>10</td>
                     <td>Output Buffer</td>
                     <td>The buffer which will have silence applied to it.</td>
                 </tr>
                 <tr>
-                    <td>2</td>
-                    <td>Start Position</td>
+                    <td>08</td>
+                    <td>Output Buffer Position</td>
                     <td>The position where silence will start.</td>
                 </tr>
                 <tr>
-                    <td>1</td>
-                    <td>Length</td>
+                    <td>04</td>
+                    <td>Run Length</td>
                     <td>The length of the silence.  This will trigger the channel to actually process anything.  It has no affect as an initial value and will be reset to 0 on completion.</td>
+                </tr>
+                <tr>
+                    <td>02</td>
+                    <td>Requested Time Met</td>
+                    <td>A parameter list applied when the amount of output time requested by Run Length has been completed.</td>
+                </tr>
+                <tr>
+                    <td>01</td>
+                    <td>Output Buffer Filled</td>
+                    <td>Applied when the output buffer has reached its and and has been filled.</td>
                 </tr>
             </tbody>
         </table>
