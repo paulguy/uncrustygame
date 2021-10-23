@@ -3,19 +3,22 @@ import crustygame as cg
 import array
 import time
 import random
-import math
 from itertools import islice, count, repeat
 import sequencer as seq
 import audio
 from traceback import print_tb
 from sys import argv
+import numpy
+from scipy import signal
 
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"
-START = 40
-SLICES = 2000
 
-TWOPI = 2.0 * math.pi
+FILTER_TAPS = 512
+BASE_FREQ = 100
+FILTERS_PER_DECADE = 100
+DECADES = 2
+SLICES = FILTERS_PER_DECADE * DECADES
 
 def _driver_key(info):
     info = info[1]
@@ -126,23 +129,23 @@ def make_color(r, g, b, a):
            (int(a) << cg.TILEMAP_ASHIFT))
 
 def color_from_rad(rad, cmin, cmax):
-    if rad >= 0 and rad < (math.pi * 2 / 6):
-        rad = (rad * (1 / (math.pi * 2 / 6)) * (cmax - cmin)) + cmin
+    if rad >= 0 and rad < (numpy.pi * 2 / 6):
+        rad = (rad * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
         return make_color(cmax, rad, cmin, 255)
-    elif rad >= (math.pi * 2 / 6) and rad < (math.pi * 2 / 6 * 2):
-        rad = cmax - ((rad - (math.pi * 2 / 6)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin))
+    elif rad >= (numpy.pi * 2 / 6) and rad < (numpy.pi * 2 / 6 * 2):
+        rad = cmax - ((rad - (numpy.pi * 2 / 6)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
         return make_color(rad, cmax, cmin, 255)
-    elif rad >= (math.pi * 2 / 6 * 2) and rad < (math.pi * 2 / 6 * 3):
-        rad = ((rad - (math.pi * 2 / 6 * 2)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin)) + cmin
+    elif rad >= (numpy.pi * 2 / 6 * 2) and rad < (numpy.pi * 2 / 6 * 3):
+        rad = ((rad - (numpy.pi * 2 / 6 * 2)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
         return make_color(cmin, cmax, rad, 255)
-    elif rad >= (math.pi * 2 / 6 * 3) and rad < (math.pi * 2 / 6 * 4):
-        rad = cmax - ((rad - (math.pi * 2 / 6 * 3)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin))
+    elif rad >= (numpy.pi * 2 / 6 * 3) and rad < (numpy.pi * 2 / 6 * 4):
+        rad = cmax - ((rad - (numpy.pi * 2 / 6 * 3)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
         return make_color(cmin, rad, cmax, 255)
-    elif rad >= (math.pi * 2 / 6 * 4) and rad < (math.pi * 2 / 6 * 5):
-        rad = ((rad - (math.pi * 2 / 6 * 4)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin)) + cmin
+    elif rad >= (numpy.pi * 2 / 6 * 4) and rad < (numpy.pi * 2 / 6 * 5):
+        rad = ((rad - (numpy.pi * 2 / 6 * 4)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
         return make_color(rad, cmin, cmax, 255)
 
-    rad = cmax - ((rad - (math.pi * 2 / 6 * 5)) * (1 / (math.pi * 2 / 6)) * (cmax - cmin))
+    rad = cmax - ((rad - (numpy.pi * 2 / 6 * 5)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
     return make_color(cmax, cmin, rad, 255)
 
 def clear_frame(ll, r, g, b):
@@ -186,7 +189,7 @@ class LogSlope():
         return self
 
     def __next__(self):
-        val = math.sqrt(self._val * self._step)
+        val = numpy.sqrt(self._val * self._step)
         if self._val == self._num:
             raise StopIteration()
         self._val += 1
@@ -218,47 +221,6 @@ class RandomNoise():
 def create_random_noise(low, high, num):
     noise = array.array('f', RandomNoise(low, high, num))
     return(noise)
-
-def create_filter(freqs, amps, cycles, rate, filt=None):
-    phase = list()
-    step = list()
-    maxval = list()
-    length = 0.0
-    for i in range(len(freqs)):
-        phase.append(0.0)
-        thislength = rate / freqs[i] * cycles[i]
-        step.append(TWOPI / (rate / freqs[i]))
-        maxval.append(cycles[i] * TWOPI)
-        if thislength > length:
-            length = thislength
-    length = int(length)
-
-    if filt != None:
-        if len(filt) < length:
-            raise ValueError("Filter length less than length needed.")
-    else:
-        filt = array.array('f', repeat(0.0, length))
-
-    for j in range(len(freqs)):
-        filt[0] = 0.0
-        phase[j] = step[j]
-        for i in range(1, length):
-            if phase[j] >= maxval[j]:
-                break
-            filt[i] += math.sin(phase[j]) / \
-                       (phase[j] / TWOPI) * \
-                       amps[j]
-            phase[j] += step[j]
-
-    return filt, length
-
-def scale_filter(filt, start, count):
-    allvals = 0.0
-    for i in range(start, start + count):
-        allvals += math.fabs(filt[i])
-
-    for i in range(start, start + count):
-        filt[i] /= allvals
 
 
 def log_cb_return(priv, string):
@@ -368,22 +330,17 @@ def main():
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
                        array.array('f', create_random_noise(-1.0, 1.0, rate)),
                        rate)
-    filt, flen = \
-        create_filter((float(START),), (1.0,), (4,), rate)
-    for i in range(1, SLICES - START):
-        thisfilt = array.array('f', filt[(i-1)*flen:])
-        create_filter((float(START + i) * 8.0,), (1.0,), (4,), rate, thisfilt)
-        filt.extend(thisfilt)
 
-    print(filt[(SLICES - START - 1)*flen])
-    for i in range(SLICES - START):
-        scale_filter(filt, i*flen, flen)
-    print(filt[(SLICES - START - 1)*flen])
+    filt = numpy.zeros(SLICES * FILTER_TAPS // 2, numpy.float32)
+    for dec in range(DECADES):
+        for i in range(FILTERS_PER_DECADE):
+            freq = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
+            pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS // 2) + (i * FILTER_TAPS // 2)
+            filt[pos:pos + (FILTER_TAPS // 2)] = \
+                signal.remez(FILTER_TAPS, [0, freq, freq * 2, rate / 2], [1, 0], fs=rate)[FILTER_TAPS//2:]
+    print(len(filt))
 
-    #filt = array.array('f', (1.0, 0.0))
-    #flen = 2
-    #fscale = 1.0
-    filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, flen * (SLICES - START))
+    filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
 
     aud.enabled(True)
 
@@ -433,8 +390,8 @@ def main():
                         for s in seq:
                             aud.del_sequence(s)
                         seq = None
-                    macros = (("FILTER_SIZE", (), str(flen)),
-                              ("FILTER_SLICES", (), str(SLICES - START)))
+                    macros = (("FILTER_SIZE", (), str(FILTER_TAPS//2)),
+                              ("FILTER_SLICES", (), str(SLICES)))
                     # load first sequence
                     seq = []
                     try:
@@ -595,9 +552,9 @@ def main():
             x2speed = random.uniform(-64.0, 64.0)
             y2speed = random.uniform(-64.0, 64.0)
 
-        colorrad = colorrad + (math.pi * timetaken)
-        if colorrad >= math.pi * 2:
-            colorrad = colorrad - (math.pi * 2)
+        colorrad = colorrad + (numpy.pi * timetaken)
+        if colorrad >= numpy.pi * 2:
+            colorrad = colorrad - (numpy.pi * 2)
         l1.colormod(color_from_rad(colorrad, 0, 255))
 
         clear_frame(ll, 32, 128, 192)
