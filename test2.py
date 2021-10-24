@@ -14,11 +14,13 @@ from scipy import signal
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"
 
-FILTER_TAPS = 512
-BASE_FREQ = 100
+FILTER_TAPS = 1024
+BASE_FREQ = 20
 FILTERS_PER_DECADE = 100
-DECADES = 2
+DECADES = 3
 SLICES = FILTERS_PER_DECADE * DECADES
+MIN_TRANS_WIDTH = 80
+TRANS_WIDTH_DIV = 500
 
 def _driver_key(info):
     info = info[1]
@@ -222,6 +224,43 @@ def create_random_noise(low, high, num):
     noise = array.array('f', RandomNoise(low, high, num))
     return(noise)
 
+def load_audio(aud):
+    rate = aud.rate
+    envslope = aud.buffer(cg.SYNTH_TYPE_F32,
+                          array.array('f', create_sqrt_slope(0.0, 1.0, rate)),
+                          rate)
+    benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
+                               array.array('f', create_sqrt_slope(1.0, 0.5, rate)),
+                               rate)
+    bendupslope = aud.buffer(cg.SYNTH_TYPE_F32,
+                             array.array('f', create_sqrt_slope(1.0, 2.0, rate)),
+                             rate)
+    noise = aud.buffer(cg.SYNTH_TYPE_F32,
+                       array.array('f', create_random_noise(-1.0, 1.0, rate)),
+                       rate)
+
+    try:
+        filt = numpy.zeros(SLICES * FILTER_TAPS // 2, numpy.float32)
+        for dec in range(DECADES):
+            for i in range(FILTERS_PER_DECADE):
+                mul = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
+                freq = BASE_FREQ * mul
+                transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
+                print("{} {}".format(freq, transwidth), end='\r')
+                pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS // 2) + (i * FILTER_TAPS // 2)
+                filt[pos:pos + (FILTER_TAPS // 2)] = \
+                    signal.remez(FILTER_TAPS,
+                                 [0, freq, freq + transwidth, rate / 2],
+                                 [1, 0], fs=rate)[FILTER_TAPS//2:]
+    except Exception as e:
+        raise e
+    finally:
+        print()
+
+    filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
+
+    return envslope, benddownslope, bendupslope, noise, filt
+
 
 def log_cb_return(priv, string):
     print(string, end='')
@@ -317,31 +356,7 @@ def main():
     colorrad = 0.0
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, True)
-    rate = aud.rate
-    envslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                          array.array('f', create_sqrt_slope(0.0, 1.0, rate)),
-                          rate)
-    benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                               array.array('f', create_sqrt_slope(1.0, 0.5, rate)),
-                               rate)
-    bendupslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                             array.array('f', create_sqrt_slope(1.0, 2.0, rate)),
-                             rate)
-    noise = aud.buffer(cg.SYNTH_TYPE_F32,
-                       array.array('f', create_random_noise(-1.0, 1.0, rate)),
-                       rate)
-
-    filt = numpy.zeros(SLICES * FILTER_TAPS // 2, numpy.float32)
-    for dec in range(DECADES):
-        for i in range(FILTERS_PER_DECADE):
-            freq = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
-            pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS // 2) + (i * FILTER_TAPS // 2)
-            filt[pos:pos + (FILTER_TAPS // 2)] = \
-                signal.remez(FILTER_TAPS, [0, freq, freq * 2, rate / 2], [1, 0], fs=rate)[FILTER_TAPS//2:]
-    print(len(filt))
-
-    filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
-
+    audbuffers = load_audio(aud)
     aud.enabled(True)
 
     wavout = False
@@ -397,8 +412,7 @@ def main():
                     try:
                         with open(seqname, "r") as seqfile:
                             seq.append(audio.AudioSequencer(seqfile,
-                                       [envslope, benddownslope, bendupslope, noise, filt],
-                                       macros, trace=True))
+                                       audbuffers, macros, trace=True))
                     except Exception as e:
                         aud.print_full_stats()
                         print_tb(e.__traceback__)
