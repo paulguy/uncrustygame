@@ -224,6 +224,49 @@ def create_random_noise(low, high, num):
     noise = array.array('f', RandomNoise(low, high, num))
     return(noise)
 
+def make_filter(rate):
+    filt = None
+    fileexists = False
+
+    filename = "{}t{}b{}fd{}d{}mtw{}twd{}r.npy".format(FILTER_TAPS, BASE_FREQ, FILTERS_PER_DECADE, DECADES, MIN_TRANS_WIDTH, TRANS_WIDTH_DIV, rate)
+
+    try:
+        filt = numpy.load(filename, allow_pickle=False)
+        fileexists = True
+        print("Filters loaded from file.")
+    except IOError as e:
+        pass
+
+    if filt is None:
+        print("Generating filters...")
+        try:
+            filt = numpy.zeros(SLICES * FILTER_TAPS // 2, numpy.float32)
+            maxval = DECADES * FILTERS_PER_DECADE
+            for dec in range(DECADES):
+                for i in range(FILTERS_PER_DECADE):
+                    mul = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
+                    freq = BASE_FREQ * mul
+                    transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
+                    pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS // 2) + (i * FILTER_TAPS // 2)
+                    filt[pos:pos + (FILTER_TAPS // 2)] = \
+                        signal.remez(FILTER_TAPS,
+                                     [0, freq, freq + transwidth, rate / 2],
+                                     [1, 0], fs=rate)[FILTER_TAPS//2:]
+                    print("{} / {}".format(dec * FILTERS_PER_DECADE + i + 1, maxval), end='\r')
+        except Exception as e:
+            raise e
+        finally:
+            print()
+
+    if not fileexists:
+        print("Saving filter to file...")
+        try:
+            numpy.save(filename, filt, allow_pickle=False)
+        except IOError:
+            print("Saving failed.")
+
+    return(filt)
+
 def load_audio(aud):
     rate = aud.rate
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
@@ -239,24 +282,7 @@ def load_audio(aud):
                        array.array('f', create_random_noise(-1.0, 1.0, rate)),
                        rate)
 
-    try:
-        filt = numpy.zeros(SLICES * FILTER_TAPS // 2, numpy.float32)
-        for dec in range(DECADES):
-            for i in range(FILTERS_PER_DECADE):
-                mul = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
-                freq = BASE_FREQ * mul
-                transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
-                print("{} {}".format(freq, transwidth), end='\r')
-                pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS // 2) + (i * FILTER_TAPS // 2)
-                filt[pos:pos + (FILTER_TAPS // 2)] = \
-                    signal.remez(FILTER_TAPS,
-                                 [0, freq, freq + transwidth, rate / 2],
-                                 [1, 0], fs=rate)[FILTER_TAPS//2:]
-    except Exception as e:
-        raise e
-    finally:
-        print()
-
+    filt = make_filter(rate)
     filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
 
     return envslope, benddownslope, bendupslope, noise, filt
