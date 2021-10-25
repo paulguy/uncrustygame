@@ -11,6 +11,7 @@ START_ENV _BASE_VOL _ATK_SPD _ATK_LEN _DKY_SPD _DKY_LEN _SUS_SPD _MAX_SUS=112068
    102028 0.0 0.0 0 0 \ ; input buffer end was reached, do silence
   0 \ ; clear input buffer reached behavior because if attack reaches its peak at the requested time, both behaviors will trigger 
  102000 -1.0 0.0 ; input buffer reached end before ATK_LEN, hold
-REL_ENV _REL_SPD _MAX_REL=2068 -_REL_SPD _MAX_REL 0 102028 0.0 0.0 0 0
+REL_ENV _REL_SPD _MAX_REL=2068 -_REL_SPD _MAX_REL 0 \
+ 102008 0.0 0.0 0
 FILTER_CHANNEL _INB _FILTB _FILTSIZE _OUTB _SLICES _SLICEBUF=_INB 0 _OUTB 0 _FILTB 0 _SLICES 0 _SLICEBUF SYNTH_AUTO_SOURCE SYNTH_OUTPUT_REPLACE 1.0 _INB SYNTH_AUTO_CONSTANT 0 0 20000 0 80000 0 0 1000 _SLICEBUF _FILTSIZE
 ; vim: textwidth=0

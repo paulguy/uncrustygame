@@ -201,8 +201,7 @@ class Sequencer():
                 fullRow.append(newrow)
 
         if len(fullRow) != self._desc.columns:
-            print(fullRow)
-            raise Exception("wrong number of columns in file ({} != {})".format(len(structs), self._desc.columns))
+            raise Exception("wrong number of columns in file ({} != {})".format(len(fullRow), self._desc.columns))
 
         return fullRow
 

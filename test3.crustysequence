@@ -4,7 +4,7 @@ include macros.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
 macro SQRBUF=2
-buffer saw.wav
+buffer triangle.wav
 macro SLOPEBUF=3
 buffer external
 macro BENDUPBUF=4
@@ -15,22 +15,118 @@ macro NOISEBUF=6
 buffer external
 macro FILTERBUF=7
 buffer external
-macro ENV1BUF=4
-buffer MAXREQ
-macro OUT1BUF=5
-buffer MAXREQ
 ;string 1
+macro ENV1BUF=8
+buffer MAXREQ
+macro OUTN1BUF=9
+buffer MAXREQ
+macro OUTT1BUF=10
+buffer MAXREQ
 channel player
 channel player
 channel filter
 channel player
 channel player
-macro NORMPLUCK NOTE=START_ENV 1.0 1000.0 1 2.0 250 0.65 1000 | PLAY_TONE NOTE 1251 | 40 1251 | MONO_MIX 1251
+channel filter
+channel player
+channel player
+;string 2
+macro ENV2BUF=11
+buffer MAXREQ
+macro OUTN2BUF=12
+buffer MAXREQ
+macro OUTT2BUF=13
+buffer MAXREQ
+channel player
+channel player
+channel filter
+channel player
+channel player
+channel filter
+channel player
+channel player
+;string 3
+macro ENV3BUF=14
+buffer MAXREQ
+macro OUTN3BUF=15
+buffer MAXREQ
+macro OUTT3BUF=16
+buffer MAXREQ
+channel player
+channel player
+channel filter
+channel player
+channel player
+channel filter
+channel player
+channel player
+;string 4
+macro ENV4BUF=17
+buffer MAXREQ
+macro OUTN4BUF=18
+buffer MAXREQ
+macro OUTT4BUF=19
+buffer MAXREQ
+channel player
+channel player
+channel filter
+channel player
+channel player
+channel filter
+channel player
+channel player
+;string 5
+macro ENV5BUF=20
+buffer MAXREQ
+macro OUTN5BUF=21
+buffer MAXREQ
+macro OUTT5BUF=22
+buffer MAXREQ
+channel player
+channel player
+channel filter
+channel player
+channel player
+channel filter
+channel player
+channel player
+;string 6
+macro ENV6BUF=23
+buffer MAXREQ
+macro OUTN6BUF=24
+buffer MAXREQ
+macro OUTT6BUF=25
+buffer MAXREQ
+channel player
+channel player
+channel filter
+channel player
+channel player
+channel filter
+channel player
+channel player
+macro ENV_OSC_FILT ENVBUF TONEBUF INTBUF OUTBUF=GEN_ENV_CHANNEL SLOPEBUF ENVBUF | TONE_ENV_CHANNEL TONEBUF ENVBUF INTBUF | FILTER_CHANNEL INTBUF FILTERBUF FILTER_SIZE OUTBUF FILTER_SLICES ENVBUF
+macro PLUCKCHAN ENVBUF INTBUF OUTBUF=ENV_OSC_FILT ENVBUF NOISEBUF OUTBUF OUTBUF | ENV_OSC_FILT ENVBUF SQRBUF INTBUF OUTBUF | MONO_TO_STEREO_CHAN OUTBUF
+macro NORMPLUCK NOTE=START_ENV 1.0 200.0 5 249.0 4 1.0 1246 | PLAY_TONE 0.01 1255 | 240 0.02 1255 | START_ENV 1.0 200.0 5 2.0 250 0.65 1000 | PLAY_TONE NOTE 1255 | 240 0.1 1255 | MONO_MIX 1255
+macro MUTEPLUCK=START_ENV 1.0 200.0 5 240.0 4 1.0 1246 | PLAY_TONE 0.01 1255 | 240 0.04 1255 | 40 0 | 40 0 | 40 0 | MONO_MIX 1255
 sequence
-0 | GEN_ENV_CHANNEL SLOPEBUF ENV1BUF | TONE_ENV_CHANNEL NOISEBUF ENV1BUF OUT1BUF | FILTER_CHANNEL OUT1BUF FILTERBUF FILTER_SIZE OUT1BUF FILTER_SLICES ENV1BUF | MONO_TO_STEREO_CHAN OUT1BUF
+0 | PLUCKCHAN ENV1BUF OUTN1BUF OUTT1BUF | PLUCKCHAN ENV2BUF OUTN2BUF OUTT2BUF | PLUCKCHAN ENV3BUF OUTN3BUF OUTT3BUF | PLUCKCHAN ENV4BUF OUTN4BUF OUTT4BUF | PLUCKCHAN ENV5BUF OUTN5BUF OUTT5BUF | PLUCKCHAN ENV6BUF OUTN6BUF OUTT6BUF
 2
 1
-0 | -2 | 200 0.4 | -2
-1
-1 2000 | NORMPLUCK c3
+1 0 | -5 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -2
+14
+1 15       | NORMPLUCK e2 | -40
+0    |  -8 | NORMPLUCK a3 | -32
+0    | -16 | NORMPLUCK d3 | -24
+0    | -24 | NORMPLUCK g3 | -16
+0    | -32 | NORMPLUCK b4 | -8
+0    | -40 | NORMPLUCK e4
+1 2000 |
+1 15       | MUTEPLUCK | -40
+0    |  -8 | MUTEPLUCK | -32
+0    | -16 | MUTEPLUCK | -24
+0    | -24 | MUTEPLUCK | -16
+0    | -32 | MUTEPLUCK | -8
+0    | -40 | MUTEPLUCK
+1 1500 |
 0 1
