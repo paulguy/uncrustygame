@@ -3,130 +3,47 @@ CrustyTracker
 include macros.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
-macro SQRBUF=2
+macro SQRINBUF=2
+buffer square.wav
+macro TRIINBUF=3
 buffer triangle.wav
-macro SLOPEBUF=3
+macro SAWINBUF=4
+buffer saw.wav
+macro SININBUF=5
+buffer sine.wav
+macro LFOINBUF=6
+buffer sinelfo.wav
+macro SLOPEINBUF=7
 buffer external
-macro BENDUPBUF=4
+macro BENDUPINBUF=8
 buffer external
-macro BENDDNBUF=5
+macro BENDDNINBUF=9
 buffer external
-macro NOISEBUF=6
+macro NOISEINBUF=10
 buffer external
-macro FILTERBUF=7
+macro FILTERINBUF=11
 buffer external
-;string 1
-macro ENV1BUF=8
+macro LFOBUF=12
 buffer MAXREQ
-macro OUTN1BUF=9
+channel player ; LFO generator
+macro ENVBUF=13
 buffer MAXREQ
-macro OUTT1BUF=10
+channel player ; envelope generator
+channel player ; oscillator
+macro FILTERBUF=14
 buffer MAXREQ
-channel player
-channel player
 channel filter
-channel player
-channel player
-channel filter
-channel player
-channel player
-;string 2
-macro ENV2BUF=11
-buffer MAXREQ
-macro OUTN2BUF=12
-buffer MAXREQ
-macro OUTT2BUF=13
-buffer MAXREQ
-channel player
-channel player
-channel filter
-channel player
-channel player
-channel filter
-channel player
-channel player
-;string 3
-macro ENV3BUF=14
-buffer MAXREQ
-macro OUTN3BUF=15
-buffer MAXREQ
-macro OUTT3BUF=16
-buffer MAXREQ
-channel player
-channel player
-channel filter
-channel player
-channel player
-channel filter
-channel player
-channel player
-;string 4
-macro ENV4BUF=17
-buffer MAXREQ
-macro OUTN4BUF=18
-buffer MAXREQ
-macro OUTT4BUF=19
-buffer MAXREQ
-channel player
-channel player
-channel filter
-channel player
-channel player
-channel filter
-channel player
-channel player
-;string 5
-macro ENV5BUF=20
-buffer MAXREQ
-macro OUTN5BUF=21
-buffer MAXREQ
-macro OUTT5BUF=22
-buffer MAXREQ
-channel player
-channel player
-channel filter
-channel player
-channel player
-channel filter
-channel player
-channel player
-;string 6
-macro ENV6BUF=23
-buffer MAXREQ
-macro OUTN6BUF=24
-buffer MAXREQ
-macro OUTT6BUF=25
-buffer MAXREQ
-channel player
-channel player
-channel filter
-channel player
-channel player
-channel filter
-channel player
-channel player
-macro ENV_OSC_FILT ENVBUF TONEBUF INTBUF OUTBUF=GEN_ENV_CHANNEL SLOPEBUF ENVBUF | TONE_ENV_CHANNEL TONEBUF ENVBUF INTBUF | FILTER_CHANNEL INTBUF FILTERBUF FILTER_SIZE OUTBUF FILTER_SLICES ENVBUF
-macro PLUCKCHAN ENVBUF INTBUF OUTBUF=ENV_OSC_FILT ENVBUF NOISEBUF OUTBUF OUTBUF | ENV_OSC_FILT ENVBUF SQRBUF INTBUF OUTBUF | MONO_TO_STEREO_CHAN OUTBUF
-macro NORMPLUCK NOTE=START_ENV 1.0 200.0 5 249.0 4 1.0 1246 | PLAY_TONE 0.01 1255 | 240 0.02 1255 | START_ENV 1.0 200.0 5 2.0 250 0.65 1000 | PLAY_TONE NOTE 1255 | 240 0.1 1255 | MONO_MIX 1255
-macro MUTEPLUCK=START_ENV 1.0 200.0 5 240.0 4 1.0 1246 | PLAY_TONE 0.01 1255 | 240 0.04 1255 | 40 0 | 40 0 | 40 0 | MONO_MIX 1255
+channel player ; left output
+channel player ; right output
+channel silence
+macro SYNTHCHAN _BTONE _BLFO _BENV _BFILT=TONE_CHANNEL LFOINBUF _BLFO | GEN_ENV_CHANNEL SLOPEINBUF _BENV | TONE_ENV_CHANNEL _BTONE _BENV _BFILT | FILTER_CHANNEL _BFILT FILTERINBUF FILTER_SIZE _BFILT FILTER_SLICES _BENV | MONO_TO_STEREO_CHAN _BFILT | _BFILT 0 0 0 8 0
 sequence
-0 | PLUCKCHAN ENV1BUF OUTN1BUF OUTT1BUF | PLUCKCHAN ENV2BUF OUTN2BUF OUTT2BUF | PLUCKCHAN ENV3BUF OUTN3BUF OUTT3BUF | PLUCKCHAN ENV4BUF OUTN4BUF OUTT4BUF | PLUCKCHAN ENV5BUF OUTN5BUF OUTT5BUF | PLUCKCHAN ENV6BUF OUTN6BUF OUTT6BUF
+0 | SYNTHCHAN TRIINBUF LFOBUF ENVBUF FILTERBUF
 2
 1
-1 0 | -5 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -7 | 400 SYNTH_OUTPUT_ADD | -2
-14
-1 15       | NORMPLUCK e2 | -40
-0    |  -8 | NORMPLUCK a3 | -32
-0    | -16 | NORMPLUCK d3 | -24
-0    | -24 | NORMPLUCK g3 | -16
-0    | -32 | NORMPLUCK b4 | -8
-0    | -40 | NORMPLUCK e4
-1 2000 |
-1 15       | MUTEPLUCK | -40
-0    |  -8 | MUTEPLUCK | -32
-0    | -16 | MUTEPLUCK | -24
-0    | -24 | MUTEPLUCK | -16
-0    | -32 | MUTEPLUCK | -8
-0    | -40 | MUTEPLUCK
-1 1500 |
+; set up LFO, filter feedback, and disable filter modulation
+1 0 | 10000 0.1 | 0 | 30000 SYNTH_OUTPUT_ADD 0.5 | 22e00 50 100 SYNTH_AUTO_CONSTANT SYNTH_OUTPUT_ADD 1.6 | -3
+;1 0 | 10000 0.1 | 0 | 21800 SYNTH_OUTPUT_ADD LFOBUF SYNTH_AUTO_SOURCE | 22e00 100 100 SYNTH_AUTO_CONSTANT SYNTH_OUTPUT_ADD 0.8 | -3
+1
+1 5000 | PLAY_TONE 1.0 5000 | START_ENV 1.0 2.0 500 2.0 250 0.5 3250 | PLAY_TONE a2 5000 | 40 5000 | MONO_MIX 5000 | 4 5000
 0 1

@@ -1395,8 +1395,8 @@ int synth_silence_buffer(Synth *s,
 
     if(start >= os ||
        start + length > os) {
-        LOG_PRINTF(s, "Bound(s) out of buffer range.\n");
-        return(0);
+        LOG_PRINTF(s, "Bound(s) out of buffer range. %u + %u > %u\n", start, length, os);
+        return(-1);
     }
     o = &(o[start]);
     /* always deals with float buffers, whether it's output or otherwise */

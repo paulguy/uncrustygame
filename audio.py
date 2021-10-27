@@ -231,7 +231,7 @@ class AudioSequencer():
                         if not isinstance(buffer[extBuf], cg.Buffer):
                             raise Exception("Buffers must be external Buffers.")
                         # import an external buffer
-                        self._buffer.append([buffer[extBuf], 0, None])
+                        self._buffer.append([buffer[extBuf], None, None, None])
                         extBuf += 1
                     else:
                         bufferline = line.split(maxsplit=1)
@@ -243,7 +243,7 @@ class AudioSequencer():
                         except ValueError:
                             # add the string to use as a filename later
                             item = bufferline[0].strip()
-                        self._buffer.append([item, None, None])
+                        self._buffer.append([item, None, None, None])
                 elif linetype == 'channel':
                     line = line.strip().lower()
                     if line == CHANNEL_TYPE_SILENCE:
@@ -484,11 +484,11 @@ class AudioSequencer():
             else:
                 raise ValueError("Silence can't be applied to output channels")
             b = self._buffer[buf]
-            silence[0] = b[2]
+            silence[0] = b
         if status[1] != None:
-            silence[1] = status[1] * self._samplesms
+            silence[1] = status[1] * silence[0][3]
         if status[2] != None:
-            silence[2] = status[2] * self._samplesms
+            silence[2] = status[2] * silence[0][3]
         if status[3] != None:
             if status[3] == seq.EMPTY_ROW:
                 silence[3] = None
@@ -514,9 +514,9 @@ class AudioSequencer():
             pos = status[1]
             # make -1 be the real last sample
             if pos < 0:
-                pos = (pos * self._samplesms) + (self._samplesms - 1)
+                pos = (pos * player[8][3]) + (player[8][3] - 1)
             else:
-                pos = pos * self._samplesms
+                pos = pos * player[8][3]
             p.input_pos(pos)
         if status[2] != None:
             buf = status[2]
@@ -529,9 +529,9 @@ class AudioSequencer():
         if status[3] != None:
             pos = status[3]
             if pos < 0:
-                pos = (pos * self._samplesms) + (self._samplesms - 1)
+                pos = (pos * player[9][3]) + (player[9][3] - 1)
             else:
-                pos = pos * self._samplesms
+                pos = pos * player[9][3]
             p.output_pos(pos)
         if status[4] != None:
             p.output_mode(status[4])
@@ -567,21 +567,21 @@ class AudioSequencer():
         if status[12] != None:
             pos = status[12]
             if pos < 0:
-                pos = (pos * self._samplesms) + (self._samplesms - 1)
+                pos = (pos * player[8][3]) + (player[8][3] - 1)
             else:
-                pos = pos * self._samplesms
+                pos = pos * player[8][3]
             p.loop_start(pos)
         if status[13] != None:
             pos = status[13]
             if pos < 0:
-                pos = (pos * self._samplesms) + (self._samplesms - 1)
+                pos = (pos * player[8][3]) + (player[8][3] - 1)
             else:
-                pos = pos * self._samplesms
+                pos = pos * player[8][3]
             p.loop_end(pos)
         if status[14] != None:
             p.mode(status[14])
         if status[15] != None:
-            player[1] = status[15] * self._samplesms
+            player[1] = status[15] * player[9][3]
         if status[16] != None:
             if status[16] == seq.EMPTY_ROW:
                 player[2] = None
@@ -621,13 +621,14 @@ class AudioSequencer():
                 buf -= self._seqChannels
                 buf += self._channels
             b = self._buffer[buf]
+            flt[8] = b
             f.input(b[2])
         if status[1] != None:
             pos = status[1]
             if pos < 0:
-                pos = (pos * self._samplesms) + (self._samplesms - 1)
+                pos = (pos * flt[8][3]) + (flt[8][3] - 1)
             else:
-                pos = pos * self._samplesms
+                pos = pos * flt[8][3]
             f.input_pos(pos)
         if status[2] != None:
             buf = status[2]
@@ -640,9 +641,9 @@ class AudioSequencer():
         if status[3] != None:
             pos = status[3]
             if pos < 0:
-                pos = (pos * self._samplesms) + (self._samplesms - 1)
+                pos = (pos * flt[7][3]) + (flt[7][3] - 1)
             else:
-                pos = pos * self._samplesms
+                pos = pos * flt[7][3]
             f.output_pos(pos)
         if status[4] != None:
             buf = status[4]
@@ -680,7 +681,7 @@ class AudioSequencer():
         if status[13] != None:
             f.volume_mode(status[13])
         if status[14] != None:
-            flt[1] = status[14] * self._samplesms
+            flt[1] = status[14] * flt[7][3]
         if status[15] != None:
             if status[15] == seq.EMPTY_ROW:
                 flt[2] = None
@@ -716,7 +717,7 @@ class AudioSequencer():
         self._channels = len(channels)
         if self._channels < self._seqChannels:
             raise Exception("Not enough output channels to play sequence")
-        newbuffer = [[None, rate, b] for b in channels]
+        newbuffer = [[None, rate, b, 0] for b in channels]
         newbuffer.extend(self._buffer)
         self._buffer = newbuffer
         for buffer in self._buffer:
@@ -735,37 +736,41 @@ class AudioSequencer():
                 # external buffer
                 buffer[2] = buffer[0]
             buffer[1] = buffer[2].rate()
+            buffer[3] = int(buffer[1] / 1000)
         print(self._buffer)
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
         for channel in enumerate(self._channel):
-            if channel[1] == CHANNEL_TYPE_SILENCE:
-                buf = initial[channel[0]][0]
-                buf -= self._seqChannels
-                buf += self._channels
-                silence = [self._buffer[buf],
-                           initial[channel[0]][1],
-                           initial[channel[0]][2]]
-                silence[2] = 0
-                self._localChannels.append(silence)
-            elif channel[1] == CHANNEL_TYPE_PLAYER:
-                inbuf = initial[channel[0]][0]
-                inbuf -= self._seqChannels
-                inbuf += self._channels
-                b = self._buffer[inbuf][2]
-                player = [b.player(), 0, None, None, None, None, None, None, None, None, 0]
-                self._update_player(player, initial[channel[0]])
-                player[1] = 0
-                self._localChannels.append(player)
-            elif channel[1] == CHANNEL_TYPE_FILTER:
-                filterbuf = initial[channel[0]][4]
-                filterbuf -= self._seqChannels
-                filterbuf += self._channels
-                b = self._buffer[filterbuf][2]
-                flt = [b.filter(initial[channel[0]][20]), 0, None, None, None, None, None, None, 0]
-                self._update_filter(flt, initial[channel[0]])
-                flt[1] = 0
-                self._localChannels.append(flt)
+            try:
+                if channel[1] == CHANNEL_TYPE_SILENCE:
+                    buf = initial[channel[0]][0]
+                    buf -= self._seqChannels
+                    buf += self._channels
+                    silence = [self._buffer[buf], 0, 0, None, None]
+                    self._update_silence(silence, initial[channel[0]])
+                    silence[2] = 0
+                    self._localChannels.append(silence)
+                elif channel[1] == CHANNEL_TYPE_PLAYER:
+                    inbuf = initial[channel[0]][0]
+                    inbuf -= self._seqChannels
+                    inbuf += self._channels
+                    b = self._buffer[inbuf][2]
+                    player = [b.player(), 0, None, None, None, None, None, None, None, None, 0]
+                    self._update_player(player, initial[channel[0]])
+                    player[1] = 0
+                    self._localChannels.append(player)
+                elif channel[1] == CHANNEL_TYPE_FILTER:
+                    filterbuf = initial[channel[0]][4]
+                    filterbuf -= self._seqChannels
+                    filterbuf += self._channels
+                    b = self._buffer[filterbuf][2]
+                    flt = [b.filter(initial[channel[0]][20]), 0, None, None, None, None, None, None, 0, 0]
+                    self._update_filter(flt, initial[channel[0]])
+                    flt[1] = 0
+                    self._localChannels.append(flt)
+            except Exception as e:
+                print("Error when loading channel {}.".format(channel[0] + 1))
+                raise e
         if self._trace:
             print(self._localChannels)
         self._loaded = True
@@ -848,7 +853,7 @@ class AudioSequencer():
                         if self._trace:
                             print("{} {} {}".format(i, channel[1], hex(reason)))
                             if channel[1] != 0 and reason == 0:
-                                raise Exception("Synth returned no samples for no reason.")
+                                raise Exception("Synth returned no samples for n // 1000o reason.")
                         if channel[1] == 0:
                             if channel[2] != None:
                                 upd = channel[2]
@@ -970,17 +975,20 @@ class AudioSequencer():
                     if self._trace:
                         print(i, end=' ')
                         print(line[i])
-                    self._update_filter(channel, line[i])
+                    self._update_silence(channel, line[i])
                 # simulate in-time synth functionality
                 while time > 0:
                     get = time
                     if channel[2] < get:
                         get = channel[2]
-                    got = channel[0][2].size() - channel[1]
-                    if got < get:
-                        get = got
-                    channel[0][2].silence(channel[1], got)
-                    if got == 0:
+                    remain = channel[0][2].size() - channel[1]
+                    if get > remain:
+                        get = remain
+                    if remain > 0:
+                        channel[0][2].silence(channel[1], get)
+                    if self._trace:
+                        print("{} +{}".format(i, get))
+                    if get == 0:
                         if lastgot == 0:
                             channel[2] = 0
                             break
@@ -992,7 +1000,7 @@ class AudioSequencer():
                                     print(upd)
                                 self._update_silence(channel, upd)
                                 changed = True
-                        if get > 0:
+                        if remain == 0:
                             if channel[4] != None:
                                 upd = channel[4]
                                 if self._trace:
@@ -1002,10 +1010,10 @@ class AudioSequencer():
                         if not changed:
                             channel[2] = 0
                             break
-                    lastgot = got
-                    time -= got
-                    channel[1] += got
-                    channel[2] -= got
+                    lastgot = get
+                    time -= get
+                    channel[1] += get
+                    channel[2] -= get
             i += 1
 
     def run(self, needed):
