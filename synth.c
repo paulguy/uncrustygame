@@ -160,19 +160,19 @@ int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     int sb;
 
     if(SDL_LoadWAV(filename, &spec, &audiobuf, &len) == NULL) {
-        fprintf(stderr, "Failed to load WAV file.\n");
+        LOG_PRINTF(s, "Failed to load WAV file.\n");
         return(-1);
     }
 
     if(spec.channels != 1) {
-        fprintf(stderr, "Buffers are mono.\n");
+        LOG_PRINTF(s, "Buffers are mono.\n");
         SDL_FreeWAV(audiobuf);
         return(-1);
     }
 
     type = synth_type_from_audioformat(spec.format);
     if(type == SYNTH_TYPE_INVALID) {
-        fprintf(stderr, "Unsupported format.\n");
+        LOG_PRINTF(s, "Unsupported format.\n");
         SDL_FreeWAV(audiobuf);
         return(-1);
     }
