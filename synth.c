@@ -1892,7 +1892,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 }
                 o[outPos] = i[(int)inPos] * vol;
                 outPos++;
-                inPos += s[speedPos] * speed;
+                inPos += speed * powf(2, s[speedPos]);
                 speedPos++;
             }
         } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
@@ -1903,7 +1903,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 }
                 o[outPos] += i[(int)inPos] * vol;
                 outPos++;
-                inPos += s[speedPos] * speed;
+                inPos += speed * powf(2, s[speedPos]);
                 speedPos++;
             }
         } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
@@ -1917,7 +1917,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                     }
                     o[outPos] = i[(int)inPos] * v[volPos] * vol;
                     outPos++;
-                    inPos += s[speedPos] * speed;
+                    inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     volPos++;
                 }
@@ -1928,7 +1928,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                     }
                     o[outPos] += i[(int)inPos] * v[volPos] * vol;
                     outPos++;
-                    inPos += s[speedPos] * speed;
+                    inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     volPos++;
                 }
@@ -2035,7 +2035,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 }
                 o[outPos] = i[(int)inPos] * vol;
                 outPos++;
-                inPos += s[speedPos] * speed;
+                inPos += speed * powf(2, s[speedPos]);
                 speedPos++;
             }
         } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
@@ -2051,7 +2051,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 }
                 o[outPos] += i[(int)inPos] * vol;
                 outPos++;
-                inPos += s[speedPos] * speed;
+                inPos += speed * powf(2, s[speedPos]);
                 speedPos++;
             }
         } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
@@ -2070,7 +2070,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                     }
                     o[outPos] = i[(int)inPos] * v[volPos] * vol;
                     outPos++;
-                    inPos += s[speedPos] * speed;
+                    inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     volPos++;
                 }
@@ -2086,7 +2086,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                     }
                     o[outPos] += i[(int)inPos] * v[volPos] * vol;
                     outPos++;
-                    inPos += s[speedPos] * speed;
+                    inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     volPos++;
                 }
