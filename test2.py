@@ -292,6 +292,9 @@ class WaveGen():
     def sine(self, freq):
         return(self.gen(((freq, 1.0, 0.0),)))
 
+    # information for these was found at:
+    # <https://pages.uoregon.edu/emi/9.php>
+    # but it's well-known stuff.
     def square(self, harmonics, freq):
         # odd harmonics
         # each 1/harmonic in amplitude

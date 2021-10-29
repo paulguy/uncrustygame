@@ -197,7 +197,7 @@ class Sequencer():
                     continue
                 pos, newrow = self._read_row(split, columnDesc, initial=initial)
                 if len(split) > pos:
-                    raise Exception("too many values in column ({} > {})".format(len(split), pos))
+                    raise Exception("too many values in column {} ({} > {})".format(i, len(split), pos))
                 fullRow.append(newrow)
 
         if len(fullRow) != self._desc.columns:

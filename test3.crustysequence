@@ -4,7 +4,10 @@ include macros.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
 macro LFOINBUF=2
-buffer sinelfo.wav
+buffer sinelfo.wav ; leave this here because there's no consequence for it
+                   ; really other than being sint16 when everything else is
+                   ; float32 but leave it as a test to assure WAV loading
+                   ; continues to function
 macro SLOPEINBUF=3
 buffer external
 macro BENDUPINBUF=4
@@ -23,26 +26,45 @@ macro TRIINBUF=10
 buffer external
 macro SAWINBUF=11
 buffer external
-macro LFOBUF=12
+; osc 1
+macro LFO1BUF=12
 buffer MAXREQ
 channel player ; LFO generator
-macro ENVBUF=13
+macro ENV1BUF=13
 buffer MAXREQ
 channel player ; envelope generator
 channel player ; oscillator
-macro FILTERBUF=14
+macro FILTER1BUF=14
 buffer MAXREQ
 channel filter
 channel player ; left output
 channel player ; right output
 channel silence
-macro SYNTHCHAN _BTONE _BLFO _BENV _BFILT=TONE_CHANNEL LFOINBUF _BLFO | GEN_ENV_CHANNEL SLOPEINBUF _BENV | TONE_ENV_CHANNEL _BTONE _BENV _BFILT | FILTER_CHANNEL _BFILT FILTERINBUF FILTER_SIZE _BFILT FILTER_SLICES _BENV | MONO_TO_STEREO_CHAN _BFILT | _BFILT 0 0 0 8 0
+; osc 2
+macro LFO2BUF=15
+buffer MAXREQ
+channel player ; LFO generator
+macro ENV2BUF=16
+buffer MAXREQ
+channel player ; envelope generator
+channel player ; oscillator
+macro FILTER2BUF=17
+buffer MAXREQ
+channel filter
+channel player ; left output
+channel player ; right output
+channel silence
+macro SYNTHCHAN _BTONE _BLFO _BENV _BFILT _SLICE=TONE_CHANNEL LFOINBUF _BLFO | GEN_ENV_CHANNEL SLOPEINBUF _BENV | TONE_ENV_SPD_CHANNEL _BTONE _BENV _BLFO _BFILT | FILTER_CHANNEL _BFILT FILTERINBUF FILTER_SIZE _BFILT FILTER_SLICES _SLICE | MONO_TO_STEREO_CHAN _BFILT | _BFILT 0 0 0 8 0
+; set up LFO, filter feedback, and disable filter modulation
+macro SYNTHPARAMS _LFODEPTH _FDELAY _FBACK=10000 _LFODEPTH | 0 | 20000 SYNTH_OUTPUT_ADD | 20600 _FDELAY SYNTH_OUTPUT_ADD _FBACK | -3
+macro SYNTHPLAY _TIME _LFORATE _VOL _ARATE _ATIME _DRATE _DTIME _SRATE _STIME _SPEED=PLAY_TONE _LFORATE _TIME | START_ENV _VOL _ARATE _ATIME _DRATE _DTIME _SRATE _STIME | PLAY_TONE _SPEED _TIME | 40 _TIME | MONO_MIX _TIME | 4 _TIME
+macro SYNTHREL _RSPEED _RTIME=40 _RTIME | REL_ENV _RSPEED _RTIME | 40 _RTIME | 40 _RTIME | MONO_MIX _RTIME | 4 _RTIME
 sequence
-0 | SYNTHCHAN TRIINBUF LFOBUF ENVBUF FILTERBUF
+0 | SYNTHCHAN TRIINBUF LFO1BUF ENV1BUF FILTER1BUF 50 | SYNTHCHAN TRIINBUF LFO2BUF ENV2BUF FILTER2BUF 50
 2
 1
-; set up LFO, filter feedback, and disable filter modulation
-1 0 | 10000 0.03 | 0 | 21802 SYNTH_OUTPUT_ADD LFOBUF SYNTH_AUTO_SOURCE 1000 LFOBUF | 22e00 100 299 SYNTH_AUTO_CONSTANT SYNTH_OUTPUT_ADD 0.8 | -3
-1
-1 5000 | PLAY_TONE 10.0 5000 | START_ENV 0.1 2.0 500 2.0 250 0.5 3250 | PLAY_TONE a2 5000 | 40 5000 | MONO_MIX 5000 | 4 5000
+1 0 | SYNTHPARAMS 0.04 20 1.0 | SYNTHPARAMS 0.04 20 1.0
+2
+1 5000 | SYNTHPLAY 5000 1.0 0.1 2.0 500 2.0 250 0.0 3250 a3 | SYNTHPLAY 5000 1.25 0.1 2.0 500 2.0 250 0.0 3250 e#3
+1 2000 | SYNTHREL 0.5 2000 | SYNTHREL 0.5 2000
 0 1
