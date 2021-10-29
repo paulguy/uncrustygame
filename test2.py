@@ -267,7 +267,56 @@ def make_filter(rate):
 
     return(filt)
 
-def load_audio(aud):
+class WaveGen():
+    def __init__(self, rate):
+        self._rate = rate
+        self._harmonics = {}
+
+    def gen(self, harmonics):
+        wave = numpy.zeros(self._rate, dtype=numpy.float32)
+
+        for h in harmonics:
+            # try to cache results for reuse
+            if h[0] not in self._harmonics:
+                maxpt = numpy.pi * 2 * h[0]
+                points = numpy.arange(0, maxpt, maxpt / self._rate)
+                self._harmonics[h[0]] = numpy.sin(points, dtype=numpy.float32)
+
+            split = int(self._rate * h[2])
+            remain = self._rate - split
+            wave[:split] += self._harmonics[h[0]][remain:] * h[1]
+            wave[split:] += self._harmonics[h[0]][:remain] * h[1]
+
+        return wave
+
+    def sine(self, freq):
+        return(self.gen(((freq, 1.0, 0.0),)))
+
+    def square(self, harmonics, freq):
+        # odd harmonics
+        # each 1/harmonic in amplitude
+        # all in phase
+        return self.gen(zip([x * freq for x in range(1, harmonics * 2 + 1, 2)],
+                            [1 / x for x in range(1, harmonics * 2 + 1, 2)],
+                            [0 for x in range(harmonics)]))
+
+    def triangle(self, harmonics, freq):
+        # odd harmonics
+        # each 1/(harmonic ** 2) in amplitude
+        # every other harmonic is out of phase
+        return self.gen(zip([x * freq for x in range(1, harmonics * 2 + 1, 2)],
+                            [1 / (x ** 2) for x in range(1, harmonics * 2 + 1, 2)],
+                            [(x % 2) * 0.5 for x in range(harmonics)]))
+
+    def sawtooth(self, harmonics, freq):
+        # all harmonics
+        # each 1/harmonic in amplitude
+        # odd harmonics are 180 deg out of phase
+        return self.gen(zip([x * freq for x in range(1, harmonics + 1)],
+                            [1 / x for x in range(1, harmonics + 1)],
+                            [(x % 2) * 0.5 for x in range(harmonics)]))
+
+def load_audio(aud, harmonics):
     rate = aud.rate
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
                           array.array('f', create_sqrt_slope(0.0, 1.0, rate)),
@@ -285,7 +334,13 @@ def load_audio(aud):
     filt = make_filter(rate)
     filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
 
-    return envslope, benddownslope, bendupslope, noise, filt
+    wave = WaveGen(rate)
+    sine = aud.buffer(cg.SYNTH_TYPE_F32, wave.sine(440), rate)
+    square = aud.buffer(cg.SYNTH_TYPE_F32, wave.square(harmonics, 440), rate)
+    triangle = aud.buffer(cg.SYNTH_TYPE_F32, wave.triangle(harmonics, 440), rate)
+    saw = aud.buffer(cg.SYNTH_TYPE_F32, wave.sawtooth(harmonics, 440), rate)
+
+    return envslope, benddownslope, bendupslope, noise, filt, sine, square, triangle, saw
 
 
 def log_cb_return(priv, string):
@@ -382,7 +437,7 @@ def main():
     colorrad = 0.0
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, True)
-    audbuffers = load_audio(aud)
+    audbuffers = load_audio(aud, 8)
     aud.enabled(True)
 
     wavout = False

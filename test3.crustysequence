@@ -3,25 +3,25 @@ CrustyTracker
 include macros.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
-macro SQRINBUF=2
-buffer square.wav
-macro TRIINBUF=3
-buffer triangle.wav
-macro SAWINBUF=4
-buffer saw.wav
-macro SININBUF=5
-buffer sine.wav
-macro LFOINBUF=6
+macro LFOINBUF=2
 buffer sinelfo.wav
-macro SLOPEINBUF=7
+macro SLOPEINBUF=3
 buffer external
-macro BENDUPINBUF=8
+macro BENDUPINBUF=4
 buffer external
-macro BENDDNINBUF=9
+macro BENDDNINBUF=5
 buffer external
-macro NOISEINBUF=10
+macro NOISEINBUF=6
 buffer external
-macro FILTERINBUF=11
+macro FILTERINBUF=7
+buffer external
+macro SININBUF=8
+buffer external
+macro SQRINBUF=9
+buffer external
+macro TRIINBUF=10
+buffer external
+macro SAWINBUF=11
 buffer external
 macro LFOBUF=12
 buffer MAXREQ
@@ -42,7 +42,7 @@ sequence
 2
 1
 ; set up LFO, filter feedback, and disable filter modulation
-1 0 | 10000 0.03 | 0 | 21802 SYNTH_OUTPUT_ADD LFOBUF SYNTH_AUTO_SOURCE 1000 LFOBUF | 22e00 100 100 SYNTH_AUTO_CONSTANT SYNTH_OUTPUT_ADD 0.8 | -3
+1 0 | 10000 0.03 | 0 | 21802 SYNTH_OUTPUT_ADD LFOBUF SYNTH_AUTO_SOURCE 1000 LFOBUF | 22e00 100 299 SYNTH_AUTO_CONSTANT SYNTH_OUTPUT_ADD 0.8 | -3
 1
 1 5000 | PLAY_TONE 10.0 5000 | START_ENV 0.1 2.0 500 2.0 250 0.5 3250 | PLAY_TONE a2 5000 | 40 5000 | MONO_MIX 5000 | 4 5000
 0 1
