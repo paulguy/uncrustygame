@@ -129,7 +129,11 @@ class Sequencer():
                 elif isinstance(desc[i], int):
                     # pass False because an initial row argument may be an empty
                     # row
-                    adv, newrow = self._read_row(struct[pos:], desc[i], initial=False)
+                    try:
+                        adv, newrow = self._read_row(struct[pos:], desc[i], initial=False)
+                    except IndexError as e:
+                        print("... while parsing parameter change field {}.".format(i))
+                        raise e
                     row.append(newrow)
                     pos += adv
                     continue
@@ -153,10 +157,7 @@ class Sequencer():
         return pos, rownum
 
     def _read_line(self, file, initial=False):
-        try:
-            structs = file.readline().split('|')
-        except:
-            raise Exception("Unexpected end of file or error reading file.")
+        structs = file.readline().split('|')
 
         fullRow = list()
         # allow global only or totally empty lines

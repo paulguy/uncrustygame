@@ -23,7 +23,12 @@ knows maybe a high score table or something eventually.
 
 RUNNING PYTHON TEST CASE:
 in project root directory
-./test.py
+./test.py [sequence file]
 
-Currently doesn't do anything but display a test image.  Close the window to
-quit.
+Q - Quit
+P - Play sequence
+S - Stop sequence
+R - Run synth (default)
+N - Disable synth (pause)
+I - Print synth stats at any time
+W - Tiggle WAV output

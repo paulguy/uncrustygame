@@ -19,9 +19,6 @@ def _create_float_array(iterable):
 
 _NOTES = "a bc d ef g "
 
-class _EndOfFile(Exception):
-    pass
-
 class _MacroReaderIterator():
     def __init__(self, reader):
         self._reader = reader
@@ -29,7 +26,7 @@ class _MacroReaderIterator():
     def __next__(self):
         try:
             return self._reader.readline()
-        except _EndOfFile:
+        except IOError:
             raise StopIteration()
 
 class MacroReader():
@@ -97,7 +94,7 @@ class MacroReader():
             while True:
                 newline = self._file.readline()
                 if newline == "":
-                    raise _EndOfFile()
+                    raise IOError("End of file reached reading file.")
                 self._lines += 1
                 if self._trace:
                     print("{}: {}".format(self._lines, newline), end='')
@@ -133,7 +130,10 @@ class MacroReader():
                         # replace all instances of argument names with the provided
                         # values
                         for i in range(len(macro[1])):
-                            replacement = replacement.replace(macro[1][i], args[i])
+                            try:
+                                replacement = replacement.replace(macro[1][i], args[i])
+                            except IndexError:
+                                raise ValueError("Invalid arguments used for macro ({} != {})".format(len(macro[1]), len(args)))
                         # append the replacement string
                         newLine += replacement + ' '
                         # if there's nothing left, break
@@ -483,7 +483,10 @@ class AudioSequencer():
                 buf += self._channels
             else:
                 raise ValueError("Silence can't be applied to output channels")
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             silence[0] = b
         if status[1] != None:
             silence[1] = status[1] * silence[0][3]
@@ -507,7 +510,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             player[8] = b
             p.input(b[2])
         if status[1] != None:
@@ -523,7 +529,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             player[9] = b
             p.output(b[2])
         if status[3] != None:
@@ -542,7 +551,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             p.volume_source(b[2])
         if status[7] != None:
             p.volume_mode(status[7])
@@ -553,7 +565,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             p.speed_source(b[2])
         if status[10] != None:
             p.speed_mode(status[10])
@@ -562,7 +577,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             p.phase_source(b[2])
         if status[12] != None:
             pos = status[12]
@@ -620,7 +638,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             flt[8] = b
             f.input(b[2])
         if status[1] != None:
@@ -635,7 +656,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             flt[7] = b
             f.output(b[2])
         if status[3] != None:
@@ -650,7 +674,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             f.filter(b[2])
         if status[5] != None:
             f.filter_start(status[5])
@@ -663,7 +690,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             f.slice_source(b[2])
         if status[9] != None:
             f.mode(status[9])
@@ -676,7 +706,10 @@ class AudioSequencer():
             if buf >= self._seqChannels:
                 buf -= self._seqChannels
                 buf += self._channels
-            b = self._buffer[buf]
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
             f.volume_source(b[2])
         if status[13] != None:
             f.volume_mode(status[13])
