@@ -9,8 +9,6 @@ FIELD_TYPE_FLOAT = object()
 FIELD_TYPE_STR = object()
 FIELD_TYPE_ROW = object()
 
-EMPTY_ROW = object()
-
 class SequenceEnded(Exception):
     pass
 
@@ -85,7 +83,7 @@ class Sequencer():
         save = None
         if not initial:
             if len(struct) == 0:
-                return 0, EMPTY_ROW
+                return 0, None 
             first = struct[0]
             # check to see if this is referencing a saved row
             if first[0] == '=':
@@ -104,7 +102,7 @@ class Sequencer():
                     raise ValueError("Numeric row name.")
             changeMask = int(first, base=16)
             if changeMask == 0:
-                return 1, EMPTY_ROW
+                return 1, -1
             pos += 1
 
         row = list()
@@ -132,7 +130,7 @@ class Sequencer():
                     try:
                         adv, newrow = self._read_row(struct[pos:], desc[i], initial=False)
                     except IndexError as e:
-                        print("... while parsing parameter change field {}.".format(i))
+                        print("... while parsing parameter change field {}..".format(i))
                         raise e
                     row.append(newrow)
                     pos += adv
@@ -165,7 +163,7 @@ class Sequencer():
             if len(structs[0].strip()) == 0:
                 # totally empty line "|"
                 for i in range(self._desc.columns):
-                    fullRow.append(EMPTY_ROW)
+                    fullRow.append(None)
             else:
                 # line with only global changes "~~~ |"
                 columnDesc = self._desc._column[0]
@@ -175,7 +173,7 @@ class Sequencer():
                     raise Exception("too many values in column ({} > {})".format(len(split), pos))
                 fullRow.append(newrow)
                 for i in range(1, self._desc.columns):
-                    fullRow.append(EMPTY_ROW)
+                    fullRow.append(None)
         else:
             skip = 0
             for i in range(len(structs)):
@@ -193,7 +191,7 @@ class Sequencer():
                     if i + skip + first - 1 >= len(self._desc._column):
                         raise Exception("skipped columns would go beyond column range")
                     for j in range(first):
-                        fullRow.append(EMPTY_ROW)
+                        fullRow.append(None)
                     skip += first - 1
                     continue
                 pos, newrow = self._read_row(split, columnDesc, initial=initial)
@@ -235,7 +233,8 @@ class Sequencer():
                 pattern.append(self._read_line(file))
             self._pattern.append(pattern)
         self._fix_rows()
-        print(self._row)
+        for row in enumerate(self._row):
+            print("{} {}".format(row[0], row[1][:-1]))
 
         try:
             ordersData = file.readline().split()
@@ -309,7 +308,7 @@ class Sequencer():
     def _get_line(self, line):
         newLine = list()
         for i in range(len(line)):
-            if line[i] == EMPTY_ROW:
+            if line[i] is None or line[i] == -1:
                 newLine.append(None)
             else:
                 newLine.append(self._row[line[i]][:-1])

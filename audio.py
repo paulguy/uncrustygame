@@ -277,103 +277,103 @@ class AudioSequencer():
                 pass
             seqDesc = seq.SequenceDescription()
             silenceDesc = seqDesc.add_row_description()
-            # output buffer     0x10
+            # 0   output buffer     0x10
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-            # start pos         0x08
+            # 1  start pos         0x08
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-            # run length        0x04
+            # 2  run length        0x04
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
-            # stopped requested 0x02
+            # 3  stopped requested 0x02
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_ROW, rowDesc=silenceDesc)
-            # stopped outbuffer 0x01
+            # 4  stopped outbuffer 0x01
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_ROW, rowDesc=silenceDesc)
             playerDesc = seqDesc.add_row_description()
-            # input buffer                      0x200000
+            # 0   input buffer                      0x200000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # input buffer pos                  0x100000
+            # 1   input buffer pos                  0x100000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-            # output buffer                     0x080000
+            # 2   output buffer                     0x080000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # output buffer pos                 0x040000
+            # 3   output buffer pos                 0x040000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # output mode                       0x020000
+            # 4   output mode                       0x020000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # volume                            0x010000
+            # 5   volume                            0x010000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-            # volume source                     0x008000
+            # 6   volume source                     0x008000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # volume mode                       0x004000
+            # 7   volume mode                       0x004000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # speed (frequency, /speed, note)   0x002000
+            # 8   speed (frequency, /speed, note)   0x002000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_STR)
-            # speed source                      0x001000
+            # 9   speed source                      0x001000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # speed mode                        0x000800
+            # 10  speed mode                        0x000800
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # phase source                      0x000400
+            # 11  phase source                      0x000400
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # loop start                        0x000200
+            # 12  loop start                        0x000200
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # loop end                          0x000100
+            # 13  loop end                          0x000100
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # player mode                       0x000080
+            # 14  player mode                       0x000080
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # run length                        0x000040
+            # 15  run length                        0x000040
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # stopped requested                 0x000020
+            # 16  stopped requested                 0x000020 (reason 0)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # stopped outbuffer                 0x000010
+            # 17  stopped outbuffer                 0x000010 (reason 01)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # stopped inbuffer                  0x000008
+            # 18  stopped inbuffer                  0x000008 (reason 02)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # stopped volbuffer                 0x000004
+            # 19  stopped volbuffer                 0x000004 (reason 04)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # stopped speedbuffer               0x000002
+            # 20  stopped speedbuffer               0x000002 (reason 08)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # stopped phasebuffer               0x000001
+            # 21  stopped phasebuffer               0x000001 (reason 10)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
             filterDesc = seqDesc.add_row_description()
-            # input buffer         0x100000
+            # 0   input buffer         0x100000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # input buffer pos     0x080000
+            # 1   input buffer pos     0x080000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # output buffer        0x040000
+            # 2   output buffer        0x040000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # output buffer pos    0x020000
+            # 3   output buffer pos    0x020000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter buffer        0x010000
+            # 4   filter buffer        0x010000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter buffer start  0x008000
+            # 5   filter buffer start  0x008000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter buffer slices 0x004000
+            # 6   filter buffer slices 0x004000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # slice                0x002000
+            # 7   slice                0x002000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # slice source         0x001000
+            # 8   slice source         0x001000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # filter mode          0x000800
+            # 9   filter mode          0x000800
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # output mode          0x000400
+            # 10  output mode          0x000400
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # volume               0x000200
+            # 11  volume               0x000200
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
-            # volume source        0x000100
+            # 12  volume source        0x000100
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # volume mode          0x000080
+            # 13  volume mode          0x000080
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # run length           0x000040
+            # 14  run length           0x000040
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
-            # stopped requested    0x000020
+            # 15  stopped requested    0x000020 (reason 0)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped outbuffer    0x000010
+            # 16  stopped outbuffer    0x000010 (reason 01)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped inbuffer     0x000008
+            # 17  stopped inbuffer     0x000008 (reason 02)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped volbuffer    0x000004
+            # 18  stopped volbuffer    0x000004 (reason 04)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # stopped slicebuffer  0x000002
+            # 19  stopped slicebuffer  0x000002 (reason 20)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
-            # initial size         0x000001 (only used for initialization)
+            # 20  initial size         0x000001 (only used for initialization)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
             for channel in self._channel:
                 if channel == CHANNEL_TYPE_SILENCE:
@@ -476,6 +476,12 @@ class AudioSequencer():
         return (outrate / inrate) * tune
 
     def _update_silence(self, silence, status):
+        # 0  output buffer
+        # 1  start position
+        # 2  requested time
+        # 3  row ID for requested time met behavior
+        # 4  row ID for output buffer filled behavior
+        # status arguments are the order in which they appear
         if status[0] != None:
             buf = status[0]
             if buf >= self._seqChannels:
@@ -493,17 +499,27 @@ class AudioSequencer():
         if status[2] != None:
             silence[2] = status[2] * silence[0][3]
         if status[3] != None:
-            if status[3] == seq.EMPTY_ROW:
+            if status[3] < 0:
                 silence[3] = None
             else:
                 silence[3] = self._seq.get_row(status[3])
         if status[4] != None:
-            if status[4] == seq.EMPTY_ROW:
+            if status[4] < 0:
                 silence[4] = None
             else:
                 silence[4] = self._seq.get_row(status[4])
 
     def _update_player(self, player, status):
+        # 0  the underlying Player object
+        # 1  requested time
+        # 2  row ID for requested time met behavior
+        # 3  row ID for output buffer filled behavior
+        # 4  row ID for input buffer exhausted behavior
+        # 5  row ID for volume buffer exhausted behavior
+        # 6  row ID for speed buffer exhausted behavior
+        # 7  row ID for phase buffer exhausted behavior
+        # 8  input Buffer object
+        # 9  output Buffer object
         p = player[0]
         if status[0] != None:
             buf = status[0]
@@ -601,37 +617,46 @@ class AudioSequencer():
         if status[15] != None:
             player[1] = status[15] * player[9][3]
         if status[16] != None:
-            if status[16] == seq.EMPTY_ROW:
+            if status[16] < 0:
                 player[2] = None
             else:
                 player[2] = self._seq.get_row(status[16])
         if status[17] != None:
-            if status[17] == seq.EMPTY_ROW:
+            if status[17] < 0:
                 player[3] = None
             else:
                 player[3] = self._seq.get_row(status[17])
         if status[18] != None:
-            if status[18] == seq.EMPTY_ROW:
+            if status[18] < 0:
                 player[4] = None
             else:
                 player[4] = self._seq.get_row(status[18])
         if status[19] != None:
-            if status[19] == seq.EMPTY_ROW:
+            if status[19] < 0:
                 player[5] = None
             else:
                 player[5] = self._seq.get_row(status[19])
         if status[20] != None:
-            if status[20] == seq.EMPTY_ROW:
+            if status[20] < 0:
                 player[6] = None
             else:
                 player[6] = self._seq.get_row(status[20])
         if status[21] != None:
-            if status[21] == seq.EMPTY_ROW:
+            if status[21] < 0:
                 player[7] = None
             else:
                 player[7] = self._seq.get_row(status[21])
 
     def _update_filter(self, flt, status):
+        # 0  the underlying Filter object
+        # 1  requested time
+        # 2  row ID for requested time met behavior
+        # 3  row ID for output buffer filled behavior
+        # 4  row ID for input buffer exhausted behavior
+        # 5  row ID for volume buffer exhausted behavior
+        # 6  row ID for slice buffer exhausted behavior
+        # 7  output Buffer object (yes, these are inverted from Player...)
+        # 8  input Buffer object
         f = flt[0]
         if status[0] != None:
             buf = status[0]
@@ -716,27 +741,27 @@ class AudioSequencer():
         if status[14] != None:
             flt[1] = status[14] * flt[7][3]
         if status[15] != None:
-            if status[15] == seq.EMPTY_ROW:
+            if status[15] < 0:
                 flt[2] = None
             else:
                 flt[2] = self._seq.get_row(status[15])
         if status[16] != None:
-            if status[16] == seq.EMPTY_ROW:
+            if status[16] < 0:
                 flt[3] = None
             else:
                 flt[3] = self._seq.get_row(status[16])
         if status[17] != None:
-            if status[17] == seq.EMPTY_ROW:
+            if status[17] < 0:
                 flt[4] = None
             else:
                 flt[4] = self._seq.get_row(status[17])
         if status[18] != None:
-            if status[18] == seq.EMPTY_ROW:
+            if status[18] < 0:
                 flt[5] = None
             else:
                 flt[5] = self._seq.get_row(status[18])
         if status[19] != None:
-            if status[19] == seq.EMPTY_ROW:
+            if status[19] < 0:
                 flt[6] = None
             else:
                 flt[6] = self._seq.get_row(status[19])
@@ -750,6 +775,16 @@ class AudioSequencer():
         self._channels = len(channels)
         if self._channels < self._seqChannels:
             raise Exception("Not enough output channels to play sequence")
+        # 0  None for output buffer
+        #    int for a length of empty buffer in milliseconds
+        #    str for loading a WAV from a file
+        #    Buffer for taking an external buffer
+        # 1  sample rate for the buffer, pretty much only meaningful for WAV
+        #    used for calculating real play speed by a letter note
+        #    files imported that way, otherwise it's the synth rate
+        # 2  the Buffer object
+        # 3  the samples per millisecond calculated from the rate
+        #    used for calculating times in samples for time/position arguments
         newbuffer = [[None, rate, b, 0] for b in channels]
         newbuffer.extend(self._buffer)
         self._buffer = newbuffer
@@ -774,6 +809,8 @@ class AudioSequencer():
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
         for channel in enumerate(self._channel):
+            # channel list positions are detailed in their respective _update_*
+            # functions
             try:
                 if channel[1] == CHANNEL_TYPE_SILENCE:
                     buf = initial[channel[0]][0]
@@ -1026,6 +1063,10 @@ class AudioSequencer():
                             channel[2] = 0
                             break
                         changed = False
+                        if remain == 0:
+                            print("{} {} 0x1".format(i, channel[2]))
+                        else:
+                            print("{} {} 0x0".format(i, channel[2]))
                         if channel[2] == 0:
                             if channel[3] != None:
                                 upd = channel[3]

@@ -63,6 +63,11 @@
                     <li><a href="#filter-parameters">Parameters</a></li>
                 </ul>
             </ul>
+            <li><a href="#debug-output">Debug Output</a></li>
+            <ul>
+                <li><a href="#debug-parser-output">Debug Parser Output</a></li>
+                <li><a href="#debug-sequencer-output">Debug Sequencer Output</a></li>
+            </ul>
         </ul>
         <hr>
         <h2 id="file-format">General File Format</h2>
@@ -285,6 +290,8 @@ original      │ replacement
             <caption>Parameters</caption>
             <thead>
                 <tr>
+                    <th>#</th>
+                    <th>Reason</th>
                     <th>Mask Bit</th>
                     <th>Parameter Name</th>
                     <th>Description</th>
@@ -292,26 +299,36 @@ original      │ replacement
             </thead>
             <tbody>
                 <tr>
+                    <td>0</td>
+                    <td></td>
                     <td>10</td>
                     <td>Output Buffer</td>
                     <td>The buffer which will have silence applied to it.</td>
                 </tr>
                 <tr>
+                    <td>1</td>
+                    <td></td>
                     <td>08</td>
                     <td>Output Buffer Position</td>
                     <td>The position where silence will start.</td>
                 </tr>
                 <tr>
+                    <td>2</td>
+                    <td></td>
                     <td>04</td>
                     <td>Run Length</td>
                     <td>The length of the silence.  This will trigger the channel to actually process anything.  It has no affect as an initial value and will be reset to 0 on completion.</td>
                 </tr>
                 <tr>
+                    <td>3</td>
+                    <td>0</td>
                     <td>02</td>
                     <td>Requested Time Met</td>
                     <td>A parameter list applied when the amount of output time requested by Run Length has been completed.</td>
                 </tr>
                 <tr>
+                    <td>4</td>
+                    <td>1</td>
                     <td>01</td>
                     <td>Output Buffer Filled</td>
                     <td>Applied when the output buffer has reached its and and has been filled.</td>
@@ -324,6 +341,8 @@ original      │ replacement
             <caption>Parameters</caption>
             <thead>
                 <tr>
+                    <th>#</th>
+                    <th>Reason</th>
                     <th>Mask Bit</th>
                     <th>Parameter Name</th>
                     <th>Description</th>
@@ -331,81 +350,113 @@ original      │ replacement
             </thead>
             <tbody>
                 <tr>
+                    <td>0</td>
+                    <td></td>
                     <td>200000</td>
                     <td>Input Buffer</td>
                     <td>The buffer which shall be used as the primary source of input for this channel.</td>
                 </tr>
                 <tr>
+                    <td>1</td>
+                    <td></td>
                     <td>100000</td>
                     <td>Input Buffer Position</td>
                     <td>The position to start reading the input buffer from.  This is a value in float because the buffer can be played at any arbitrary rate and the position is kept track of in float.</td>
                 </tr>
                 <tr>
+                    <td>2</td>
+                    <td></td>
                     <td>080000</td>
                     <td>Output Buffer</td>
                     <td>The buffer which will receive the output from this player.</td>
                 </tr>
                 <tr>
+                    <td>3</td>
+                    <td></td>
                     <td>040000</td>
                     <td>Output Buffer Position</td>
                     <td>The position to start writing to the output buffer.</td>
                 </tr>
                 <tr>
+                    <td>4</td>
+                    <td></td>
                     <td>020000</td>
                     <td>Output Mode</td>
                     <td><a href="#output-modes">Either SYNTH_OUTPUT_REPLACE or SYNTH_OUTPUT_ADD.</a></td>
                 </tr>
                 <tr>
+                    <td>5</td>
+                    <td></td>
                     <td>010000</td>
                     <td>Volume</td>
                     <td>The base volume level for this player.  1.0 is no change in volume from the input buffer, lesser values will attenuate, greater values will amplify.</td>
                 </tr>
                 <tr>
+                    <td>6</td>
+                    <td></td>
                     <td>008000</td>
                     <td>Volume Source</td>
                     <td>A buffer to read volume values from if the volume mode is SYNTH_AUTO_SOURCE.  The base volume level is also applied.</td>
                 </tr>
                 <tr>
+                    <td>7</td>
+                    <td></td>
                     <td>004000</td>
                     <td>Volume Mode</td>
                     <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
                 </tr>
                 <tr>
+                    <td>8</td>
+                    <td></td>
                     <td>002000</td>
                     <td>Speed</td>
                     <td>This affects the interval at which values are fetched from the input buffer.  This is a complex value which can take many format.  It can be most simply a float value, where 1.0 will play the input buffer with no change in rate, lower values will play slower (by mutiplying up input samples, without interpolation) or faster (also, no antialiasing, so skipped samples are totally not represented).  This value may also be negative, for reverse playback.  This value may also be a note, A-G.  Followed optionally by a b or a # to flatten or sharpen it a semitone, then followed optionally by a number denoting the octave.  The default octave is 4, and A4 is 1.0 rate.  Additionally to the note, a detune value may be provided directly after '*' character as a float value.  This will detune the note by some number of semitones, or anywhere in between.  This is in addition to any other provided global detuning.</td>
                 </tr>
                 <tr>
+                    <td>9</td>
+                    <td></td>
                     <td>001000</td>
                     <td>Speed Source</td>
                     <td>A buffer to read rate values from to change the speed over time.  This is applied along with the base speed value.</td>
                 </tr>
                 <tr>
+                    <td>10</td>
+                    <td></td>
                     <td>000800</td>
                     <td>Speed Mode</td>
                     <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
                 </tr>
                 <tr>
+                    <td>11</td>
+                    <td></td>
                     <td>000400</td>
                     <td>Phase Source</td>
                     <td>The buffer to read phase values from in the case that the Player Mode is SYNTH_MODE_PHASE_SOURCE.</td>
                 </tr>
                 <tr>
+                    <td>12</td>
+                    <td></td>
                     <td>000200</td>
                     <td>Loop Start</td>
                     <td>The start position of a loop.  Also the 0.0 position of the phase in the case a buffer is used as the phase source.</td>
                 </tr>
                 <tr>
+                    <td>13</td>
+                    <td></td>
                     <td>000100</td>
                     <td>Loop End</td>
                     <td>The end position of a loop.  Also the 1.0 position of the phase in the case a buffer is used as the phase source.</td>
                 </tr>
                 <tr>
+                    <td>14</td>
+                    <td></td>
                     <td>000080</td>
                     <td>Player Mode</td>
                     <td><a href="#player-modes">Either SYNTH_MODE_ONCE, SYNTH_MODE_LOOP or SYNTH_MODE_PHASE_SOURCE.</a></td>
                 </tr>
                 <tr>
+                    <td>15</td>
+                    <td></td>
                     <td>000040</td>
                     <td>Run Length</td>
                     <td>The amount of output time the player should generate in to an output buffer.</td>
@@ -417,6 +468,8 @@ original      │ replacement
         <table class="parameters">
             <thead>
                 <tr>
+                    <th>#</th>
+                    <th>Reason</th>
                     <th>Mask Bit</th>
                     <th>Parameter Name</th>
                     <th>Description</th>
@@ -424,31 +477,43 @@ original      │ replacement
             </thead>
             <tbody>
                 <tr>
+                    <td>16</td>
+                    <td>0</td>
                     <td>000020</td>
                     <td>Requested Time Met</td>
                     <td>A parameter list applied when the amount of output time requested by Run Length has been completed.</td>
                 </tr>
                 <tr>
+                    <td>17</td>
+                    <td>01</td>
                     <td>000010</td>
                     <td>Output Buffer Filled</td>
                     <td>Applied when the output buffer has reached its and and has been filled.</td>
                 </tr>
                 <tr>
+                    <td>18</td>
+                    <td>02</td>
                     <td>000008</td>
                     <td>Input Buffer Exhausted</td>
                     <td>Applied when the input buffer has reached an end.</td>
                 </tr>
                 <tr>
+                    <td>19</td>
+                    <td>04</td>
                     <td>000004</td>
                     <td>Volume Buffer Exhausted</td>
                     <td>Applied When the volume source buffer has ended.</td>
                 </tr>
                 <tr>
+                    <td>20</td>
+                    <td>08</td>
                     <td>000002</td>
                     <td>Speed Buffer Exhausted</td>
                     <td>Applied when the speed source buffer has ended.</td>
                 </tr>
                 <tr>
+                    <td>21</td>
+                    <td>10</td>
                     <td>000001</td>
                     <td>Phase Buffer Exhausted</td>
                     <td>Applied when the phase source buffer has ended.</td>
@@ -461,6 +526,8 @@ original      │ replacement
             <caption>Parameters</caption>
             <thead>
                 <tr>
+                    <th>#</th>
+                    <th>Reason</th>
                     <th>Mask Bit</th>
                     <th>Parameter Name</th>
                     <th>Description</th>
@@ -468,112 +535,184 @@ original      │ replacement
             </thead>
             <tbody>
                 <tr>
+                    <td>0</td>
+                    <td></td>
                     <td>100000</td>
                     <td>Input Buffer</td>
                     <td>The buffer which is to have a filter applied to it.</td>
                 </tr>
                 <tr>
+                    <td>1</td>
+                    <td></td>
                     <td>080000</td>
                     <td>Input Buffer Position</td>
                     <td>The position which the input buffer will start from.  This is an int in this case since this kind of channel can't do time based operations.</td>
                 </tr>
                 <tr>
+                    <td>2</td>
+                    <td></td>
                     <td>040000</td>
                     <td>Output Buffer</td>
                     <td>The buffer which this channel will output to.</td>
                 </tr>
                 <tr>
+                    <td>3</td>
+                    <td></td>
                     <td>020000</td>
                     <td>Output Buffer Position</td>
                     <td>The position of the output buffer where output will begin.</td>
                 </tr>
                 <tr>
+                    <td>4</td>
+                    <td></td>
                     <td>010000</td>
                     <td>Filter Buffer</td>
                     <td>The buffer which will contain the filter kernel or kernels for the convolution.</td>
                 </tr>
                 <tr>
+                    <td>5</td>
+                    <td></td>
                     <td>008000</td>
                     <td>Filter Buffer Start</td>
                     <td>The start position within the buffer where filters are to be found.  This value is, unlike all other offset values, in samples.</td>
                 </tr>
                 <tr>
+                    <td>6</td>
+                    <td></td>
                     <td>004000</td>
                     <td>Filter Buffer Slices</td>
                     <td>The number of same-size filter kernels which follow from the start.</td>
                 </tr>
                 <tr>
+                    <td>7</td>
+                    <td></td>
                     <td>002000</td>
                     <td>Selected Slice</td>
                     <td>The filter slice which is to be selected starting from the filter start.  Starting from 0.</td>
                 </tr>
                 <tr>
+                    <td>8</td>
+                    <td></td>
                     <td>001000</td>
                     <td>Slice Source</td>
                     <td>A buffer which will be used to select slices.  0.0 is the first slice and 1.0 is the last slice, and the nearest slice in between will be selected.</td>
                 </tr>
                 <tr>
+                    <td>9</td>
+                    <td></td>
                     <td>000800</td>
                     <td>Filter Mode</td>
                     <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
                 </tr>
                 <tr>
+                    <td>10</td>
+                    <td></td>
                     <td>000400</td>
                     <td>Output Mode</td>
                     <td><a href="#output-modes">Either SYNTH_OUTPUT_REPLACE or SYNTH_OUTPUT_ADD.</a></td>
                 </tr>
                 <tr>
+                    <td>11</td>
+                    <td></td>
                     <td>000200</td>
                     <td>Volume</td>
                     <td>The base output volume for this filter.</td>
                 </tr>
                 <tr>
+                    <td>12</td>
+                    <td></td>
                     <td>000100</td>
                     <td>Volume Source</td>
                     <td>A source buffer for volume, like the player Volume Source.</td>
                 </tr>
                 <tr>
+                    <td>13</td>
+                    <td></td>
                     <td>000080</td>
                     <td>Volume Mode</td>
                     <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
                 </tr>
                 <tr>
+                    <td>14</td>
+                    <td></td>
                     <td>000040</td>
                     <td>Run Length</td>
                     <td>How much time to try to output.</td>
                 </tr>
                 <tr>
+                    <td>15</td>
+                    <td>0</td>
                     <td>000020</td>
                     <td>Requested Time Met</td>
                     <td>Applied when the Run Length has been met.</td>
                 </tr>
                 <tr>
+                    <td>16</td>
+                    <td>01</td>
                     <td>000010</td>
                     <td>Output Buffer Filled</td>
                     <td>Applied when the output buffer has been filled.</td>
                 </tr>
                 <tr>
+                    <td>17</td>
+                    <td>02</td>
                     <td>000008</td>
                     <td>Input Buffer Exhausted</td>
                     <td>Applied when the input source buffer has run out.</td>
                 </tr>
                 <tr>
+                    <td>18</td>
+                    <td>04</td>
                     <td>000004</td>
                     <td>Volume Buffer Exhausted</td>
                     <td>Applied when the volume source buffer has run out.</td>
                 </tr>
                 <tr>
+                    <td>19</td>
+                    <td>20</td>
                     <td>000002</td>
                     <td>Slice Buffer Exhausted</td>
                     <td>Applied when the slice source buffer has run out.</td>
                 </tr>
                 <tr>
+                    <td>20</td>
+                    <td></td>
                     <td>000001</td>
                     <td>Filter Size</td>
                     <td>This specifies the size of the filter for the initial state.  This can't be changed once it's set and will be ignored if provided on a sequence line.</td>
                 </tr>
             </tbody>
         </table>
+        <hr>
+        <h2 id="debug-output">Debug Output</h2>
+        <p>This part isn't really likely to be stable and consistent and a lot of it's mostly just stuff i threw in while working on stuff.  It does seem useful for tracing what's going on during playback, though.  I won't bother documenting all of it but I'll document what's important.  The sequencer needs to have tracing enabled for this stuff to be output, otherwise it'll just be errors.</p>
+        <h3 id="debug-parser-output">Debug Parser Output</h3>
+        <p>While a file is being read, each input line will be printed, followed by the output after parsing macros.  For example:</p>
+        <code>0: CrustyTracker
+-&gt; CrustyTracker
+1: 2 2
+-&gt; 2 2
+. . .</code>
+        <p>The parser will then print all the unique lines it's found with their numbers.<p>
+        <code>0 [0]
+1 [None, 0, None, None, None]
+. . .</code>
+        <h3 id="debug-sequencer-output">Debug Sequencer Output</h3>
+        <p>While a sequence is playing, a lot of information will be printed showing what's happening and hopefully why.</p>
+        <p>When the underlying synth engine calls the audio callback needing audio, the output will look like this for example.</p>
+        <code>=== Audio Callback 16 ===</code>
+        <p>Where 16 is the amount of milliseconds requested.</p>
+        <p>For each callback, the channels will be run in order for each line of events in the file, or to continue/complete an event in process between callbacks.  The output for a call to run an event looks like:</p>
+        <code>=== run_channels === 768</code>
+        <p>Where 768 is the amount of samples needed from the underlying synthesizer to fulfill/continue/complete the event.</p>
+        <p>Each channel with new line event will be printed with the line number followed by a list of parameters.  These parameters are in the order in the parameter tables.  None indicates no update and for parameter change updates, a number indicates that the numbered line will be used for the parameter change, and a -1 means that the parameter change will be unset.  It looks like this:</p>
+        <code>8 [None, None, 5000, None, None]</code>
+        <p>Each line will be followed by how many samples the synth engine returned.</p>
+        <code>8 +768</code>
+        <p>If this value is +0, it'll be followed by a line with the "reason" why there was 0 samples returned.  These refer to the binary OR'd together reason values in the parameter tables, in hex.</p>
+        <code>8 192000 1</code>
+        <p>Followed by a list of any changes applied.</p>
+        <code>[None, 0, None, None, None]</code>
         <hr>
     </body>
 </html>
