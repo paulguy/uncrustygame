@@ -62,6 +62,11 @@ class MacroReader():
         if isinstance(macros[0], tuple):
             # try to find each macro arg in the macro body
             for macro in macros:
+                for macro_b in self._macros:
+                    if macro[0] in macro_b[0]:
+                        raise ValueError("Macro {} would be aliased by macro {}.".format(macro_b[0], macro[0]))
+                    elif macro_b[0] in macro[0]:
+                        raise ValueError("Macro {} would be aliased by macro {}.".format(macro[0], macro_b[0]))
                 for arg in macro[1]:
                     try:
                         macro[2].index(arg)
@@ -69,6 +74,11 @@ class MacroReader():
                         raise ValueError("Macro {} has arg {} not found in body.".format(macro[0], arg))
             self._macros.extend(macros)
         else:
+            for macro_b in self._macros:
+                if macros[0] in macro_b[0]:
+                    raise ValueError("Macro {} would be aliased by macro {}.".format(macro_b[0], macros[0]))
+                elif macro_b[0] in macros[0]:
+                    raise ValueError("Macro {} would be aliased by macro {}.".format(macros[0], macro_b[0]))
             # try to find each macro arg in the macro body
             for arg in macros[1]:
                 try:
@@ -133,7 +143,7 @@ class MacroReader():
                             try:
                                 replacement = replacement.replace(macro[1][i], args[i])
                             except IndexError:
-                                raise ValueError("Invalid arguments used for macro ({} != {})".format(len(macro[1]), len(args)))
+                                raise ValueError("Invalid arguments used for macro {} ({} != {})".format(macro[0], len(macro[1]), len(args)))
                         # append the replacement string
                         newLine += replacement + ' '
                         # if there's nothing left, break
