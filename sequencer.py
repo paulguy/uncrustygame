@@ -240,11 +240,11 @@ class Sequencer():
             ordersData = file.readline().split()
         except:
             raise Exception("Unexpected end of file or error reading file.")
-        for item in ordersData:
-            order = int(item)
+        for item in enumerate(ordersData):
+            order = int(item[1])
             if order < 0 or order > len(self._pattern) - 1:
-                raise IndexError("order refers to pattern out of range")
-            self._order.append(int(item))
+                raise IndexError("order {} refers to pattern out of range: {}".format(item[0] + 1, order))
+            self._order.append(order)
 
     def _write_row(self, file, row, initial):
         desc = self._desc._rowdesc[row[-1]]

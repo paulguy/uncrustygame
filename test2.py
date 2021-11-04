@@ -22,6 +22,8 @@ SLICES = FILTERS_PER_DECADE * DECADES
 MIN_TRANS_WIDTH = 80
 TRANS_WIDTH_DIV = 500
 
+WAVEFORM_HARMONICS = 8
+
 def _driver_key(info):
     info = info[1]
     # everything else is in between
@@ -440,7 +442,7 @@ def main():
     colorrad = 0.0
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, True)
-    audbuffers = load_audio(aud, 8)
+    audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
     aud.enabled(True)
 
     wavout = False
