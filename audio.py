@@ -17,7 +17,7 @@ def _create_float_array(iterable):
 
     return(a)
 
-_NOTES = "a bc d ef g "
+_NOTES = "c d ef g a b"
 
 class _MacroReaderIterator():
     def __init__(self, reader):
@@ -404,17 +404,26 @@ class AudioSequencer():
     def ended(self):
         return self._ended
 
+    def _rearrange_tunings(orig):
+        for i in range(3, 12):
+            orig[i] /= 2.0
+        tunes = (orig[3], orig[4], orig[5], orig[6], orig[7], orig[8], orig[9], orig[10], orig[11], orig[0], orig[1], orig[2])
+        print(tunes)
+        return tunes
+
     def _tune(self):
         tuning = None
         try:
             tuning = self._tag['tuning'].split()
         except KeyError:
-            self._tunes = [2 ** (x / 12) for x in range(12)]
+            tunes = [2 ** (x / 12) for x in range(12)]
+            self._tunes = AudioSequencer._rearrange_tunings(tunes)
             return
 
         if len(tuning) == 1:
             tuning = float(tuning[0])
-            self._tunes = [tuning * (2 ** (x / 12)) for x in range(12)]
+            tunes = [tuning * (2 ** (x / 12)) for x in range(12)]
+            self._tunes = AudioSequencer._rearrange_tunings(tunes)
         elif len(tuning) == 12:
             self._tunes = [float(x) for x in tuning]
         else:

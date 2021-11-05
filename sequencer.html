@@ -192,7 +192,7 @@
             <tbody>
                 <tr>
                     <td>tuning</td>
-                    <td>Either 1 detuning value can be provided which will detune all the notes by some amount (1.0 is in tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be given to detune every note.  Notes start at A.</td>
+                    <td>Either 1 detuning value can be provided which will detune all the notes by some amount (1.0 is in tune, 0.5 is half frequency, 2.0 is double frequency), or 12 values can be given to detune every note.  Octaves start at C.</td>
                 </tr>
                 <tr>
                     <td>init</td>
@@ -410,7 +410,7 @@ original      │ replacement
                     <td></td>
                     <td>002000</td>
                     <td>Speed</td>
-                    <td>This affects the interval at which values are fetched from the input buffer.  This is a complex value which can take many format.  It can be most simply a float value, where 1.0 will play the input buffer with no change in rate, lower values will play slower (by mutiplying up input samples, without interpolation) or faster (also, no antialiasing, so skipped samples are totally not represented).  This value may also be negative, for reverse playback.  This value may also be a note, A-G.  Followed optionally by a b or a # to flatten or sharpen it a semitone, then followed optionally by a number denoting the octave.  The default octave is 4, and A4 is 1.0 rate.  Additionally to the note, a detune value may be provided directly after '*' character as a float value.  This will detune the note by some number of semitones, or anywhere in between.  This is in addition to any other provided global detuning.</td>
+                    <td>This affects the interval at which values are fetched from the input buffer.  This is a complex value which can take many format.  It can be most simply a float value, where 1.0 will play the input buffer with no change in rate, lower values will play slower (by mutiplying up input samples, without interpolation) or faster (also, no antialiasing, so skipped samples are totally not represented).  This value may also be negative, for reverse playback.  This value may also be a note, C-G,A,B.  Followed optionally by a b or a # to flatten or sharpen it a semitone, then followed optionally by a number denoting the octave.  The default octave is 4, and A4 is 1.0 rate.  Additionally to the note, a detune value may be provided directly after '*' character as a float value.  This will detune the note by some number of semitones, or anywhere in between.  This is in addition to any other provided global detuning.</td>
                 </tr>
                 <tr>
                     <td>9</td>
@@ -709,7 +709,7 @@ original      │ replacement
         <code>8 [None, None, 5000, None, None]</code>
         <p>Each line will be followed by how many samples the synth engine returned.</p>
         <code>8 +768</code>
-        <p>If this value is +0, it'll be followed by a line with the "reason" why there was 0 samples returned.  These refer to the binary OR'd together reason values in the parameter tables, in hex.</p>
+        <p>If this value is +0, it'll be followed by a line with the requested time remaining followed by the "reason" why there was 0 samples returned.  If the reason is 0, and the time remaining is not 0, then there was no reason, which shouldn't happen!  But if both are 0, it doesn't mean the synthesizer had any reason to stop continuing, but that the requested amount of time had simply passed.  These refer to the binary OR'd together reason values in the parameter tables, in hex.</p>
         <code>8 192000 1</code>
         <p>Followed by a list of any changes applied.</p>
         <code>[None, 0, None, None, None]</code>
