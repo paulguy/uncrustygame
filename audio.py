@@ -408,7 +408,6 @@ class AudioSequencer():
         for i in range(3, 12):
             orig[i] /= 2.0
         tunes = (orig[3], orig[4], orig[5], orig[6], orig[7], orig[8], orig[9], orig[10], orig[11], orig[0], orig[1], orig[2])
-        print(tunes)
         return tunes
 
     def _tune(self):
@@ -427,7 +426,7 @@ class AudioSequencer():
         elif len(tuning) == 12:
             self._tunes = [float(x) for x in tuning]
         else:
-            raise Exception("'tuning' tag must be some detune or all 12 note detunings.")
+            raise ValueError("'tuning' tag must be some detune or all 12 note detunings.")
 
     def _get_speed(self, speed, inrate, outrate):
         tune = 0.0

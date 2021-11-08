@@ -221,13 +221,15 @@ class Sequencer():
 
         try:
             patterns = int(file.readline())
-        except:
-            raise Exception("Unexpected end of file or error reading file.")
+        except Exception as e:
+            print("Unexpected end of file or error reading pattern count.")
+            raise e
         for i in range(patterns):
             try:
                 patlen = int(file.readline())
-            except:
-                raise Exception("Unexpected end of file or error reading file.")
+            except Exception as e:
+                print("Unexpected end of file or error reading pattern length.")
+                raise e
             pattern = list()
             for j in range(patlen):
                 pattern.append(self._read_line(file))
@@ -238,8 +240,9 @@ class Sequencer():
 
         try:
             ordersData = file.readline().split()
-        except:
-            raise Exception("Unexpected end of file or error reading file.")
+        except Exception as e:
+            print("Unexpected end of file or error reading pattern order.")
+            raise e
         for item in enumerate(ordersData):
             order = int(item[1])
             if order < 0 or order > len(self._pattern) - 1:

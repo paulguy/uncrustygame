@@ -1,12 +1,10 @@
 ; default input and output behavior is to loop since this is most likely to be
 ; most useful
-CH_PLAYER_INB _OUTB=_INB 0 _OUTB 0 SYNTH_OUTPUT_REPLACE 1.0 _INB SYNTH_AUTO_CONSTANT 1.0 _INB SYNTH_AUTO_CONSTANT _INB 0 -1 SYNTH_MODE_LOOP 0 0 40000 0 0 0 0 0
+CH_PLAYER _INB _OUTB=_INB 0 _OUTB 0 SYNTH_OUTPUT_REPLACE 1.0 _INB SYNTH_AUTO_CONSTANT 1.0 _INB SYNTH_AUTO_CONSTANT _INB 0 -1 SYNTH_MODE_LOOP 0 0 40000 0 0 0 0 0
 ; used for TOSTEREO.  Doesn't loop output.
 _OUT_CHANNEL _INB _OUTB=_INB 0 _OUTB 0 SYNTH_OUTPUT_ADD 1.0 _INB SYNTH_AUTO_CONSTANT 1.0 _INB SYNTH_AUTO_CONSTANT _INB 0 -1 SYNTH_MODE_LOOP 0 0 0 0 0 0 0
 ; split a buffer to both output buffers
 CH_TOSTEREO _INB=_OUT_CHANNEL _INB 0 | _OUT_CHANNEL _INB 1
-; output to output buffers for some time
-TOSTEREO_RUN _TIME=40 _TIME | 40 _TIME
 ; filter channel loops input and output for requested time by default
 CH_FILTER _INB _FILTB _FILTSIZE _OUTB _SLICES=_INB 0 _OUTB 0 _FILTB 0 _SLICES 0 _INB SYNTH_AUTO_CONSTANT SYNTH_OUTPUT_REPLACE 1.0 _INB SYNTH_AUTO_CONSTANT 0 0 20000 0 80000 0 0 0 _FILTSIZE
 ; silence channel loops output for requested time by default
@@ -65,6 +63,10 @@ P_RELENV _REL_SPD _MAX_REL=2068 -_REL_SPD _MAX_REL 0 \
 P_OLOOP=10 40000 0
 ; don't loop output
 P_ONOLOOP=10 0
+; mono to stereo volumes
+P_TOS_VOL _VL _VR=10000 _VL | 10000 _VR
+; output to output buffers for some time
+P_TOS_RUN _TIME=40 _TIME | 40 _TIME
 ; ##### filter channel #####
 F_IBUF _INB=100000 _INB
 F_INP _POS=80000 _POS
@@ -93,9 +95,9 @@ S_OBUF _OUTB=10 _OUTB
 S_OUTP _POS=8 _POS
 S_RUN _TIME=4 _TIME
 ; loop output
-S_LOOP _BOUT=1 8 0
+S_LOOP=1 8 0
 ; don't loop output
-S_NOLOOP _BOUT=1 0
+S_NOLOOP=1 0
 ; semitone ratios
 ST_01=0.0833
 ST_02=0.1667
