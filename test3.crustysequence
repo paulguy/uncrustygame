@@ -26,78 +26,40 @@ macro TRIINBUF=10
 buffer external
 macro SAWINBUF=11
 buffer external
-; osc 1
-macro LFO1BUF=12
+; reusable buffers
+macro LFOBUF=12
 buffer MAXREQ
+macro ENVBUF=13
+buffer MAXREQ
+macro FILTERBUF=14
+buffer MAXREQ
+macro BENDBUF=15
+buffer MAXREQ
+; voice 1
+channel player ; LFO bias
 channel player ; LFO generator
 channel player ; pitch bend
-macro ENV1BUF=13
-buffer MAXREQ
 channel player ; envelope generator
 channel player ; oscillator
-macro OSC1BUF=14
+macro OSC1BUF=16
 buffer MAXREQ
 channel filter
-macro FILTER1BUF=15
-buffer MAXREQ
 channel player ; filter mix
 channel player ; feedback
 channel player ; left output
 channel player ; right output
 channel silence
-; osc 2
-macro LFO2BUF=12
-buffer MAXREQ
-channel player ; LFO generator
-channel player ; pitch bend
-macro ENV2BUF=13
-buffer MAXREQ
-channel player ; envelope generator
-channel player ; oscillator
-macro OSC2BUF=14
-buffer MAXREQ
-channel filter
-macro FILTER2BUF=15
-buffer MAXREQ
-channel player ; filter mix
-channel player ; feedback
-channel player ; left output
-channel player ; right output
-channel silence
-; osc 3
-macro LFO3BUF=16
-buffer MAXREQ
-channel player ; LFO generator
-channel player ; pitch bend
-macro ENV3BUF=17
-buffer MAXREQ
-channel player ; envelope generator
-channel player ; oscillator
-macro OSC3BUF=18
-buffer MAXREQ
-channel filter
-macro FILTER3BUF=19
-buffer MAXREQ
-channel player ; filter mix
-channel player ; feedback
-channel player ; left output
-channel player ; right output
-channel silence
-macro SYNTHCHAN _BTONE _BLFO _BENV _BOSC _BFILT _SLICE=TONE_CHANNEL LFOINBUF _BLFO | GEN_ENV_CHANNEL SLOPEINBUF _BLFO | GEN_ENV_CHANNEL SLOPEINBUF _BENV | TONE_ENV_SPD_CHANNEL _BTONE _BENV _BLFO _BOSC | FILTER_CHANNEL _BOSC FILTERINBUF FILTER_SIZE _BFILT FILTER_SLICES _SLICE | TONE_CHANNEL _BFILT _BOSC | TONE_CHANNEL _BOSC _BOSC | MONO_TO_STEREO_CHAN _BOSC | _BOSC 0 0 0 8 0
-macro SYNTHPARAMS _LFODEPTH _VOL _WET _DELAY _FBACK=10000 _LFODEPTH | 20008 SYNTH_OUTPUT_ADD 102000 -1.0 0.0 | 0 | 30000 SYNTH_OUTPUT_ADD _VOL | 0 | 30000 SYNTH_OUTPUT_ADD _WET | 70000 _DELAY SYNTH_OUTPUT_ADD _FBACK | -3
-macro SYNTHPLAY _TIME _LFORATE _VOL _ARATE _ATIME _DRATE _DTIME _SRATE _STIME _SPEED=PLAY_TONE _LFORATE _TIME | PLAY_SAMPLE 0.0 0.0 _TIME | START_ENV _VOL _ARATE _ATIME _DRATE _DTIME _SRATE _STIME | PLAY_TONE _SPEED _TIME | 40 _TIME | 40 _TIME | 40 _TIME | MONO_MIX _TIME | 4 _TIME
-macro SYNTHREL _RSPEED _RTIME=40 _RTIME | 40 _RTIME | REL_ENV _RSPEED _RTIME | 40 _RTIME | 40 _RTIME | 40 _RTIME | 40 _RTIME | MONO_MIX _RTIME | 4 _RTIME
-macro SYNTHBEND _BVOL _BSPEED=0 | 12000 _BVOL _BSPEED | -8
-macro SYNTHCONT _SPEED=0 | 102000 0.0 0.0 | 0 | 2000 _SPEED | -6
-macro SYNTHNOP=-10
 sequence
-0 | SYNTHCHAN SAWINBUF LFO1BUF ENV1BUF OSC1BUF FILTER1BUF 50 | SYNTHCHAN SAWINBUF LFO2BUF ENV2BUF OSC2BUF FILTER2BUF 50 | SYNTHCHAN SAWINBUF LFO3BUF ENV3BUF OSC3BUF FILTER3BUF 50
+0 | \ ; voice 1 instances
+CH_PLAYER SLOPEINBUF LFOBUF | CH_PLAYER LFOINBUF LFOBUF | CH_PLAYER SLOPEINBUF BENDBUF | CH_PLAYER SLOPEINBUF ENVBUF | CH_PLAYER SAWINBUF OSC1BUF | CH_FILTER OSC1BUF FILTERINBUF FILTERBUF FILTER_SIZE FILTER_SLICES | CH_PLAYER FILTERBUF OSC1BUF | CH_PLAYER OSC1BUF OSC1BUF | CH_TOSTEREO OSC1BUF | CH_SILENCE OSC1BUF
 2
-1
-1 0 | SYNTHPARAMS 0.02 0.1 10.0 250 0.1 | SYNTHPARAMS 0.01 0.1 10.0 200 0.1 | SYNTHPARAMS 0.02 0.1 10.0 270 0.1
+1 0 | CH_PCPOS -1.0 | CH_PVMIX |
+0   | CH_PSPD 0.0   | CH_VOL 0.02 | 
+1 0 | 0 | SYNTHPARAMS 0.02 0.1 10.0 250 0.1
+0 | 112000 -1.0 0.05 0.0 | 20000 SYNTH_OUTPUT_ADD | a0000 BENDBUF SYNTH_OUTPUT_REPLACE | 0 | 1002 BENDBUF 1000 BENDBUF | 1802 LFOBUF SYNTH_AUTO_SOURCE 1000 LFOBUF | -5
 4
-1 1500 | SYNTHPLAY 5000 0.4 0.1 2.0 500 2.0 250 0.0 3250 c3 | SYNTHPLAY 5000 0.46 0.2 2.0 500 2.0 250 0.0 3250 e2 | SYNTHPLAY 5000 0.32 0.1 2.0 500 2.0 250 0.0 3250 g3
-1 1000 | SYNTHNOP | SYNTHBEND -ST_01 2.0 | SYNTHNOP
-1 1500 | SYNTHNOP | SYNTHCONT eb2 | SYNTHNOP
-1 2000 | SYNTHREL 0.5 2000 | SYNTHREL 0.5 2000 | SYNTHREL 0.5 2000
+1 2500 | 40 7000 | SYNTHPLAY 5000 0.4 0.1 2.0 500 2.0 250 0.0 3250 c2
+1 1000 | 0 | SYNTHBEND ST_19 2.0
+1 1500 | 0 | SYNTHCONT g3
+1 2000 | 0 | SYNTHREL 0.5 2000
 0 1

@@ -242,18 +242,18 @@ def make_filter(rate):
     if filt is None:
         print("Generating filters...")
         try:
-            filt = numpy.zeros(SLICES * FILTER_TAPS // 2, numpy.float32)
+            filt = numpy.zeros(SLICES * FILTER_TAPS, numpy.float32)
             maxval = DECADES * FILTERS_PER_DECADE
             for dec in range(DECADES):
                 for i in range(FILTERS_PER_DECADE):
                     mul = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
                     freq = BASE_FREQ * mul
                     transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
-                    pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS // 2) + (i * FILTER_TAPS // 2)
-                    filt[pos:pos + (FILTER_TAPS // 2)] = \
+                    pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS) + (i * FILTER_TAPS)
+                    filt[pos:pos + FILTER_TAPS] = \
                         signal.remez(FILTER_TAPS,
                                      [0, freq, freq + transwidth, rate / 2],
-                                     [1, 0], fs=rate)[FILTER_TAPS//2:]
+                                     [1, 0], fs=rate)
                     print("{} / {}".format(dec * FILTERS_PER_DECADE + i + 1, maxval), end='\r')
         except Exception as e:
             raise e
