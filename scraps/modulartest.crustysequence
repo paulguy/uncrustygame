@@ -1,0 +1,70 @@
+CrustyTracker
+2 2
+include macros.txt
+include modular.txt
+macro MAXREQ=1000
+tag max-request=MAXREQ
+macro LFOINBUF=2
+buffer sinelfo.wav ; leave this here because there's no consequence for it
+                   ; really other than being sint16 when everything else is
+                   ; float32 but leave it as a test to assure WAV loading
+                   ; continues to function
+macro SLOPEINBUF=3
+buffer external
+macro BENDUPINBUF=4
+buffer external
+macro BENDDNINBUF=5
+buffer external
+macro NOISEINBUF=6
+buffer external
+macro LPFILTINBUF=7
+buffer external
+macro HPFILTINBUF=8
+buffer external
+macro SININBUF=9
+buffer external
+macro SQRINBUF=10
+buffer external
+macro TRIINBUF=11
+buffer external
+macro SAWINBUF=12
+buffer external
+; reusable buffers
+macro LFOBUF=13
+buffer MAXREQ
+macro ENVBUF=14
+buffer MAXREQ
+macro BENDBUF=15
+buffer MAXREQ
+macro FILTERBUF=16
+buffer MAXREQ
+; voice 1
+channel player ; LFO bias
+channel player ; LFO generator
+channel player ; pitch bend
+channel player ; envelope generator
+channel player ; oscillator
+macro OSC1BUF=17
+buffer MAXREQ
+channel filter
+channel player ; mix
+channel player ; feedback
+channel player ; left output
+channel player ; right output
+channel silence
+macro VOICE1_START _TONE=P_RUN 999999 | P_RUN 999999 | P_RUN 999999 | P_STARTENV 1.0 2.0 500 2.0 250 0.0 999999 | P_TONE _TONE 999999 | F_RUN 999999 | P_RUN 999999 | P_RUN 999999 | P_TOS_RUN 999999 | S_RUN 999999
+macro VOICE1_BEND _VAL _RATE=-2 | PBEND_DO _VAL _RATE | -8
+macro VOICE1_CONT _TONE=-2 | PBEND_RESET | 0 | P_SPD _TONE | -6
+macro VOICE1_REL=P_RUN 2000 | P_RUN 2000 | P_RUN 2000 | P_RELENV 0.5 2000 | P_RUN 2000 | F_RUN 2000 | P_RUN 2000 | P_RUN 2000 | P_TOS_RUN 2000 | S_RUN 2000
+sequence
+0 | \ ; voice 1 instances
+CH_PLAYER SLOPEINBUF LFOBUF | CH_PLAYER LFOINBUF LFOBUF | CH_PLAYER SLOPEINBUF BENDBUF | CH_PLAYER SLOPEINBUF ENVBUF | CH_PLAYER SAWINBUF OSC1BUF | CH_FILTER OSC1BUF LPFILTINBUF FILTER_SIZE FILTERBUF FILTER_SLICES | CH_PLAYER FILTERBUF OSC1BUF | CH_PLAYER OSC1BUF OSC1BUF | CH_TOSTEREO OSC1BUF | CH_SILENCE OSC1BUF
+2
+1
+1 0 | BIAS_INIT 0.5 | LFO_M_INIT 0.5 1.0 | PBEND_INIT | ENV_INIT | OSC_MVS_INIT 0.1 ENVBUF BENDBUF | FILT_S_INIT 0 LFOBUF 1.0 | MIX_INIT 9.0 | FB_INIT 200 0.0 | P_TOS_VOL 0.1 0.1 | 0
+4
+1 2500 | VOICE1_START c2
+1 1000 | VOICE1_BEND ST_19 2.0
+1 1500 | VOICE1_CONT g3
+1 3000 | VOICE1_REL
+0 1

@@ -226,21 +226,20 @@ def create_random_noise(low, high, num):
     noise = array.array('f', RandomNoise(low, high, num))
     return(noise)
 
-def make_filter(rate):
+def make_filter(rate, lowpass):
     filt = None
-    fileexists = False
+#    fileexists = False
 
-    filename = "{}t{}b{}fd{}d{}mtw{}twd{}r.npy".format(FILTER_TAPS, BASE_FREQ, FILTERS_PER_DECADE, DECADES, MIN_TRANS_WIDTH, TRANS_WIDTH_DIV, rate)
+#    filename = "{}t{}b{}fd{}d{}mtw{}twd{}r.npy".format(FILTER_TAPS, BASE_FREQ, FILTERS_PER_DECADE, DECADES, MIN_TRANS_WIDTH, TRANS_WIDTH_DIV, rate)
 
-    try:
-        filt = numpy.load(filename, allow_pickle=False)
-        fileexists = True
-        print("Filters loaded from file.")
-    except IOError as e:
-        pass
+#    try:
+#        filt = numpy.load(filename, allow_pickle=False)
+#        fileexists = True
+#        print("Filters loaded from file.")
+#    except IOError as e:
+#        pass
 
     if filt is None:
-        print("Generating filters...")
         try:
             filt = numpy.zeros(SLICES * FILTER_TAPS, numpy.float32)
             maxval = DECADES * FILTERS_PER_DECADE
@@ -250,22 +249,30 @@ def make_filter(rate):
                     freq = BASE_FREQ * mul
                     transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
                     pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS) + (i * FILTER_TAPS)
-                    filt[pos:pos + FILTER_TAPS] = \
-                        signal.remez(FILTER_TAPS,
-                                     [0, freq, freq + transwidth, rate / 2],
-                                     [1, 0], fs=rate)
+#                    filt[pos:pos + FILTER_TAPS] = \
+#                        signal.remez(FILTER_TAPS,
+#                                     [0, freq, freq + transwidth, rate / 2],
+#                                     [1, 0], fs=rate)
+                    if lowpass:
+                        filt[pos:pos + FILTER_TAPS] = \
+                             signal.firwin(FILTER_TAPS, freq,
+                                           pass_zero=lowpass, fs=rate)
+                    else:
+                        filt[pos:pos + FILTER_TAPS] = \
+                             signal.firwin(FILTER_TAPS, (freq, rate/2-1),
+                                           pass_zero=lowpass, fs=rate)
                     print("{} / {}".format(dec * FILTERS_PER_DECADE + i + 1, maxval), end='\r')
         except Exception as e:
             raise e
         finally:
             print()
 
-    if not fileexists:
-        print("Saving filter to file...")
-        try:
-            numpy.save(filename, filt, allow_pickle=False)
-        except IOError:
-            print("Saving failed.")
+#    if not fileexists:
+#        print("Saving filter to file...")
+#        try:
+#            numpy.save(filename, filt, allow_pickle=False)
+#        except IOError:
+#            print("Saving failed.")
 
     return(filt)
 
@@ -336,8 +343,11 @@ def load_audio(aud, harmonics):
                        array.array('f', create_random_noise(-1.0, 1.0, rate)),
                        rate)
 
-    filt = make_filter(rate)
-    filt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
+    print("Generating filters...")
+    filt = make_filter(rate, lowpass=True)
+    lpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
+    filt = make_filter(rate, lowpass=False)
+    hpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
 
     wave = WaveGen(rate)
     sine = aud.buffer(cg.SYNTH_TYPE_F32, wave.sine(440), rate)
@@ -345,7 +355,7 @@ def load_audio(aud, harmonics):
     triangle = aud.buffer(cg.SYNTH_TYPE_F32, wave.triangle(harmonics, 440), rate)
     saw = aud.buffer(cg.SYNTH_TYPE_F32, wave.sawtooth(harmonics, 440), rate)
 
-    return envslope, benddownslope, bendupslope, noise, filt, sine, square, triangle, saw
+    return envslope, benddownslope, bendupslope, noise, lpfilt, hpfilt, sine, square, triangle, saw
 
 
 def log_cb_return(priv, string):
@@ -491,7 +501,7 @@ def main():
                         for s in seq:
                             aud.del_sequence(s)
                         seq = None
-                    macros = (("FILTER_SIZE", (), str(FILTER_TAPS//2)),
+                    macros = (("FILTER_SIZE", (), str(FILTER_TAPS)),
                               ("FILTER_SLICES", (), str(SLICES)))
                     # load first sequence
                     seq = []
