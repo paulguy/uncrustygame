@@ -67,6 +67,8 @@ P_ONOLOOP=10 0
 P_TOS_VOL _VL _VR=10000 _VL | 10000 _VR
 ; output to output buffers for some time
 P_TOS_RUN _TIME=40 _TIME | 40 _TIME
+; output to output buffer for some time and volume
+P_TOS_VRUN _VL _VR _TIME=10040 _VL _TIME | 10040 _VR _TIME
 ; ##### filter channel #####
 F_IBUF _INB=100000 _INB
 F_INP _POS=80000 _POS

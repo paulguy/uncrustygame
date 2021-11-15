@@ -177,7 +177,10 @@ class Sequencer():
         else:
             skip = 0
             for i in range(len(structs)):
-                columnDesc = self._desc._column[i + skip]
+                try:
+                    columnDesc = self._desc._column[i + skip]
+                except IndexError:
+                    raise IndexError("Too many columns in line  == {}".format(len(self._desc._column)))
                 split = structs[i].split()
                 first = 0
                 try:
