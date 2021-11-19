@@ -78,7 +78,7 @@
         <p>The first line contains only the text 'CrustyTracker', this is basically just used for it to determine that it is a CrustyTracker format sequence.</p>
         <p>The second line contains the version and the number of output channels the file will want.  The current version is version 2 and this version may not be stable.  Version 1 support isn't likely since it was bad and nothing meaningful was written in it that I know of.  The need to specify the channel count for the file is there might be more or less output channels than the file wants.  If there's fewer available, playing the file will fail as there will be no attempt to reduce the number of channels.  If there's more channels, it'll play out of the first N channels that the file declares it needs.</p>
         <p>The rest of the header is a bunch of one-line declarations that begin with the type.  There are currently 4 types then the header is terminated by a line reading 'sequence'.</p>
-        <table id="header-statements">
+        <table class="descriptions" id="header-statements">
             <caption>Header Statement Types</caption>
             <thead>
                 <tr>
@@ -113,7 +113,7 @@
         <p>The string of text may contain the argument names within it and while the file is read, when the macro is used, those arguments will be replaced with the arguments provided with the macro invocation.</p>
         <h4 id="default-macros">Default Macros</h4>
         <p>There are some default macros that define useful parameter values:</p>
-        <table id="output-modes">
+        <table class="descriptions" id="output-modes">
             <caption>Output Modes</caption>
             <thead>
                 <tr>
@@ -132,7 +132,7 @@
                 </tr>
             </tbody>
         </table>
-        <table id="automation-modes">
+        <table class="descriptions" id="automation-modes">
             <caption>Automation Modes</caption>
             <thead>
                 <tr>
@@ -151,7 +151,7 @@
                 </tr>
             </tbody>
         </table>
-        <table id="player-modes">
+        <table class="descriptions" id="player-modes">
             <caption>Player Modes</caption>
             <thead>
                 <tr>
@@ -181,7 +181,7 @@
         <p>Tags are</p>
         <code>tag &lt;name&gt;=&lt;value&gt;</code>
         <p>pairs which define whatever you would like, some tags have meaning though.</p>
-        <table id="meaningful-tags">
+        <table class="descriptions" id="meaningful-tags">
             <caption>Meaningful Tags</caption>
             <thead>
                 <tr>
@@ -206,7 +206,7 @@
         </table>
         <h3 id="buffers">Buffer Statemetn</h3>
         <p>A buffer is a space where audio data can be provided but also can act as intermediate buffers as input and output for channels for processing.  The number of output buffers specified at the top of the file are the first buffers, so if there's 2 channels (stereo), those will be buffers 0 and 1, the rest of the buffers will be in order as declared in the header.</p>
-        <table id="buffer-types">
+        <table class="descriptions" id="buffer-types">
             <caption>Buffer Types</caption>
             <thead>
                 <tr>
@@ -232,7 +232,7 @@
         <h3 id="channels">Channel Statement</h3>
         <p>Channels are base units which can perform operations on buffers.  They are individually limited, but may be chained to perform more complex effects.</p>
         <p>A channel can be one of 3 values:</p>
-        <table id="channel-types">
+        <table class="descriptions" id="channel-types">
             <caption>Channel Types</caption>
             <thead>
                 <tr>

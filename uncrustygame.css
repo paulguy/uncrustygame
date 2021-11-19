@@ -15,9 +15,9 @@ table {
 }
 
 td {
-    background-color: rgb(8, 16, 32);
-    color: rgb(192, 224, 255);
     padding: 2px 4px;
+    color: rgb(192, 224, 255);
+    background-color: rgb(8, 16, 32);
 }
 
 h1, h2, h3, h4 {
@@ -31,13 +31,16 @@ th {
     font-variant: small-caps;
 }
 
-td:first-of-type, td:nth-of-type(2), td:nth-of-type(3) {
+table.parameters td:first-of-type,
+table.parameters td:nth-of-type(2),
+table.parameters td:nth-of-type(3) {
     font-family: monospace;
     font-weight: bold;
     color: yellow;
 }
 
-table.parameters td:nth-of-type(4) {
+table.parameters td:nth-of-type(4),
+table.descriptions td:first-of-type {
     color: rgb(32, 255, 32);
 }
 
