@@ -1879,7 +1879,6 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
     } else if(pl->mode == SYNTH_MODE_ONCE &&
               pl->speedMode == SYNTH_AUTO_SOURCE) {
         float *s = get_buffer_data(syn, pl->speedBuffer);
-        int is = get_buffer_size(syn, pl->inBuffer);
         float inPos = pl->inPos;
         int speedPos = pl->speedPos;
         float speed = pl->speed;
@@ -1936,7 +1935,6 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
               pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
-        unsigned int is = get_buffer_size(syn, pl->inBuffer);
         float speed = pl->speed;
         float loopLen = pl->loopEnd - pl->loopStart + 1;
         if(pl->volMode == SYNTH_AUTO_CONSTANT &&
@@ -2006,7 +2004,6 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float *s = get_buffer_data(syn, pl->speedBuffer);
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
-        unsigned int is = get_buffer_size(syn, pl->inBuffer);
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);

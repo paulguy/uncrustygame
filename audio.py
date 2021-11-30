@@ -287,12 +287,12 @@ class AudioSequencer():
                 pass
             seqDesc = seq.SequenceDescription()
             silenceDesc = seqDesc.add_row_description()
-            # 0   output buffer     0x10
+            # 0  output buffer     0x10
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
             # 1  start pos         0x08
-            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_FLOAT)
             # 2  run length        0x04
-            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_FLOAT)
             # 3  stopped requested 0x02
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_ROW, rowDesc=silenceDesc)
             # 4  stopped outbuffer 0x01
@@ -305,7 +305,7 @@ class AudioSequencer():
             # 2   output buffer                     0x080000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
             # 3   output buffer pos                 0x040000
-            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
             # 4   output mode                       0x020000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
             # 5   volume                            0x010000
@@ -329,7 +329,7 @@ class AudioSequencer():
             # 14  player mode                       0x000080
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
             # 15  run length                        0x000040
-            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
             # 16  stopped requested                 0x000020 (reason 0)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
             # 17  stopped outbuffer                 0x000010 (reason 01)
@@ -346,11 +346,11 @@ class AudioSequencer():
             # 0   input buffer         0x100000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
             # 1   input buffer pos     0x080000
-            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
             # 2   output buffer        0x040000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
             # 3   output buffer pos    0x020000
-            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
             # 4   filter buffer        0x010000
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
             # 5   filter buffer start  0x008000
@@ -372,7 +372,7 @@ class AudioSequencer():
             # 13  volume mode          0x000080
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
             # 14  run length           0x000040
-            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_INT)
+            seqDesc.add_field(filterDesc, seq.FIELD_TYPE_FLOAT)
             # 15  stopped requested    0x000020 (reason 0)
             seqDesc.add_field(filterDesc, seq.FIELD_TYPE_ROW, rowDesc=filterDesc)
             # 16  stopped outbuffer    0x000010 (reason 01)
@@ -513,9 +513,9 @@ class AudioSequencer():
                 raise IndexError("Invalid buffer number {}.".format(buf))
             silence[0] = b
         if status[1] != None:
-            silence[1] = status[1] * silence[0][3]
+            silence[1] = int(status[1] * silence[0][3])
         if status[2] != None:
-            silence[2] = status[2] * silence[0][3]
+            silence[2] = int(status[2] * silence[0][3])
         if status[3] != None:
             if status[3] < 0:
                 silence[3] = None
@@ -552,8 +552,9 @@ class AudioSequencer():
             p.input(b[2])
         if status[1] != None:
             pos = status[1]
-            # make -1 be the real last sample
-            if pos < 0:
+            # make -1.0 be the real last sample
+            # input buffer position is natively float, so don't convert to int
+            if pos < 0.0:
                 pos = (pos * player[8][3]) + (player[8][3] - 1)
             else:
                 pos = pos * player[8][3]
@@ -572,9 +573,9 @@ class AudioSequencer():
         if status[3] != None:
             pos = status[3]
             if pos < 0:
-                pos = (pos * player[9][3]) + (player[9][3] - 1)
+                pos = int((pos * player[9][3]) + (player[9][3] - 1))
             else:
-                pos = pos * player[9][3]
+                pos = int(pos * player[9][3])
             p.output_pos(pos)
         if status[4] != None:
             p.output_mode(status[4])
@@ -617,23 +618,16 @@ class AudioSequencer():
                 raise IndexError("Invalid buffer number {}.".format(buf))
             p.phase_source(b[2])
         if status[12] != None:
+            # loop pointers should be relative to the sample to be most useful
             pos = status[12]
-            if pos < 0:
-                pos = (pos * player[8][3]) + (player[8][3] - 1)
-            else:
-                pos = pos * player[8][3]
             p.loop_start(pos)
         if status[13] != None:
             pos = status[13]
-            if pos < 0:
-                pos = (pos * player[8][3]) + (player[8][3] - 1)
-            else:
-                pos = pos * player[8][3]
             p.loop_end(pos)
         if status[14] != None:
             p.mode(status[14])
         if status[15] != None:
-            player[1] = status[15] * player[9][3]
+            player[1] = int(status[15] * player[9][3])
         if status[16] != None:
             if status[16] < 0:
                 player[2] = None
@@ -689,6 +683,7 @@ class AudioSequencer():
             f.input(b[2])
         if status[1] != None:
             pos = status[1]
+            # input buffer position is natively float, so don't convert to int
             if pos < 0:
                 pos = (pos * flt[8][3]) + (flt[8][3] - 1)
             else:
@@ -708,9 +703,9 @@ class AudioSequencer():
         if status[3] != None:
             pos = status[3]
             if pos < 0:
-                pos = (pos * flt[7][3]) + (flt[7][3] - 1)
+                pos = int((pos * flt[7][3]) + (flt[7][3] - 1))
             else:
-                pos = pos * flt[7][3]
+                pos = int(pos * flt[7][3])
             f.output_pos(pos)
         if status[4] != None:
             buf = status[4]
@@ -757,7 +752,7 @@ class AudioSequencer():
         if status[13] != None:
             f.volume_mode(status[13])
         if status[14] != None:
-            flt[1] = status[14] * flt[7][3]
+            flt[1] = int(status[14] * flt[7][3])
         if status[15] != None:
             if status[15] < 0:
                 flt[2] = None
@@ -788,7 +783,7 @@ class AudioSequencer():
         if self._loaded:
             raise Exception("Already loaded")
         rate = s.rate()
-        self._samplesms = int(rate / 1000)
+        self._samplesms = rate / 1000
         channels = s.channels()
         self._channels = len(channels)
         if self._channels < self._seqChannels:
@@ -812,7 +807,7 @@ class AudioSequencer():
                 pass
             elif isinstance(buffer[0], int):
                 # silent buffer
-                length = buffer[0] * self._samplesms
+                length = int(buffer[0] * self._samplesms)
                 buffer[2] = s.buffer(cg.SYNTH_TYPE_F32, None, length)
             elif isinstance(buffer[0], str):
                 # filename
@@ -822,7 +817,7 @@ class AudioSequencer():
                 # external buffer
                 buffer[2] = buffer[0]
             buffer[1] = buffer[2].rate()
-            buffer[3] = int(buffer[1] / 1000)
+            buffer[3] = buffer[1] / 1000
         print(self._buffer)
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
@@ -941,7 +936,7 @@ class AudioSequencer():
                         if self._trace:
                             print("{} {} {}".format(i, channel[1], hex(reason)))
                             if channel[1] != 0 and reason == 0:
-                                raise Exception("Synth returned no samples for n // 1000o reason.")
+                                raise Exception("Synth returned no samples for no reason.")
                         if channel[1] == 0:
                             if channel[2] != None:
                                 upd = channel[2]
@@ -1112,24 +1107,22 @@ class AudioSequencer():
         if self._ended:
             return
 
-        if needed == 0:
+        if needed <= 0:
+            raise ValueError("needed must be a positive, nonzero value")
+
+        origneeded = needed
+        while needed > self._samplesms:
+            get = min(needed, int(self._maxreq * self._samplesms))
             try:
-                _, line = self._seq.advance(0)
+                time, line = self._seq.advance(int(get / self._samplesms))
             except seq.SequenceEnded:
                 self._ended = True
-            self._run_channels(0, line)
-        elif needed > 0:
-            while needed > 0:
-                get = min(needed, self._maxreq)
-                try:
-                    time, line = self._seq.advance(get)
-                except seq.SequenceEnded:
-                    self._ended = True
-                    break
-                self._run_channels(time * self._samplesms, line, needed * self._samplesms)
-                needed -= time
-        else:
-            raise ValueError("needed must be a positive value")
+                break
+            time = int(time * self._samplesms)
+            self._run_channels(time, line, needed)
+            needed -= time
+
+        return origneeded - needed
 
     def get_tag(self, name):
         return self._tag[name]
@@ -1155,7 +1148,6 @@ class AudioSystem():
                            log_cb_return, log_cb_priv,
                            rate, channels)
         self._sequences = list()
-        self._samplesms = int(self._s.rate() / 1000)
         self._fragment_size = self._s.fragment_size()
         self._fragments = 0
         self._inc_fragments()
@@ -1198,7 +1190,7 @@ class AudioSystem():
                 # finally returns back to here, just return again
                 return 0
 
-            needed = int(self._s.needed() / self._samplesms)
+            needed = self._s.needed()
             if self._trace and len(self._sequences) > 0:
                 print("=== Audio Callback {} ===".format(needed))
             if needed > 0:
@@ -1207,10 +1199,17 @@ class AudioSystem():
                     if not seq[1]:
                         continue
                     seq[0]._reset_output_positions()
-                    seq[0].run(needed)
+                    got = seq[0].run(needed)
+                    # a biiiiiit hacky but now that we're dealing with floating
+                    # point stuff, but the sequencer still runs in terms of
+                    # whole milliseconds (might change later?), bits of
+                    # rounding error need to be lopped off so all sequences can
+                    # run in lockstep
+                    if not seq[0].ended:
+                        needed = got
                 self._error = None
 
-            return needed * self._samplesms
+            return needed
         except Exception as e:
             # save it, otherwise raising it now confuses it.
             self._exception = e
