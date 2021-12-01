@@ -14,6 +14,7 @@ typedef struct {
     PyTypeObject *LayerType;
     PyTypeObject *SynthType;
     PyTypeObject *BufferType;
+    PyTypeObject *InternalBufferType;
     PyTypeObject *PlayerType;
     PyTypeObject *FilterType;
 
@@ -77,6 +78,14 @@ typedef struct BufferObject_s {
     int buffer;
     unsigned int rate;
 } BufferObject;
+
+typedef struct InternalBufferObject_s {
+    PyObject_HEAD
+    SynthObject *s;
+    BufferObject *b;
+    float *data;
+    int size;
+} InternalBufferObject;
 
 typedef struct {
     PyObject_HEAD
@@ -2110,6 +2119,7 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
     } else {
         buf = &bufmem;
         if(PyObject_GetBuffer(data, buf, PyBUF_CONTIG_RO) < 0) {
+            buf = NULL;
             goto error;
         }
 
@@ -2271,7 +2281,7 @@ static PyObject *Synth_B_player(BufferObject *self,
     PyObject *player;
 
     if(self->s == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
         return(NULL);
     }
 
@@ -2299,7 +2309,7 @@ static PyObject *Synth_B_filter(BufferObject *self,
     PyObject *filter;
 
     if(self->s == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
         return(NULL);
     }
 
@@ -2368,6 +2378,137 @@ static PyType_Spec BufferSpec = {
     .slots = BufferSlots
 };
 
+static PyObject *InternalBuffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    InternalBufferObject *self;
+
+    self = (InternalBufferObject *)type->tp_alloc(type, 0);
+    if(self == NULL) {
+        return(NULL);
+    }
+    /* just have it be do-nothing until it's properly initialize */
+    self->s = NULL;
+    self->b = NULL;
+
+    return((PyObject *)self);
+}
+
+static int InternalBuffer_init(InternalBufferObject *self, PyObject *args, PyObject *kwds) {
+    if(self->s != NULL) {
+        PyErr_SetString(PyExc_TypeError, "InternalBuffer already initialized");
+        return(-1);
+    }
+
+    /* docs say this init isn't called if the class is instantiated as some
+     * other type.  Not sure the consequences there... */
+    crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
+
+    if(!PyArg_ParseTuple(args, "OO", &(self->s), &(self->b))) {
+        return(-1);
+    }
+    Py_XINCREF(self->s);
+    Py_XINCREF(self->b);
+    if(!PyObject_TypeCheck(self->s, state->SynthType)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be a Synth");
+        goto error;
+    }
+    if(!PyObject_TypeCheck(self->b, state->BufferType)) {
+        PyErr_SetString(PyExc_TypeError, "second argument must be a Buffer");
+        goto error;
+    }
+    self->size = synth_get_internal_buffer(self->s->s, self->b->buffer, &(self->data));
+    if(self->size < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "failed to get internal buffer pointer");
+        goto error;
+    }
+
+    return(0);
+
+error:
+    Py_CLEAR(self->b);
+    Py_CLEAR(self->s);
+    return(-1);
+}
+
+static void InternalBuffer_dealloc(InternalBufferObject *self) {
+    if(self->b != NULL) {
+        synth_release_buffer(self->s->s, self->b->buffer);
+    }
+    Py_XDECREF(self->b);
+    Py_XDECREF(self->s);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static int InternalBuffer_getbuffer(InternalBufferObject *self, Py_buffer *view, int flags) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_BufferError, "this Buffer is not initialized");
+        return(-1);
+    }
+
+    Py_INCREF(self);
+    view->obj = (void *)self;
+    view->readonly = 0;
+    view->itemsize = sizeof(float);
+    if(flags & PyBUF_FORMAT) {
+        view->format = "f";
+    } else {
+        view->format = NULL;
+    }
+    /* never needed here */
+    view->suboffsets = NULL;
+    view->len = self->size * sizeof(float);
+    view->buf = self->data;
+    view->ndim = 1;
+    if((flags & PyBUF_ND) == PyBUF_ND) {
+        view->shape = malloc(sizeof(Py_ssize_t));
+        if(view->shape == NULL) {
+            PyErr_SetString(PyExc_BufferError, "failed to allocate memory for shape");
+            goto error;
+        }
+        view->shape[0] = self->size;
+        if((flags & PyBUF_STRIDES) == PyBUF_STRIDES) {
+            view->strides = malloc(sizeof(Py_ssize_t));
+            if(view->strides == NULL) {
+                PyErr_SetString(PyExc_BufferError, "failed to allocate memory for shape");
+                goto error;
+            }
+            view->strides[0] = sizeof(float);
+        } else {
+            view->strides = NULL;
+        }
+    } else {
+        view->shape = NULL;
+    }
+
+    return(0);
+
+error:
+    Py_DECREF(self);
+    view->obj = NULL;
+    return(-1);
+}
+
+static void InternalBuffer_releasebuffer(InternalBufferObject *self, Py_buffer *view) {
+    Py_DECREF(view->obj);
+}
+
+static PyType_Slot InternalBufferSlots[] = {
+    {Py_tp_new, InternalBuffer_new},
+    {Py_tp_init, (initproc)InternalBuffer_init},
+    {Py_tp_dealloc, (destructor)InternalBuffer_dealloc},
+    {Py_tp_traverse, heap_type_traverse},
+    {Py_bf_getbuffer, (getbufferproc)InternalBuffer_getbuffer},
+    {Py_bf_releasebuffer, (releasebufferproc)InternalBuffer_releasebuffer},
+    {0, NULL}
+};
+
+static PyType_Spec InternalBufferSpec = {
+    .name = "crustygame.InternalBuffer",
+    .basicsize = sizeof(InternalBufferObject),
+    .itemsize = 0,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .slots = InternalBufferSlots
+};
+
 static PyObject *Player_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     PlayerObject *self;
 
@@ -2411,7 +2552,7 @@ static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
     if(!PyObject_TypeCheck(buffer, state->BufferType)) {
-        PyErr_SetString(PyExc_TypeError, "first argument must be a Buffer");
+        PyErr_SetString(PyExc_TypeError, "second argument must be a Buffer");
         goto error;
     }
     /* reflect all the buffers which are referenced internally */
@@ -4018,6 +4159,11 @@ static int crustygame_exec(PyObject* m) {
     if(state->BufferType == NULL || PyModule_AddObject(m, "Buffer", (PyObject *)state->BufferType) < 0) {
         goto error;
     }
+    state->InternalBufferType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &InternalBufferSpec, NULL);
+    Py_XINCREF(state->InternalBufferType);
+    if(state->InternalBufferType == NULL || PyModule_AddObject(m, "InternalBuffer", (PyObject *)state->InternalBufferType) < 0) {
+        goto error;
+    }
     state->PlayerType = (PyTypeObject *)PyType_FromModuleAndSpec(m, &PlayerSpec, NULL);
     Py_XINCREF(state->PlayerType);
     if(state->PlayerType == NULL || PyModule_AddObject(m, "Player", (PyObject *)state->PlayerType) < 0) {
@@ -4183,6 +4329,7 @@ error:
     Py_XDECREF(ctypes_m);
     Py_CLEAR(state->FilterType);
     Py_CLEAR(state->PlayerType);
+    Py_CLEAR(state->InternalBufferType);
     Py_CLEAR(state->BufferType);
     Py_CLEAR(state->SynthType);
     Py_CLEAR(state->LayerType);
@@ -4203,6 +4350,7 @@ static void crustygame_free(void *p) {
     Py_XDECREF(state->return_ptr);
     Py_XDECREF(state->FilterType);
     Py_XDECREF(state->PlayerType);
+    Py_XDECREF(state->InternalBufferType);
     Py_XDECREF(state->BufferType);
     Py_XDECREF(state->SynthType);
     Py_XDECREF(state->LayerType);

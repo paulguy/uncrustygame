@@ -317,6 +317,33 @@ int synth_free_buffer(Synth *s, unsigned int index);
  */
 int synth_buffer_get_size(Synth *s, unsigned int index);
 /*
+ * Get the pointer to the internal buffer data.  This can either be a normal
+ * buffer or an output buffer.  Behavior differs a fair bit between the two:
+ * Normal buffers will just return the fixed size and pointer to the beginning
+ * of the buffer, and their reference count will be increased.
+ * Output buffers have no reference counts but may be internally "split" since
+ * it's a ring buffer, so to get the full output buffer, this must be called
+ * twice, which the first, second, both or neither may return 0 length and a
+ * NULL pointer for buf.
+ *
+ * s        the Synth structure
+ * index    the buffer handle index
+ * buf      a pointer to a pointer which will be assigned to the pointer to
+ *          the buffer.
+ * return   size in samples or -1 on failure
+ */
+int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf);
+/*
+ * Release the reference to the inernal buffer data.  The buffer data shouldn't
+ * be used after this until a new reference is acquired.  Output buffers don't
+ * need to be released, but it's harmless to do so.
+ *
+ * s        the Synth structure
+ * index    the buffer handle index
+ * return   0 on success or -1 on failure
+ */
+int synth_release_buffer(Synth *s, unsigned int index);
+/*
  * Silence a buffer which contains audio.
  *
  * s        The Synth structure

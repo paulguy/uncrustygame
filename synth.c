@@ -39,6 +39,9 @@ typedef struct {
     float *data;
     unsigned int size;
     unsigned int ref;
+
+    /* for getting both parts of an output channel buffer */
+    int getPart;
 } SynthBuffer;
 
 typedef struct {
@@ -1221,6 +1224,7 @@ static int init_buffer(Synth *s,
         memset(b->data, 0, size * sizeof(float));
     }
     b->ref = 0;
+    b->getPart = 0;
 
     return(0);
 }
@@ -1378,6 +1382,76 @@ int synth_buffer_get_size(Synth *s, unsigned int index) {
     }
 
     return(get_buffer_size(s, index));
+}
+
+int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf) {
+    SynthBuffer *b;
+
+    if(index < s->channels) {
+        b = &(s->channelbuffer[index]);
+        if(b->getPart == 0) {
+            b->getPart = 1;
+            if(s->readcursor == s->writecursor) {
+                if(s->bufferfilled == s->buffersize) {
+                    *buf = &(b->data[s->readcursor]);
+                    return(s->buffersize - s->readcursor);
+                } else {
+                    *buf = NULL;
+                    return(0);
+                }
+            } else if(s->readcursor < s->writecursor) {
+                *buf = &(b->data[s->readcursor]);
+                return(s->writecursor - s->readcursor);
+            } /* s->readcursor > s->writecursor */
+            *buf = &(b->data[s->readcursor]);
+            return(s->buffersize - s->readcursor);
+        }
+
+        b->getPart = 0;
+        if(s->readcursor == s->writecursor) {
+            if(s->bufferfilled == s->buffersize) {
+                *buf = b->data;
+                return(s->writecursor);
+            } else {
+                *buf = NULL;
+                return(0);
+            }
+        } else if(s->readcursor < s->writecursor) {
+            *buf = NULL;
+            return(0);
+        } /* s->readcursor > s->writecursor */
+        *buf = b->data;
+        return(s->writecursor);
+    }
+
+    index -= s->channels;
+    if(index > s->buffersmem ||
+       s->buffer[index].data == NULL) {
+        LOG_PRINTF(s, "Invalid buffer index.\n");
+        *buf = NULL;
+        return(-1);
+    }
+
+    add_buffer_ref(s, index);
+    *buf = get_buffer_data(s, index);
+    return(get_buffer_size(s, index));
+}
+
+int synth_release_buffer(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        /* output buffers aren't refcounted */
+        return(0);
+    }
+
+    index -= s->channels;
+    if(index > s->buffersmem ||
+       s->buffer[index].data == NULL) {
+        LOG_PRINTF(s, "Invalid buffer index.\n");
+        return(-1);
+    }
+
+    free_buffer_ref(s, index);
+    return(0);
 }
 
 int synth_silence_buffer(Synth *s,
