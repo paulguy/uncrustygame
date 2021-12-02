@@ -25,8 +25,6 @@
 #include "synth.h"
 
 #define DEFAULT_RATE (48000)
-/* try to determine a sane size which is roughly half a frame long at 60 FPS. 48000 / 120 = 400, nearest power of two is 512, user can set more fragments if they need */
-#define DEFAULT_FRAGMENT_SIZE (512)
 
 #define LOG_PRINTF(SYNTH, FMT, ...) \
     log_cb_helper((SYNTH)->log_cb, (SYNTH)->log_priv, \
@@ -371,7 +369,7 @@ static void add_samples(Synth *s, unsigned int added) {
     s->bufferfilled += added;
 }
 
-static unsigned int get_samples_available(Synth *s) {
+unsigned int synth_samples_available(Synth *s) {
     if(s->readcursor == s->writecursor) {
         if(s->bufferfilled == s->buffersize) {
             return(s->buffersize);
@@ -385,7 +383,7 @@ static unsigned int get_samples_available(Synth *s) {
     }
 }
 
-static void consume_samples(Synth *s, unsigned int consumed) {
+void synth_consume_samples(Synth *s, unsigned int consumed) {
     s->readcursor += consumed;
     if(s->readcursor == s->buffersize) {
         s->readcursor = 0;
@@ -395,7 +393,7 @@ static void consume_samples(Synth *s, unsigned int consumed) {
 
 /* big ugly, overcomplicated function, but hopefully it isolates most of the
  * complexity in one place. */
-void do_synth_audio_cb(Synth *s, Uint8 *stream, unsigned int todo) {
+static void do_synth_audio_cb(Synth *s, Uint8 *stream, unsigned int todo) {
     unsigned int i, j;
 
     if(s->channels == 1) {
@@ -509,11 +507,13 @@ void do_synth_audio_cb(Synth *s, Uint8 *stream, unsigned int todo) {
         }
         s->written += towrite;
     }
+
+    synth_consume_samples(s, todo);
 }
 
 static void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
     Synth *s = (Synth *)userdata;
-    unsigned int available = get_samples_available(s);
+    unsigned int available = synth_samples_available(s);
     unsigned int todo;
     /* get number of samples */
     unsigned int samsize = (SDL_AUDIO_BITSIZE(s->converter.dst_format) / 8) * s->channels;
@@ -526,15 +526,13 @@ static void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
 
     todo = MIN(length, available);
     do_synth_audio_cb(s, stream, todo);
-    consume_samples(s, todo);
     length -= todo;
 
     if(length > 0) {
         stream = &(stream[todo * samsize]);
-        available = get_samples_available(s);
+        available = synth_samples_available(s);
         todo = MIN(length, available);
         do_synth_audio_cb(s, stream, todo);
-        consume_samples(s, todo);
         length -= todo;
 
         if(length > 0) {
@@ -571,7 +569,7 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
      * supported and in theory this should create additional audio sinks for
      * all the surround channels.  Untested. */
     desired.channels = channels;
-    desired.samples = DEFAULT_FRAGMENT_SIZE;
+    desired.samples = SYNTH_DEFAULT_FRAGMENT_SIZE;
     desired.callback = synth_audio_cb;
     desired.userdata = s;
     s->audiodev = SDL_OpenAudioDevice(NULL,
@@ -678,6 +676,7 @@ Synth *synth_new_wavout(const char *filename,
                         void *log_priv,
                         unsigned int rate,
                         unsigned int channels,
+                        unsigned int fragsize,
                         SynthImportType format) {
     SDL_AudioFormat sdlFormat;
     Synth *s;
@@ -744,15 +743,17 @@ Synth *synth_new_wavout(const char *filename,
         return(NULL);
     }
 
-    if(synth_open_wav(s, filename) < 0) {
-        free(s);
-        return(NULL);
+    if(filename != NULL) {
+        if(synth_open_wav(s, filename) < 0) {
+            free(s);
+            return(NULL);
+        }
     }
 
     s->audiodev = -1;
     s->outbuf = NULL;
     s->rate = rate;
-    s->fragmentsize = DEFAULT_FRAGMENT_SIZE;
+    s->fragmentsize = fragsize;
     s->fragments = 0;
     s->channels = channels;
     /* Won't know what size to allocate to them until the user has set a number of fragments */
@@ -774,8 +775,10 @@ Synth *synth_new_wavout(const char *filename,
 void synth_free(Synth *s) {
     unsigned int i;
 
-    SDL_LockAudioDevice(s->audiodev);
-    SDL_CloseAudioDevice(s->audiodev);
+    if(s->audiodev < 0) {
+        SDL_LockAudioDevice(s->audiodev);
+        SDL_CloseAudioDevice(s->audiodev);
+    }
 
     if(s->channelbuffer != NULL) {
         for(i = 0; i < s->channels; i++) {
@@ -997,6 +1000,16 @@ error:
 #undef WAVE_WRITE_FIELD_PTR
 #undef WAVE_WRITE_FIELD
 
+int synth_write_wav(Synth *s, unsigned int samples) {
+    do_synth_audio_cb(s, s->outbuf, samples);
+    /* file will be closed on error */
+    if(s->out == NULL) {
+        return(-1);
+    }
+
+    return(0);
+}
+
 unsigned int synth_get_rate(Synth *s) {
     return(s->rate);
 }
@@ -1050,10 +1063,6 @@ int synth_frame(Synth *s) {
     int got;
 
     if(s->audiodev < 0) {
-        if(s->out == NULL) {
-            LOG_PRINTF(s, "No WAV file is opened, either due to error or being closed.\n");
-            return(-1);
-        }
         if(s->outbuf == NULL) {
             LOG_PRINTF(s, "Set a number of fragments first.\n");
             return(-1);
@@ -1063,12 +1072,7 @@ int synth_frame(Synth *s) {
         if(got < 0) {
             return(-1);
         }
-
-        do_synth_audio_cb(s, s->outbuf, got);
-        /* file will be closed on error */
-        if(s->out == NULL) {
-            return(-1);
-        }
+        add_samples(s, got);
 
         return(got);
     } else {
@@ -1155,7 +1159,13 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
     }
 
     if(s->outbuf != NULL) {
+        free(s->outbuf);
+        s->outbuf = NULL;
+    }
+
+    if(s->audiodev < 0) {
         unsigned int formatbytes;
+
         switch(s->format) {
             case SYNTH_TYPE_U8:
                 formatbytes = sizeof(uint8_t);
@@ -1171,7 +1181,6 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
                 return(-1);
         }
 
-        free(s->outbuf);
         s->outbuf = malloc(formatbytes * s->fragments * s->fragmentsize);
         if(s->outbuf == NULL) {
             LOG_PRINTF(s, "Failed to allocate file output buffer.\n");

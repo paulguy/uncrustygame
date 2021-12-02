@@ -1578,7 +1578,9 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
                                    &(self->synth_frame),
                                    (log_cb_return_t)log_cb_adapter,
                                    &(self->log),
-                                   rate, channels, format);
+                                   rate, channels,
+                                   SYNTH_DEFAULT_FRAGMENT_SIZE,
+                                   format);
     }
     if(self->s == NULL) {
         PyErr_SetString(state->CrustyException, "synth_new returned an error");
@@ -4233,6 +4235,9 @@ static int crustygame_exec(PyObject* m) {
         goto error;
     }
     if(PyModule_AddIntMacro(m, TILEMAP_AMASK) < 0) {
+        goto error;
+    }
+    if(PyModule_AddIntMacro(m, SYNTH_DEFAULT_FRAGMENT_SIZE) < 0) {
         goto error;
     }
     if(PyModule_AddIntMacro(m, SYNTH_TYPE_INVALID) < 0) {

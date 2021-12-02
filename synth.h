@@ -43,6 +43,9 @@
 
 #include "log_cb_helper.h"
 
+/* try to determine a sane size which is roughly half a frame long at 60 FPS. 48000 / 120 = 400, nearest power of two is 512, user can set more fragments if they need */
+#define SYNTH_DEFAULT_FRAGMENT_SIZE (512)
+
 /* most common formats */
 typedef enum {
     SYNTH_TYPE_INVALID = 0,
@@ -162,6 +165,9 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
  * written, or 0 if none could be written, and still -1 on error.
  * Some method of determining completion will have to be determined by the
  * library user.
+ * The filename may be NULL to simply run the synth with no output, to be used
+ * by the internal buffers methods.  synth_frame shouldn't be called in this
+ * case and instead synth_consume_samples should be used to advance things.
  * filename         output filename
  * synth_frame_cb   as above
  * synth_frame_priv as above
@@ -184,6 +190,7 @@ Synth *synth_new_wavout(const char *filename,
                         void *log_priv,
                         unsigned int rate,
                         unsigned int channels,
+                        unsigned int fragsize,
                         SynthImportType format);
 /*
  * Stop the synth, free any buffers created by it and close the associated
@@ -207,6 +214,16 @@ int synth_open_wav(Synth *s, const char *filename);
  *          closed, but the header might be incomplete.)
  */
 int synth_close_wav(Synth *s);
+/*
+ * Write data to a wav file.  This is used when there is no SDL audio output.
+ * synth_frame should be called first and its return value should be passed to
+ * this function's samples argumet.
+ *
+ * d        the Synth structure
+ * samples  the number of samples to write
+ * return   0 on success, -1 on error, and the file will be closed
+ */
+int synth_write_wav(Synth *s, unsigned int samples);
 /*
  * Get the sample rate the audio device was initialized with, may be different
  * from what was requested.
@@ -282,6 +299,21 @@ int synth_frame(Synth *s);
  */
 int synth_set_fragments(Synth *s,
                         unsigned int fragments);
+/*
+ * Get the number of samples available in the output buffers.
+ *
+ * s        the Synth structure
+ * return   the number of samples available
+ */
+unsigned int synth_samples_available(Synth *s);
+/*
+ * Mark a certain amount of buffered audio as used/processed and that memory
+ * can now be used for more data.
+ *
+ * s        the Synth structure
+ * consumed the amount to mark as consumed
+ */
+void synth_consume_samples(Synth *s, unsigned int consumed);
 /*
  * Add a new buffer, given type, data and a size, in samples.  NULL can be given
  * as data to create a "silent" buffer which can be output to.  Everything is
