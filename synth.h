@@ -367,8 +367,8 @@ int synth_buffer_get_size(Synth *s, unsigned int index);
 int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf);
 /*
  * Release the reference to the inernal buffer data.  The buffer data shouldn't
- * be used after this until a new reference is acquired.  Output buffers don't
- * need to be released, but it's harmless to do so.
+ * be used after this until a new reference is acquired.  Output buffers must
+ * be released before audio playback will continue.
  *
  * s        the Synth structure
  * index    the buffer handle index

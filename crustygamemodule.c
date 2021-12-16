@@ -1514,10 +1514,12 @@ static PyObject *Synth_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
-    const char *filename = NULL;
+    PyObject *fn = NULL;
+    const char *filename;
     unsigned int rate;
     SynthImportType format;
     unsigned int channels;
+    unsigned int fragsize;
     PyObject *arglist;
     int i;
     PyObject *etype, *evalue, *etraceback;
@@ -1531,27 +1533,28 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "sOOOOIIi",
-                         &filename,
+    if(!PyArg_ParseTuple(args, "OOOOOIIiI",
+                         &fn,
                          &(self->synth_frame.cb),
                          &(self->synth_frame.priv),
                          &(self->log.cb),
                          &(self->log.priv),
-                         &rate, &channels, &format)) {
+                         &rate, &channels, &format, &fragsize)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
         Py_XDECREF(etraceback);
-    }
 
-    if(!PyArg_ParseTuple(args, "OOOOII",
-                         &(self->synth_frame.cb),
-                         &(self->synth_frame.priv),
-                         &(self->log.cb),
-                         &(self->log.priv),
-                         &rate, &channels)) {
-        return(-1);
+        if(!PyArg_ParseTuple(args, "OOOOII",
+                             &(self->synth_frame.cb),
+                             &(self->synth_frame.priv),
+                             &(self->log.cb),
+                             &(self->log.priv),
+                             &rate, &channels)) {
+            return(-1);
+        }
     }
+    Py_XINCREF(fn);
     Py_XINCREF(self->log.cb);
     Py_XINCREF(self->log.priv);
     Py_XINCREF(self->synth_frame.cb);
@@ -1566,13 +1569,21 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    if(filename == NULL) {
+    if(fn == NULL) {
         self->s = synth_new((synth_frame_cb_t)synth_cb_adapter,
                             &(self->synth_frame),
                             (log_cb_return_t)log_cb_adapter,
                             &(self->log),
                             rate, channels);
     } else {
+        if(fn == Py_None) {
+            filename = NULL;
+        } else {
+            filename = PyUnicode_AsUTF8(fn);
+            if(filename == NULL) {
+                goto error;
+            }
+        }
         self->s = synth_new_wavout(filename,
                                    (synth_frame_cb_t)synth_cb_adapter,
                                    &(self->synth_frame),
@@ -1614,6 +1625,7 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         }
     }
 
+    Py_XDECREF(fn);
     return(0);
 
 error:
@@ -1630,6 +1642,7 @@ error:
     Py_CLEAR(self->synth_frame.cb);
     Py_CLEAR(self->log.priv);
     Py_CLEAR(self->log.cb);
+    Py_CLEAR(fn);
     return(-1);
 }
 

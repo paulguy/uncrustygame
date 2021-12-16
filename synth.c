@@ -103,6 +103,7 @@ struct Synth_s {
     unsigned int fragments;
     unsigned int channels;
     SynthBuffer *channelbuffer;
+    unsigned long reffedchannels;
     unsigned int readcursor;
     unsigned int writecursor;
     unsigned int bufferfilled;
@@ -655,6 +656,7 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
     s->silence = obtained.silence;
     /* Won't know what size to allocate to them until the user has set a number of fragments */
     s->channelbuffer = NULL;
+    s->reffedchannels = 0;
     s->buffer = NULL;
     s->buffersmem = 0;
     s->player = NULL;
@@ -758,6 +760,7 @@ Synth *synth_new_wavout(const char *filename,
     s->channels = channels;
     /* Won't know what size to allocate to them until the user has set a number of fragments */
     s->channelbuffer = NULL;
+    s->reffedchannels = 0;
     s->buffer = NULL;
     s->buffersmem = 0;
     s->player = NULL;
@@ -1397,6 +1400,10 @@ int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf) {
     SynthBuffer *b;
 
     if(index < s->channels) {
+        if(!(s->reffedchannels) && s->audiodev >= 0 ) {
+            SDL_LockAudioDevice(s->audiodev);
+        }
+        s->reffedchannels &= 1 << index;
         b = &(s->channelbuffer[index]);
         if(b->getPart == 0) {
             b->getPart = 1;
@@ -1448,7 +1455,10 @@ int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf) {
 
 int synth_release_buffer(Synth *s, unsigned int index) {
     if(index < s->channels) {
-        /* output buffers aren't refcounted */
+        s->reffedchannels &= ~(1 << index);
+        if(!(s->reffedchannels) && s->audiodev >= 0) {
+            SDL_UnlockAudioDevice(s->audiodev);
+        }
         return(0);
     }
 
