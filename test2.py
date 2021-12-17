@@ -451,7 +451,7 @@ def main():
     blendmode = cg.TILEMAP_BLENDMODE_ADD
     colorrad = 0.0
 
-    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, True)
+    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
     aud.enabled(True)
 

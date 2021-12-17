@@ -154,6 +154,25 @@ SynthImportType synth_type_from_audioformat(SDL_AudioFormat format) {
     return(SYNTH_TYPE_INVALID);
 }
 
+SDL_AudioFormat synth_audioformat_from_type(SynthImportType type) {
+    switch(type) {
+        case SYNTH_TYPE_U8:
+            return(AUDIO_U8);
+            break;
+        case SYNTH_TYPE_S16:
+            return(AUDIO_S16SYS);
+            break;
+        case SYNTH_TYPE_F32:
+            return(AUDIO_F32SYS);
+            break;
+        default:
+            break;
+    }
+    /* 0 should indicate a sample bit size of 0 which is probably
+     * impossible */
+    return(0);
+}
+
 int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
     SDL_AudioSpec spec;
     Uint8 *audiobuf;
@@ -544,12 +563,17 @@ static void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
     }
 }
 
-Synth *synth_new(synth_frame_cb_t synth_frame_cb,
+Synth *synth_new(const char *filename,
+                 int opendev,
+                 const char *devname,
+                 synth_frame_cb_t synth_frame_cb,
                  void *synth_frame_priv,
                  log_cb_return_t log_cb,
                  void *log_priv,
                  unsigned int rate,
-                 unsigned int channels) {
+                 unsigned int channels,
+                 unsigned int fragsize,
+                 SynthImportType format) {
     SDL_AudioSpec desired, obtained;
     Synth *s;
 
@@ -562,26 +586,35 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
     s->log_cb = log_cb;
     s->log_priv = log_priv;
 
+    desired.format = synth_audioformat_from_type(format);
+    if(desired.format == 0) {
+        LOG_PRINTF(s, "Invalid SynthImportType.\n");
+        free(s);
+        return(NULL);
+    }
+
     desired.freq = rate;
-    /* may as well use this as the desired output format if the internal format
-     * will be F32 anyway, but build a converter just in case it's needed. */
-    desired.format = AUDIO_F32SYS;
     /* Stereo should be fine for most things but technically surround is
      * supported and in theory this should create additional audio sinks for
      * all the surround channels.  Untested. */
     desired.channels = channels;
-    desired.samples = SYNTH_DEFAULT_FRAGMENT_SIZE;
+    desired.samples = fragsize;
     desired.callback = synth_audio_cb;
     desired.userdata = s;
-    s->audiodev = SDL_OpenAudioDevice(NULL,
-                                      0,
-                                      &desired,
-                                      &obtained,
-                                      SDL_AUDIO_ALLOW_ANY_CHANGE);
-    if(s->audiodev < 2) {
-        LOG_PRINTF(s, "Failed to open SDL audio: %s.\n", SDL_GetError());
-        free(s);
-        return(NULL);
+    if(opendev) {
+        s->audiodev = SDL_OpenAudioDevice(devname,
+                                          0,
+                                          &desired,
+                                          &obtained,
+                                          SDL_AUDIO_ALLOW_ANY_CHANGE);
+        if(s->audiodev < 2) {
+            LOG_PRINTF(s, "Failed to open SDL audio: %s.\n", SDL_GetError());
+            free(s);
+            return(NULL);
+        }
+    } else {
+        s->audiodev = -1;
+        memcpy(&obtained, &desired, sizeof(SDL_AudioSpec));
     }
 
     /* probably impossible, but there are cases where at least one output
@@ -645,6 +678,13 @@ Synth *synth_new(synth_frame_cb_t synth_frame_cb,
         SDL_CloseAudioDevice(s->audiodev);
         free(s);
         return(NULL);
+    }
+
+    if(filename != NULL) {
+        if(synth_open_wav(s, filename) < 0) {
+            free(s);
+            return(NULL);
+        }
     }
 
     s->out = NULL;
@@ -743,13 +783,6 @@ Synth *synth_new_wavout(const char *filename,
         LOG_PRINTF(s, "Failed to build S16 import converter.\n");
         free(s);
         return(NULL);
-    }
-
-    if(filename != NULL) {
-        if(synth_open_wav(s, filename) < 0) {
-            free(s);
-            return(NULL);
-        }
     }
 
     s->audiodev = -1;

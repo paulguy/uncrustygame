@@ -1516,13 +1516,15 @@ static PyObject *Synth_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
     PyObject *fn = NULL;
     const char *filename;
+    int opendev;
+    PyObject *dn = NULL;
+    const char *devname;
     unsigned int rate;
-    SynthImportType format;
     unsigned int channels;
     unsigned int fragsize;
+    SynthImportType format;
     PyObject *arglist;
     int i;
-    PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
         PyErr_SetString(PyExc_TypeError, "Synth already initialized");
@@ -1533,28 +1535,17 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OOOOOIIiI",
-                         &fn,
+    if(!PyArg_ParseTuple(args, "OpOOOOOIIIi",
+                         &fn, &opendev, &dn,
                          &(self->synth_frame.cb),
                          &(self->synth_frame.priv),
                          &(self->log.cb),
                          &(self->log.priv),
-                         &rate, &channels, &format, &fragsize)) {
-        PyErr_Fetch(&etype, &evalue, &etraceback);
-        Py_XDECREF(etype);
-        Py_XDECREF(evalue);
-        Py_XDECREF(etraceback);
-
-        if(!PyArg_ParseTuple(args, "OOOOII",
-                             &(self->synth_frame.cb),
-                             &(self->synth_frame.priv),
-                             &(self->log.cb),
-                             &(self->log.priv),
-                             &rate, &channels)) {
-            return(-1);
-        }
+                         &rate, &channels, &fragsize, &format)) {
+        return(-1);
     }
     Py_XINCREF(fn);
+    Py_XINCREF(dn);
     Py_XINCREF(self->log.cb);
     Py_XINCREF(self->log.priv);
     Py_XINCREF(self->synth_frame.cb);
@@ -1569,30 +1560,32 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    if(fn == NULL) {
-        self->s = synth_new((synth_frame_cb_t)synth_cb_adapter,
-                            &(self->synth_frame),
-                            (log_cb_return_t)log_cb_adapter,
-                            &(self->log),
-                            rate, channels);
+    if(fn == Py_None) {
+        filename = NULL;
     } else {
-        if(fn == Py_None) {
-            filename = NULL;
-        } else {
-            filename = PyUnicode_AsUTF8(fn);
-            if(filename == NULL) {
-                goto error;
-            }
+        filename = PyUnicode_AsUTF8(fn);
+        if(filename == NULL) {
+            goto error;
         }
-        self->s = synth_new_wavout(filename,
-                                   (synth_frame_cb_t)synth_cb_adapter,
-                                   &(self->synth_frame),
-                                   (log_cb_return_t)log_cb_adapter,
-                                   &(self->log),
-                                   rate, channels,
-                                   SYNTH_DEFAULT_FRAGMENT_SIZE,
-                                   format);
     }
+    Py_CLEAR(fn);
+
+    if(dn == Py_None) {
+        devname = NULL;
+    } else {
+        devname = PyUnicode_AsUTF8(dn);
+        if(devname == NULL) {
+            goto error;
+        }
+    }
+    Py_CLEAR(dn);
+
+    self->s = synth_new(filename, opendev, devname,
+                        (synth_frame_cb_t)synth_cb_adapter,
+                        &(self->synth_frame),
+                        (log_cb_return_t)log_cb_adapter,
+                        &(self->log),
+                        rate, channels, fragsize, format);
     if(self->s == NULL) {
         PyErr_SetString(state->CrustyException, "synth_new returned an error");
         goto error;
@@ -1625,7 +1618,6 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         }
     }
 
-    Py_XDECREF(fn);
     return(0);
 
 error:
@@ -1642,6 +1634,7 @@ error:
     Py_CLEAR(self->synth_frame.cb);
     Py_CLEAR(self->log.priv);
     Py_CLEAR(self->log.cb);
+    Py_CLEAR(dn);
     Py_CLEAR(fn);
     return(-1);
 }

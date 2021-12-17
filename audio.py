@@ -1143,10 +1143,14 @@ def audio_system_frame(priv):
     return priv._frame_cb()
 
 class AudioSystem():
-    def __init__(self, log_cb_return, log_cb_priv, rate, channels, trace=False):
-        self._s = cg.Synth(audio_system_frame, self,
+    def __init__(self, log_cb_return, log_cb_priv, rate, channels,
+                 fragsize=cg.SYNTH_DEFAULT_FRAGMENT_SIZE,
+                 audformat=cg.SYNTH_TYPE_F32,
+                 filename=None, opendev=True, devname=None, trace=False):
+        self._s = cg.Synth(filename, opendev, devname,
+                           audio_system_frame, self,
                            log_cb_return, log_cb_priv,
-                           rate, channels)
+                           rate, channels, fragsize, audformat)
         self._sequences = list()
         self._fragment_size = self._s.fragment_size()
         self._fragments = 0

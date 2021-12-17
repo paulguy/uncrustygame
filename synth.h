@@ -102,13 +102,22 @@ typedef int (*synth_frame_cb_t)(void *priv, Synth *s);
 
 /*
  * Convert from an SDL_AudioFormat to a SynthImportType.  Not all formats
- * supported by SDL are supported by the synth engine so it can indicate an
- * invalid format if not.
+ * supported by SDL are supported by the synth engine so it can return
+ * SYNTH_TYPE_INVALID if not.
  *
  * format   The SDL_AudioFormat to convert
  * return   The SynthImportType you can provide to synth_add_buffer
  */
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format);
+/*
+ * Converts a SynthImportType to an SDL_AudioFormat.  Returns 0 if it's not a
+ * valid SynthImportType (which should be an invalid/impossible
+ * SDL_AudioFormat)
+ *
+ * type     The SynthImportType to convert
+ * return   The SDL_AudioFormat
+ */
+SDL_AudioFormat synth_audioformat_from_type(SynthImportType type);
 /*
  * Helper function to take a path to a WAV file and return a synth buffer
  * handle.  The sample rate from the WAV file is also returned.
@@ -140,7 +149,21 @@ unsigned int synth_get_samples_needed(Synth *s);
 /*
  * Create a new synth structure.  The structure is "stopped" on creation.  The
  * specified format might not be what is gotten.
+ * If opendev is 0, don't try to open an audio device, just output to a WAV
+ * file or purely buffers consumed by the client application.
+ * In this case, it doesn't need to be started (doing so is a no-op, with a
+ * warning) and synth_frame will instead return the amount of samples written,
+ * or 0 if none could be written, and still -1 on error.
+ * Some method of determining completion will have to be determined by the
+ * library user.
+ * The filename may be NULL to simply run the synth with no output, to be used
+ * by the internal buffers methods.  synth_frame shouldn't be called in this
+ * case and instead synth_consume_samples should be used to advance things.
  *
+ * filename         Filename to output to as WAV or NULL to not open a file.
+ * opendev          Whether an audio output device should be opened at all.
+ * devname          A device name provided by SDL_GetAudioDeviceName() or NULL
+ *                  to let SDL make the decision.
  * synth_frame_cb   The callback which will be called when synth_get_rate is
  *                  called to request that more audio may be needed.
  * synth_frame_priv some pointer which you provide which will be passed in to
@@ -150,48 +173,24 @@ unsigned int synth_get_samples_needed(Synth *s);
  *                  synth_log_cb calls.
  * rate             The prefered sample rate.
  * channels         The prefered channels count.
- * return           The new Synth structure.
- */
-Synth *synth_new(synth_frame_cb_t synth_frame_cb,
-                 void *synth_frame_priv,
-                 log_cb_return_t log_cb,
-                 void *log_priv,
-                 unsigned int rate,
-                 unsigned int channels);
-/*
- * Create a new synth structure, but without any audio output, just output to a
- * WAV file.  In this case, it doesn't need to be started (doing so is a no-op,
- * with a warning) and synth_frame will instead return the amount of samples
- * written, or 0 if none could be written, and still -1 on error.
- * Some method of determining completion will have to be determined by the
- * library user.
- * The filename may be NULL to simply run the synth with no output, to be used
- * by the internal buffers methods.  synth_frame shouldn't be called in this
- * case and instead synth_consume_samples should be used to advance things.
- * filename         output filename
- * synth_frame_cb   as above
- * synth_frame_priv as above
- * log_cb           as above
- * log_priv         as above
- * rate             The rate which the synth will run at and the format of the
- *                  output WAV file
+ * fragsize         Some fragment size, see SYNTH_DEFAULT_FRAGMENT_SIZE.
  * format           the format, supported formats are:
  *                  SYNTH_TYPE_U8
  *                  SYNTH_TYPE_S16
  *                  SYNTH_TYPE_F32
- * channels         Count of channels which the synth will output to and be
- *                  written to the file.
- * return           the new Synth structure
+ * return           The new Synth structure.
  */
-Synth *synth_new_wavout(const char *filename,
-                        synth_frame_cb_t synth_frame_cb,
-                        void *synth_frame_priv,
-                        log_cb_return_t log_cb,
-                        void *log_priv,
-                        unsigned int rate,
-                        unsigned int channels,
-                        unsigned int fragsize,
-                        SynthImportType format);
+Synth *synth_new(const char *filename,
+                 int opendev,
+                 const char *devname,
+                 synth_frame_cb_t synth_frame_cb,
+                 void *synth_frame_priv,
+                 log_cb_return_t log_cb,
+                 void *log_priv,
+                 unsigned int rate,
+                 unsigned int channels,
+                 unsigned int fragsize,
+                 SynthImportType format);
 /*
  * Stop the synth, free any buffers created by it and close the associated
  * SDL_audio device.
