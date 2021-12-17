@@ -1076,14 +1076,10 @@ int synth_set_enabled(Synth *s, int enabled) {
     if(enabled == 0) {
         SDL_PauseAudioDevice(s->audiodev, 1);
         s->state = SYNTH_STOPPED;
-        s->bufferfilled = 0;
-        s->readcursor = 0;
-        s->writecursor = 0;
-        s->underrun = 0;
     } else {
         if(s->channelbuffer == NULL) {
             LOG_PRINTF(s, "Audio buffers haven't been set up.  Set fragment "
-                            "count first.\n");
+                          "count first.\n");
             return(-1);
         }
 
@@ -1112,33 +1108,34 @@ int synth_frame(Synth *s) {
 
         return(got);
     } else {
-        if(s->state == SYNTH_ENABLED) {
-            /* signaled to start.  Reset everything, fill the buffer up then start
-             * the audio, so there's something to be consumed right away. */
-            /* Audio is stopped here, so no need to lock */
+        needed = synth_get_samples_needed(s);
+        if(needed > 0) {
+            SDL_LockAudioDevice(s->audiodev);
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
+                SDL_UnlockAudioDevice(s->audiodev);
                 return(-1);
             }
             add_samples(s, got);
-            s->state = SYNTH_RUNNING;
-            SDL_PauseAudioDevice(s->audiodev, 0);
-        } else if(s->state == SYNTH_RUNNING) {
-            needed = synth_get_samples_needed(s);
-            if(needed > 0) {
-                SDL_LockAudioDevice(s->audiodev);
-                got = s->synth_frame_cb(s->synth_frame_priv, s);
-                if(got < 0) {
-                    SDL_UnlockAudioDevice(s->audiodev);
-                    return(-1);
-                }
-                add_samples(s, got);
-                SDL_UnlockAudioDevice(s->audiodev);
-            }
+            SDL_UnlockAudioDevice(s->audiodev);
         }
     }
 
+    if(s->state == SYNTH_ENABLED) {
+        SDL_PauseAudioDevice(s->audiodev, 0);
+        s->state = SYNTH_RUNNING;
+    }
+
     return(0);
+}
+
+void synth_invalidate_buffers(Synth *s) {
+    SDL_LockAudioDevice(s->audiodev);
+    s->bufferfilled = 0;
+    s->readcursor = 0;
+    s->writecursor = 0;
+    s->underrun = 0;
+    SDL_UnlockAudioDevice(s->audiodev);
 }
 
 int synth_set_fragments(Synth *s, unsigned int fragments) {
@@ -1228,6 +1225,8 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
             return(-1);
         }
     }
+
+    synth_invalidate_buffers(s);
 
     return(0);
 }

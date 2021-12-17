@@ -1900,6 +1900,21 @@ static PyObject *Synth_frame(SynthObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *Synth_invalidate_buffers(SynthObject *self,
+                                          PyTypeObject *defining_class,
+                                          PyObject *const *args,
+                                          Py_ssize_t nargs,
+                                          PyObject *kwnames) {
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
+        return(NULL);
+    }
+
+    synth_invalidate_buffers(self->s);
+
+    Py_RETURN_NONE;
+}
+
 static PyObject *Synth_set_fragments(SynthObject *self,
                                      PyTypeObject *defining_class,
                                      PyObject *const *args,
@@ -2017,6 +2032,11 @@ static PyMethodDef Synth_methods[] = {
         (PyCMethod) Synth_frame,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Indicate that it's a good time for the frame callback to be run."},
+    {
+        "invalidate_buffers",
+        (PyCMethod) Synth_invalidate_buffers,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Invalidate the output buffers."},
     {
         "fragments",
         (PyCMethod) Synth_set_fragments,

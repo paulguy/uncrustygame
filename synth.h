@@ -286,6 +286,14 @@ int synth_set_enabled(Synth *s, int enabled);
  */
 int synth_frame(Synth *s);
 /*
+ * Invalidate the output buffers.  Data in them already will not be played.
+ * Probably best to do this when it's not enabled.  It will lock the audio
+ * device while messing with buffer state so it should be safe, though.
+ *
+ * s        the Synth structure
+ */
+void synth_invalidate_buffers(Synth *s);
+/*
  * Set the number of fragments that should be buffered internally.  Higher
  * values will add more latency but will buy more time between synth_frame
  * calls.  This must be called at least once before starting and can't be called
