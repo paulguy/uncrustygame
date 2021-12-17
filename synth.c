@@ -1119,11 +1119,11 @@ int synth_frame(Synth *s) {
             add_samples(s, got);
             SDL_UnlockAudioDevice(s->audiodev);
         }
-    }
 
-    if(s->state == SYNTH_ENABLED) {
-        SDL_PauseAudioDevice(s->audiodev, 0);
-        s->state = SYNTH_RUNNING;
+        if(s->state == SYNTH_ENABLED) {
+            SDL_PauseAudioDevice(s->audiodev, 0);
+            s->state = SYNTH_RUNNING;
+        }
     }
 
     return(0);
