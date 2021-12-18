@@ -585,12 +585,12 @@ Synth *synth_new(const char *filename,
 
     s->log_cb = log_cb;
     s->log_priv = log_priv;
+    s->audiodev = -1;
 
     desired.format = synth_audioformat_from_type(format);
     if(desired.format == 0) {
         LOG_PRINTF(s, "Invalid SynthImportType.\n");
-        free(s);
-        return(NULL);
+        goto error;
     }
 
     desired.freq = rate;
@@ -609,11 +609,9 @@ Synth *synth_new(const char *filename,
                                           SDL_AUDIO_ALLOW_ANY_CHANGE);
         if(s->audiodev < 2) {
             LOG_PRINTF(s, "Failed to open SDL audio: %s.\n", SDL_GetError());
-            free(s);
-            return(NULL);
+            goto error;
         }
     } else {
-        s->audiodev = -1;
         memcpy(&obtained, &desired, sizeof(SDL_AudioSpec));
     }
 
@@ -622,18 +620,14 @@ Synth *synth_new(const char *filename,
      * 1. */
     if(obtained.channels < 1) {
         LOG_PRINTF(s, "No channels?\n");
-        SDL_CloseAudioDevice(s->audiodev);
-        free(s);
-        return(NULL);
+        goto error;
     }
 
     switch(SDL_AUDIO_BITSIZE(obtained.format)) {
         case 32:
             if(!SDL_AUDIO_ISFLOAT(obtained.format)) {
                 LOG_PRINTF(s, "32 bit integer output format isn't supported.\n");
-                SDL_CloseAudioDevice(s->audiodev);
-                free(s);
-                return(NULL);
+                goto error;
             }
             s->format = SYNTH_TYPE_F32;
             break;
@@ -646,9 +640,7 @@ Synth *synth_new(const char *filename,
         default:
             LOG_PRINTF(s, "Unsupported format size: %d.\n",
                             SDL_AUDIO_BITSIZE(obtained.format));
-            SDL_CloseAudioDevice(s->audiodev);
-            free(s);
-            return(NULL);
+            goto error;
     }
 
     /* just use the obtained spec for frequency but try to convert the format.
@@ -657,9 +649,7 @@ Synth *synth_new(const char *filename,
                          desired.format,  1, obtained.freq,
                          obtained.format, 1, obtained.freq) < 0) {
         LOG_PRINTF(s, "Can't create audio output converter.\n");
-        SDL_CloseAudioDevice(s->audiodev);
-        free(s);
-        return(NULL);
+        goto error;
     }
 
     /* create converters now for allowing import later */
@@ -667,23 +657,18 @@ Synth *synth_new(const char *filename,
                          AUDIO_U8,    1, obtained.freq,
                          AUDIO_F32SYS, 1, obtained.freq) < 0) {
         LOG_PRINTF(s, "Failed to build U8 import converter.\n");
-        SDL_CloseAudioDevice(s->audiodev);
-        free(s);
-        return(NULL);
+        goto error;
     }
     if(SDL_BuildAudioCVT(&(s->S16toF32),
                          AUDIO_S16SYS, 1, obtained.freq,
                          AUDIO_F32SYS, 1, obtained.freq) < 0) {
         LOG_PRINTF(s, "Failed to build S16 import converter.\n");
-        SDL_CloseAudioDevice(s->audiodev);
-        free(s);
-        return(NULL);
+        goto error;
     }
 
     if(filename != NULL) {
         if(synth_open_wav(s, filename) < 0) {
-            free(s);
-            return(NULL);
+            goto error;
         }
     }
 
@@ -709,6 +694,14 @@ Synth *synth_new(const char *filename,
     s->synth_frame_priv = synth_frame_priv;
 
     return(s);
+error:
+    if(s->audiodev >= 0) {
+        SDL_CloseAudioDevice(s->audiodev);
+    }
+
+    free(s);
+
+    return(NULL);
 }
 
 void synth_free(Synth *s) {
