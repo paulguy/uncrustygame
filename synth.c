@@ -751,6 +751,42 @@ void synth_free(Synth *s) {
     free(s);
 }
 
+static int allocate_outbuf(Synth *s) {
+    unsigned int formatbytes;
+
+    if(s->fragments == 0) {
+        LOG_PRINTF(s, "Fragments must be set first.\n");
+        fclose(s->out);
+        s->out = NULL;
+        return(-1);
+    }
+
+    switch(s->format) {
+        case SYNTH_TYPE_U8:
+            formatbytes = sizeof(uint8_t);
+            break;
+        case SYNTH_TYPE_S16:
+            formatbytes = sizeof(int16_t);
+            break;
+        case SYNTH_TYPE_F32:
+            formatbytes = sizeof(float);
+            break;
+        default:
+            LOG_PRINTF(s, "Unsupported WAV output format.\n");
+            return(-1);
+    }
+
+    s->outbuf = malloc(s->channels * formatbytes * s->fragments * s->fragmentsize);
+    if(s->outbuf == NULL) {
+        LOG_PRINTF(s, "Failed to allocate file output buffer.\n");
+        fclose(s->out);
+        s->out = NULL;
+        return(-1);
+    }
+
+    return(0);
+}
+
 static const char RIFF[] = {'R', 'I', 'F', 'F'};
 static const int32_t RIFF_INIT_SIZE = 0;
 static const unsigned int RIFF_HEADER_PCM_SIZE = 36;
@@ -771,13 +807,13 @@ static const unsigned int WAVE_data_SIZE_PCM_POS = 40;
 static const unsigned int WAVE_data_SIZE_FLOAT_POS = 54;
 
 #define WAVE_WRITE_FIELD(NAME) \
-    if(fwrite(NAME, sizeof(NAME), 1, s->out) < 1) { \
+    if(fwrite((NAME), sizeof(NAME), 1, out) < 1) { \
         LOG_PRINTF(s, "Failed to write field "#NAME".\n"); \
         goto error; \
     }
 
 #define WAVE_WRITE_FIELD_PTR(NAME) \
-    if(fwrite(&(NAME), sizeof(NAME), 1, s->out) < 1) { \
+    if(fwrite(&(NAME), sizeof(NAME), 1, out) < 1) { \
         LOG_PRINTF(s, "Failed to write field "#NAME".\n"); \
         goto error; \
     }
@@ -788,6 +824,7 @@ int synth_open_wav(Synth *s, const char *filename) {
     uint32_t bytespersecond;
     int formatbytes;
     uint16_t channels;
+    FILE *out;
 
     if(s->out != NULL) {
         LOG_PRINTF(s, "Synth already has a wav file open\n");
@@ -813,14 +850,10 @@ int synth_open_wav(Synth *s, const char *filename) {
     bytespersecond = bytespersample * s->rate;
     channels = s->channels;
 
-    s->out = fopen(filename, "wb");
-    if(s->out == NULL) {
+    out = fopen(filename, "wb");
+    if(out == NULL) {
         LOG_PRINTF(s, "Failed to open %s for writing.\n", filename);
         return(-1);
-    }
-
-    if(s->audiodev >= 0) {
-        SDL_LockAudioDevice(s->audiodev);
     }
 
     WAVE_WRITE_FIELD(RIFF)
@@ -849,48 +882,35 @@ int synth_open_wav(Synth *s, const char *filename) {
     WAVE_WRITE_FIELD_PTR(RIFF_INIT_SIZE);
 
     if(s->audiodev < 0) {
-        if(s->fragments == 0) {
-            LOG_PRINTF(s, "Fragments must be set first.\n");
-            fclose(s->out);
-            s->out = NULL;
-            return(-1);
-        }
-
-        s->outbuf = malloc(formatbytes * s->fragments * s->fragmentsize);
-        if(s->outbuf == NULL) {
-            LOG_PRINTF(s, "Failed to allocate file output buffer.\n");
-            fclose(s->out);
-            s->out = NULL;
+        if(allocate_outbuf(s) < 0) {
             return(-1);
         }
     }
 
     s->written = 0;
+    s->out = out;
 
-    if(s->audiodev >= 0) {
-        SDL_UnlockAudioDevice(s->audiodev);
-    }
     return(0);
 
 error:
-    fclose(s->out);
-    s->out = NULL;
+    fclose(out);
+    out = NULL;
 
-    if(s->audiodev >= 0) {
-        SDL_UnlockAudioDevice(s->audiodev);
-    }
     return(-1);
 }
 
 #define WAVE_SEEK_POS(POS) \
-    if(fseek(s->out, POS, SEEK_SET) < 0) { \
+    if(fseek(out, POS, SEEK_SET) < 0) { \
         LOG_PRINTF(s, "Failed to seek to field NAME.\n"); \
         goto error; \
     }
 
 int synth_close_wav(Synth *s) {
     uint32_t riffsize;
+    FILE *out = s->out;
 
+    /* lock the audio device to make sure nothing's fighting to write to the
+     * file */
     if(s->audiodev >= 0) {
         SDL_LockAudioDevice(s->audiodev);
     }
@@ -997,7 +1017,7 @@ int synth_frame(Synth *s) {
     unsigned int needed;
     int got;
 
-    if(s->audiodev < 0) {
+    if(s->audiodev < 0 && s->out != NULL) {
         if(s->outbuf == NULL) {
             LOG_PRINTF(s, "Set a number of fragments first.\n");
             return(-1);
@@ -1013,14 +1033,18 @@ int synth_frame(Synth *s) {
     } else {
         needed = synth_get_samples_needed(s);
         if(needed > 0) {
-            SDL_LockAudioDevice(s->audiodev);
+            if(s->audiodev >= 0) {
+                SDL_LockAudioDevice(s->audiodev);
+            }
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
                 SDL_UnlockAudioDevice(s->audiodev);
                 return(-1);
             }
             add_samples(s, got);
-            SDL_UnlockAudioDevice(s->audiodev);
+            if(s->audiodev >= 0) {
+                SDL_UnlockAudioDevice(s->audiodev);
+            }
         }
 
         if(s->state == SYNTH_ENABLED) {
@@ -1033,12 +1057,16 @@ int synth_frame(Synth *s) {
 }
 
 void synth_invalidate_buffers(Synth *s) {
-    SDL_LockAudioDevice(s->audiodev);
+    if(s->audiodev >= 0) {
+        SDL_LockAudioDevice(s->audiodev);
+    }
     s->bufferfilled = 0;
     s->readcursor = 0;
     s->writecursor = 0;
     s->underrun = 0;
-    SDL_UnlockAudioDevice(s->audiodev);
+    if(s->audiodev >= 0) {
+        SDL_UnlockAudioDevice(s->audiodev);
+    }
 }
 
 int synth_set_fragments(Synth *s, unsigned int fragments) {
@@ -1082,12 +1110,7 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
             malloc(sizeof(float) * s->buffersize);
         if(s->channelbuffer[i].data == NULL) {
             LOG_PRINTF(s, "Failed to allocate channel buffer memory.\n");
-            for(i -= 1; i >= 0; i--) {
-                free(s->channelbuffer[i].data);
-            }
-            free(s->channelbuffer);
-            s->fragments = 0;
-            return(-1);
+            goto error;
         }
         memset(s->channelbuffer[i].data,
                0,
@@ -1099,39 +1122,24 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         s->outbuf = NULL;
     }
 
-    if(s->audiodev < 0) {
-        unsigned int formatbytes;
-
-        switch(s->format) {
-            case SYNTH_TYPE_U8:
-                formatbytes = sizeof(uint8_t);
-                break;
-            case SYNTH_TYPE_S16:
-                formatbytes = sizeof(int16_t);
-                break;
-            case SYNTH_TYPE_F32:
-                formatbytes = sizeof(float);
-                break;
-            default:
-                LOG_PRINTF(s, "Unsupported WAV output format.\n");
-                return(-1);
-        }
-
-        s->outbuf = malloc(formatbytes * s->fragments * s->fragmentsize);
-        if(s->outbuf == NULL) {
-            LOG_PRINTF(s, "Failed to allocate file output buffer.\n");
-            for(i = 0; i < (int)s->channels; i++) {
-                free(s->channelbuffer[i].data);
-            }
-            free(s->channelbuffer);
-            s->fragments = 0;
-            return(-1);
+    if(s->audiodev < 0 && s->out != NULL) {
+        if(allocate_outbuf(s) < 0) {
+            goto error;
         }
     }
 
     synth_invalidate_buffers(s);
 
     return(0);
+
+error:
+    for(i = 0; i < (int)s->channels; i++) {
+        free(s->channelbuffer[i].data);
+    }
+    free(s->channelbuffer);
+    s->fragments = 0;
+
+    return(-1);
 }
 
 static int init_buffer(Synth *s,
