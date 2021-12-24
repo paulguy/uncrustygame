@@ -34,6 +34,8 @@
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 typedef struct {
+    float *idxbuf;
+
     float *data;
     unsigned int size;
     unsigned int ref;
@@ -1031,7 +1033,9 @@ int synth_frame(Synth *s) {
             }
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
-                SDL_UnlockAudioDevice(s->audiodev);
+                if(s->audiodev >= 0) {
+                    SDL_UnlockAudioDevice(s->audiodev);
+                }
                 return(-1);
             }
             add_samples(s, got);
@@ -1074,6 +1078,7 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         return(-1);
     }
 
+    /* true on on subsequent setups */
     if(s->channelbuffer != NULL) {
         if(s->fragments != fragments) {
             for(i = 0; (unsigned int)i < s->channels; i++) {
@@ -1087,11 +1092,15 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         }
     }
 
+    /* true on first and subsequent setups */
     if(s->channelbuffer == NULL) {
         s->channelbuffer = malloc(sizeof(SynthBuffer) * s->channels);
         if(s->channelbuffer == NULL) {
             LOG_PRINTF(s, "Failed to allocate channel buffers.\n");
             return(-1);
+        }
+        for(i = 0; (unsigned int)i < s->channels; i++) {
+            s->channelbuffer[i].data = NULL;
         }
     }
 
@@ -1105,9 +1114,7 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
             LOG_PRINTF(s, "Failed to allocate channel buffer memory.\n");
             goto error;
         }
-        memset(s->channelbuffer[i].data,
-               0,
-               sizeof(float) * s->buffersize);
+        memset(s->channelbuffer[i].data, 0, sizeof(float) * s->buffersize);
     }
 
     if(s->outbuf != NULL) {
@@ -1127,9 +1134,13 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
 
 error:
     for(i = 0; i < (int)s->channels; i++) {
-        free(s->channelbuffer[i].data);
+        if(s->channelbuffer[i].data != NULL) {
+            free(s->channelbuffer[i].data);
+        }
     }
     free(s->channelbuffer);
+    s->channelbuffer = NULL;
+    /* can't be enabled */
     s->fragments = 0;
 
     return(-1);
@@ -1174,6 +1185,13 @@ static int init_buffer(Synth *s,
     b->ref = 0;
     b->getPart = 0;
 
+    b->idxbuf = malloc(size * sizeof(float));
+    if(b->idxbuf == NULL) {
+        LOG_PRINTF(s, "Couldn't allocate index buffer.\n");
+        free(b->data);
+        return(-1);
+    }
+
     return(0);
 }
 
@@ -1212,6 +1230,14 @@ static int get_buffer_size(Synth *s, unsigned int index) {
     }
 
     return(s->buffer[index - s->channels].size);
+}
+
+static float *get_buffer_idxbuf(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        return(NULL);
+    }
+
+    return(s->buffer[index - s->channels].idxbuf);
 }
 
 static void add_buffer_ref(Synth *s, unsigned int index) {
@@ -1735,7 +1761,7 @@ int synth_set_player_loop_start(Synth *s,
         LOG_PRINTF(s, "Player loop start out of buffer range.\n");
         return(-1);
     }
-    if((unsigned int)loopStart >= p->loopEnd) {
+    if((unsigned int)loopStart > p->loopEnd) {
         LOG_PRINTF(s, "Loop start must be before loop end.\n");
         return(-1);
     }
@@ -1759,7 +1785,7 @@ int synth_set_player_loop_end(Synth *s,
         LOG_PRINTF(s, "Player loop end out of buffer range.\n");
         return(-1);
     }
-    if((unsigned int)loopEnd <= p->loopStart) {
+    if((unsigned int)loopEnd < p->loopStart) {
         LOG_PRINTF(s, "Loop end must be after loop start.\n");
         return(-1);
     }
@@ -1854,6 +1880,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
     int samples = 0;
     float vol = pl->volume;
     float *i = get_buffer_data(syn, pl->inBuffer);
+    float *idx = get_buffer_idxbuf(syn, pl->inBuffer);
 
     /* TODO actual player logic */
     if(pl->mode == SYNTH_MODE_ONCE &&
@@ -1869,40 +1896,9 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             todo = MIN(todo, ((float)get_buffer_size(syn, pl->inBuffer)
                               - inPos) / speed);
         }
-        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-           pl->outOp == SYNTH_OUTPUT_REPLACE) {
-            for(samples = 0; samples < todo; samples++) {
-                o[outPos] = i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-                  pl->outOp == SYNTH_OUTPUT_ADD) {
-            for(samples = 0; samples < todo; samples++) {
-                o[outPos] += i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            float *v = get_buffer_data(syn, pl->volBuffer);
-            int volPos = pl->volPos;
-            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
-            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
-                for(samples = 0; samples < todo; samples++) {
-                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    volPos++;
-                    inPos += speed;
-                }
-            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
-                for(samples = 0; samples < todo; samples++) {
-                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    volPos++;
-                    inPos += speed;
-                }
-            }
-            pl->volPos = volPos;
+        for(samples = 0; samples < todo; samples++) {
+            idx[samples] = i[(int)inPos];
+            inPos += speed;
         }
         pl->inPos = inPos;
     } else if(pl->mode == SYNTH_MODE_ONCE &&
@@ -1912,120 +1908,29 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
-        int t1, t2 = inPos;
-        /* do the slow thing here so hopefully later loops can be more
-         * optimized */
-        for(t1 = 0; t1 < todo || t2 < 0.0 || t2 > inPos; t1++) {
-            t2 += speed * powf(2, s[speedPos + t1]);
+        int inSize = get_buffer_size(syn, pl->inBuffer);
+        int t;
+        for(t = 0; t < todo && (int)inPos >= 0 && (int)inPos < inSize; t++) {
+            idx[samples] = i[(int)inPos];
+            inPos += speed * powf(2, s[speedPos + t]);
         }
-        todo = t1;
-        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-           pl->outOp == SYNTH_OUTPUT_REPLACE) {
-            for(samples = 0; samples < todo; samples++) {
-                o[outPos] = i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed * powf(2, s[speedPos]);
-                speedPos++;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-                  pl->outOp == SYNTH_OUTPUT_ADD) {
-            for(samples = 0; samples < todo; samples++) {
-                o[outPos] += i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed * powf(2, s[speedPos]);
-                speedPos++;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            float *v = get_buffer_data(syn, pl->volBuffer);
-            int volPos = pl->volPos;
-            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
-            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
-                for(samples = 0; samples < todo; samples++) {
-                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    inPos += speed * powf(2, s[speedPos]);
-                    speedPos++;
-                    volPos++;
-                }
-            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
-                for(samples = 0; samples < todo; samples++) {
-                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    inPos += speed * powf(2, s[speedPos]);
-                    speedPos++;
-                    volPos++;
-                }
-            }
-            pl->volPos = volPos;
-        }
+        todo = t;
         pl->inPos = inPos;
-        pl->speedPos = speedPos;
+        speedPos += t;
     } else if(pl->mode == SYNTH_MODE_LOOP &&
               pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
         float speed = pl->speed;
         float loopLen = pl->loopEnd - pl->loopStart + 1;
-        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-           pl->outOp == SYNTH_OUTPUT_REPLACE) {
-            for(samples = 0; samples < todo; samples++) {
-                /* can't do this without branching that I know of, not sure
-                 * if it matters.. */
-                /* Some optimization around this was tried, and failed. Doesn't
-                 * seem to use any less CPU time, and most attempts ended up
-                 * using more.  A potential bug was determined though which the
-                 * fix needing fmod() has made things even slower. */
-                if(inPos > loopLen) {
-                    inPos = fmodf(inPos, loopLen);
-                } else if(inPos < 0) {
-                    inPos = fmodf(inPos, loopLen) + loopLen;
-                }
-                o[outPos] = i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed;
+        for(samples = 0; samples < todo; samples++) {
+            if(inPos > loopLen) {
+                inPos = fmodf(inPos, loopLen);
+            } else if(inPos < 0) {
+                inPos = fmodf(inPos, loopLen) + loopLen;
             }
-        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-                  pl->outOp == SYNTH_OUTPUT_ADD) {
-            for(samples = 0; samples < todo; samples++) {
-                if(inPos > loopLen) {
-                    inPos = fmodf(inPos, loopLen);
-                } else if(inPos < 0) {
-                    inPos = fmodf(inPos, loopLen) + loopLen;
-                }
-                o[outPos] += i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            float *v = get_buffer_data(syn, pl->volBuffer);
-            int volPos = pl->volPos;
-            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
-            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
-                for(samples = 0; samples < todo; samples++) {
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
-                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    inPos += speed;
-                    volPos++;
-                }
-            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
-                for(samples = 0; samples < todo; samples++) {
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
-                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    inPos += speed;
-                    volPos++;
-                }
-            }
-            pl->volPos = volPos;
+            idx[samples] = i[(int)inPos];
+            inPos += speed;
         }
         pl->inPos = pl->loopStart + inPos;
     } else if(pl->mode == SYNTH_MODE_LOOP &&
@@ -2037,64 +1942,15 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
         float loopLen = pl->loopEnd - pl->loopStart + 1;
-        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-           pl->outOp == SYNTH_OUTPUT_REPLACE) {
-            for(samples = 0; samples < todo; samples++) {
-                if(inPos > loopLen) {
-                    inPos = fmodf(inPos, loopLen);
-                } else if(inPos < 0) {
-                    inPos = fmodf(inPos, loopLen) + loopLen;
-                }
-                o[outPos] = i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed * powf(2, s[speedPos]);
-                speedPos++;
+        for(samples = 0; samples < todo; samples++) {
+            if(inPos > loopLen) {
+                inPos = fmodf(inPos, loopLen);
+            } else if(inPos < 0) {
+                inPos = fmodf(inPos, loopLen) + loopLen;
             }
-        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-                  pl->outOp == SYNTH_OUTPUT_ADD) {
-            for(samples = 0; samples < todo; samples++) {
-                if(inPos > loopLen) {
-                    inPos = fmodf(inPos, loopLen);
-                } else if(inPos < 0) {
-                    inPos = fmodf(inPos, loopLen) + loopLen;
-                }
-                o[outPos] += i[(int)inPos] * vol;
-                outPos++;
-                inPos += speed * powf(2, s[speedPos]);
-                speedPos++;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            float *v = get_buffer_data(syn, pl->volBuffer);
-            int volPos = pl->volPos;
-            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
-            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
-                for(samples = 0; samples < todo; samples++) {
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
-                    o[outPos] = i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    inPos += speed * powf(2, s[speedPos]);
-                    speedPos++;
-                    volPos++;
-                }
-            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
-                for(samples = 0; samples < todo; samples++) {
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
-                    o[outPos] += i[(int)inPos] * v[volPos] * vol;
-                    outPos++;
-                    inPos += speed * powf(2, s[speedPos]);
-                    speedPos++;
-                    volPos++;
-                }
-            }
-            pl->volPos = volPos;
+            idx[samples] = i[(int)inPos];
+            inPos += speed * powf(2, s[speedPos]);
+            speedPos++;
         }
         pl->inPos = inPos + pl->loopStart;
         pl->speedPos = speedPos;
@@ -2103,53 +1959,48 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         int phasePos = pl->phasePos;
         float loopLen = pl->loopEnd - pl->loopStart + 1;
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
-        if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-           pl->outOp == SYNTH_OUTPUT_REPLACE) {
-            for(samples = 0; samples < todo; samples++) {
-                o[outPos] =
-                    i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
-                      + pl->loopStart] * vol;
-                outPos++;
-                phasePos++;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
-                  pl->outOp == SYNTH_OUTPUT_ADD) {
-            for(samples = 0; samples < todo; samples++) {
-                o[outPos] =
-                    i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
-                      + pl->loopStart] * vol;
-                outPos++;
-                phasePos++;
-            }
-        } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            float *v = get_buffer_data(syn, pl->volBuffer);
-            int volPos = pl->volPos;
-            todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
-            if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
-                for(samples = 0; samples < todo; samples++) {
-                    o[outPos] =
-                        i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
-                          + pl->loopStart] * v[volPos] * vol;
-                    outPos++;
-                    volPos++;
-                    phasePos++;
-                }
-            } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
-                for(samples = 0; samples < todo; samples++) {
-                    o[outPos] +=
-                        i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
-                          + pl->loopStart] * v[volPos] * vol;
-                    outPos++;
-                    volPos++;
-                    phasePos++;
-                }
-            }
-            pl->volPos = volPos;
+        for(samples = 0; samples < todo; samples++) {
+            idx[samples] =
+                i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
+                  + pl->loopStart];
+            phasePos++;
         }
         pl->phasePos = phasePos;
     }
 
-    return(samples);
+    if(pl->volMode == SYNTH_AUTO_CONSTANT &&
+       pl->outOp == SYNTH_OUTPUT_REPLACE) {
+        for(samples = 0; samples < todo; samples++) {
+            o[outPos] = idx[samples] * vol;
+            outPos++;
+        }
+    } else if(pl->volMode == SYNTH_AUTO_CONSTANT &&
+              pl->outOp == SYNTH_OUTPUT_ADD) {
+        for(samples = 0; samples < todo; samples++) {
+            o[outPos] += idx[samples] * vol;
+            outPos++;
+        }
+    } else if(pl->volMode == SYNTH_AUTO_SOURCE) {
+        float *v = get_buffer_data(syn, pl->volBuffer);
+        int volPos = pl->volPos;
+        todo = MIN(todo, get_buffer_size(syn, pl->volBuffer) - volPos);
+        if(pl->outOp == SYNTH_OUTPUT_REPLACE) {
+            for(samples = 0; samples < todo; samples++) {
+                o[outPos] = idx[samples] * v[volPos] * vol;
+                outPos++;
+                volPos++;
+            }
+        } else if(pl->outOp == SYNTH_OUTPUT_ADD) {
+            for(samples = 0; samples < todo; samples++) {
+                o[outPos] += idx[samples] * v[volPos] * vol;
+                outPos++;
+                volPos++;
+            }
+        }
+        pl->volPos = volPos;
+    }
+
+    return(todo);
 }
 
 int synth_run_player(Synth *s,

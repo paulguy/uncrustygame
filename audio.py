@@ -1181,7 +1181,7 @@ class AudioSystem():
         return self._s.buffer(audioType, data, size)
 
     def _inc_fragments(self):
-        self._s.enabled(0)
+        self._s.enabled(False)
         self._fragments += 1
         self._s.fragments(self._fragments)
 
@@ -1190,9 +1190,6 @@ class AudioSystem():
             if self._s.underrun():
                 self._inc_fragments()
                 self._s.enabled(True)
-                # s.enabled() will eventually call this function again so when it
-                # finally returns back to here, just return again
-                return 0
 
             needed = self._s.needed()
             if self._trace and len(self._sequences) > 0:
