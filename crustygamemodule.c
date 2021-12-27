@@ -469,7 +469,7 @@ static PyObject *LayerList_getrenderer(LayerListObject *self, void *closure) {
 }
 
 static PyGetSetDef LayerList_getsetters[] = {
-    {"renderer", (getter) LayerList_getrenderer, NULL, "Get the renderer back from the LayerList."},
+    {"renderer", (getter) LayerList_getrenderer, NULL, "Get the renderer back from the LayerList.", NULL},
     {NULL}
 };
 
@@ -1763,7 +1763,7 @@ static PyObject *Synth_get_samples_needed(SynthObject *self,
                                           PyObject *const *args,
                                           Py_ssize_t nargs,
                                           PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
         return(NULL);
@@ -1785,7 +1785,7 @@ static PyObject *Synth_get_rate(SynthObject *self,
                                 PyObject *const *args,
                                 Py_ssize_t nargs,
                                 PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
         return(NULL);
@@ -1840,7 +1840,7 @@ static PyObject *Synth_get_fragment_size(SynthObject *self,
                                          PyObject *const *args,
                                          Py_ssize_t nargs,
                                          PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
         return(NULL);
@@ -1862,7 +1862,7 @@ static PyObject *Synth_has_underrun(SynthObject *self,
                                     PyObject *const *args,
                                     Py_ssize_t nargs,
                                     PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
         return(NULL);
@@ -2236,7 +2236,7 @@ static PyObject *Synth_get_size(BufferObject *self,
                                 PyObject *const *args,
                                 Py_ssize_t nargs,
                                 PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
         return(NULL);
@@ -3151,7 +3151,7 @@ static PyObject *Synth_player_stopped_reason(PlayerObject *self,
                                              PyObject *const *args,
                                              Py_ssize_t nargs,
                                              PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
         return(NULL);
@@ -3892,7 +3892,7 @@ static PyObject *Synth_filter_stopped_reason(FilterObject *self,
                                              PyObject *const *args,
                                              Py_ssize_t nargs,
                                              PyObject *kwnames) {
-    unsigned int ret;
+    int ret;
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
         return(NULL);
