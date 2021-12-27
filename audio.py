@@ -555,7 +555,7 @@ class AudioSequencer():
             # make -1.0 be the real last sample
             # input buffer position is natively float, so don't convert to int
             if pos < 0.0:
-                pos = (pos * player[8][3]) + (player[8][3] - 1)
+                pos = (pos * player[8][3]) + (player[8][3] - 1.0)
             else:
                 pos = pos * player[8][3]
             p.input_pos(pos)
