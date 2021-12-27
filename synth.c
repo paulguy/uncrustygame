@@ -565,6 +565,26 @@ static void synth_audio_cb(void *userdata, Uint8 *stream, int len) {
     }
 }
 
+static int audiodev_is_open(Synth *s) {
+    if(s->audiodev >= 2) {
+        return(1);
+    }
+
+    return(0);
+}
+
+static void lock_audiodev(Synth *s) {
+    if(audiodev_is_open(s)) {
+        SDL_LockAudioDevice(s->audiodev);
+    }
+}
+
+static void unlock_audiodev(Synth *s) {
+    if(audiodev_is_open(s)) {
+        SDL_UnlockAudioDevice(s->audiodev);
+    }
+}
+
 Synth *synth_new(const char *filename,
                  int opendev,
                  const char *devname,
@@ -587,7 +607,7 @@ Synth *synth_new(const char *filename,
 
     s->log_cb = log_cb;
     s->log_priv = log_priv;
-    s->audiodev = -1;
+    s->audiodev = 0;
 
     desired.format = synth_audioformat_from_type(format);
     if(desired.format == 0) {
@@ -609,7 +629,7 @@ Synth *synth_new(const char *filename,
                                           &desired,
                                           &obtained,
                                           SDL_AUDIO_ALLOW_ANY_CHANGE);
-        if(s->audiodev < 2) {
+        if(!audiodev_is_open(s)) {
             LOG_PRINTF(s, "Failed to open SDL audio: %s.\n", SDL_GetError());
             goto error;
         }
@@ -697,7 +717,7 @@ Synth *synth_new(const char *filename,
 
     return(s);
 error:
-    if(s->audiodev >= 0) {
+    if(audiodev_is_open(s)) {
         SDL_CloseAudioDevice(s->audiodev);
     }
 
@@ -709,7 +729,7 @@ error:
 void synth_free(Synth *s) {
     unsigned int i;
 
-    if(s->audiodev < 0) {
+    if(audiodev_is_open(s)) {
         SDL_LockAudioDevice(s->audiodev);
         SDL_CloseAudioDevice(s->audiodev);
     }
@@ -876,7 +896,7 @@ int synth_open_wav(Synth *s, const char *filename) {
     WAVE_WRITE_FIELD(WAVE_data);
     WAVE_WRITE_FIELD_PTR(RIFF_INIT_SIZE);
 
-    if(s->audiodev < 0) {
+    if(!audiodev_is_open(s)) {
         if(allocate_outbuf(s) < 0) {
             return(-1);
         }
@@ -906,9 +926,7 @@ int synth_close_wav(Synth *s) {
 
     /* lock the audio device to make sure nothing's fighting to write to the
      * file */
-    if(s->audiodev >= 0) {
-        SDL_LockAudioDevice(s->audiodev);
-    }
+    lock_audiodev(s);
 
     WAVE_SEEK_POS(RIFF_SIZE_POS)
 
@@ -929,24 +947,27 @@ int synth_close_wav(Synth *s) {
         WAVE_WRITE_FIELD_PTR(s->written)
     }
 
-    if(s->audiodev < 0) {
+    if(!audiodev_is_open(s)) {
         free(s->outbuf);
         s->outbuf = NULL;
     }
     fclose(s->out);
     s->out = NULL;
 
-    if(s->audiodev >= 0) {
-        SDL_UnlockAudioDevice(s->audiodev);
-    }
+    unlock_audiodev(s);
+
     return(0);
 error:
+    if(!audiodev_is_open(s)) {
+        free(s->outbuf);
+        s->outbuf = NULL;
+    }
+
     fclose(s->out);
     s->out = NULL;
 
-    if(s->audiodev >= 0) {
-        SDL_UnlockAudioDevice(s->audiodev);
-    }
+    unlock_audiodev(s);
+
     return(-1);
 }
 
@@ -986,7 +1007,7 @@ int synth_has_underrun(Synth *s) {
 }
 
 int synth_set_enabled(Synth *s, int enabled) {
-    if(s->audiodev < 0) {
+    if(!audiodev_is_open(s)) {
         LOG_PRINTF(s, "Audio doesn't need to be enabled for wave output only mode.\n");
         return(0);
     }
@@ -1012,7 +1033,7 @@ int synth_frame(Synth *s) {
     unsigned int needed;
     int got;
 
-    if(s->audiodev < 0 && s->out != NULL) {
+    if(!audiodev_is_open(s)) {
         if(s->outbuf == NULL) {
             LOG_PRINTF(s, "Set a number of fragments first.\n");
             return(-1);
@@ -1028,20 +1049,14 @@ int synth_frame(Synth *s) {
     } else {
         needed = synth_get_samples_needed(s);
         if(needed > 0) {
-            if(s->audiodev >= 0) {
-                SDL_LockAudioDevice(s->audiodev);
-            }
+            lock_audiodev(s);
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
-                if(s->audiodev >= 0) {
-                    SDL_UnlockAudioDevice(s->audiodev);
-                }
+                unlock_audiodev(s);
                 return(-1);
             }
             add_samples(s, got);
-            if(s->audiodev >= 0) {
-                SDL_UnlockAudioDevice(s->audiodev);
-            }
+            unlock_audiodev(s);
         }
 
         if(s->state == SYNTH_ENABLED) {
@@ -1054,16 +1069,14 @@ int synth_frame(Synth *s) {
 }
 
 void synth_invalidate_buffers(Synth *s) {
-    if(s->audiodev >= 0) {
-        SDL_LockAudioDevice(s->audiodev);
-    }
+    lock_audiodev(s);
+
     s->bufferfilled = 0;
     s->readcursor = 0;
     s->writecursor = 0;
     s->underrun = 0;
-    if(s->audiodev >= 0) {
-        SDL_UnlockAudioDevice(s->audiodev);
-    }
+
+    unlock_audiodev(s);
 }
 
 int synth_set_fragments(Synth *s, unsigned int fragments) {
@@ -1122,7 +1135,7 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         s->outbuf = NULL;
     }
 
-    if(s->audiodev < 0 && s->out != NULL) {
+    if(!audiodev_is_open(s)) {
         if(allocate_outbuf(s) < 0) {
             goto error;
         }
@@ -1362,7 +1375,7 @@ int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf) {
     SynthBuffer *b;
 
     if(index < s->channels) {
-        if(!(s->reffedchannels) && s->audiodev >= 0 ) {
+        if(!(s->reffedchannels) && audiodev_is_open(s)) {
             SDL_LockAudioDevice(s->audiodev);
         }
         s->reffedchannels &= 1 << index;
@@ -1418,7 +1431,7 @@ int synth_get_internal_buffer(Synth *s, unsigned int index, float **buf) {
 int synth_release_buffer(Synth *s, unsigned int index) {
     if(index < s->channels) {
         s->reffedchannels &= ~(1 << index);
-        if(!(s->reffedchannels) && s->audiodev >= 0) {
+        if(!(s->reffedchannels) && audiodev_is_open(s)) {
             SDL_UnlockAudioDevice(s->audiodev);
         }
         return(0);
