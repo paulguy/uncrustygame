@@ -96,16 +96,14 @@ int audio_frame_cb(void *priv, Synth *s) {
             return(-1);
         }
 
-        /* re-enable the synth.  I don't entirely remember how this works but
-         * this function may be called again recursively so make sure nothing
-         * else happens between this and returning. */
+        /* reenable the synth */
         if(synth_set_enabled(s, 1) < 0) {
             /* if it is recursive, allow the error to fall through, but don't
              * print something that might end up spammy */
             return(-1);
         }
-        /* don't try to generate audio that'll just be crackles anyway */
-        return(0);
+        /* try again, the underrun state should be cleared */
+        return(audio_frame_cb(priv, s));
     }
 
     /* clear channel mix buffers */
@@ -222,30 +220,29 @@ int audio_frame_cb(void *priv, Synth *s) {
 }
 
 AudioState *init_audio_state(unsigned int rate) {
-    AudioState *as = malloc(sizeof(AudioState));
     unsigned int i;
 
+    AudioState *as = malloc(sizeof(AudioState));
     if(as == NULL) {
         fprintf(stderr, "Failed to allocate audio state.\n");
         return(NULL);
     }
+    as->s = NULL;
 
-    as->s = synth_new(audio_frame_cb,
-                      as,
-                      log_cb,
-                      stderr,
+    as->s = synth_new(NULL, 1, NULL,
+                      audio_frame_cb, as,
+                      log_cb, stderr,
                       rate,
-                      2);
+                      2,
+                      SYNTH_DEFAULT_FRAGMENT_SIZE,
+                      SYNTH_TYPE_F32);
     if(as->s == NULL) {
         fprintf(stderr, "Failed to create synth.\n");
-        free(as);
-        return(NULL);
+        goto error;
     }
     if(synth_get_channels(as->s) < 2) {
         fprintf(stderr, "Mono output is unsupported.\n");
-        synth_free(as->s);
-        free(as);
-        return(NULL);
+        goto error;
     }
 
     /* set the initial fragments to 1, which will be expanded as needed */
@@ -256,19 +253,27 @@ AudioState *init_audio_state(unsigned int rate) {
     }
 
     if(create_mix_buffers(as) < 0) {
-        synth_free(as->s);
-        free(as);
-        return(NULL);
+        goto error;
     }
     /* fragments need to be set so the output buffer will have been initialized */
     if(synth_set_fragments(as->s, 1) < 0) {
         fprintf(stderr, "Failed to set fragments.\n");
-        synth_free(as->s);
-        free(as);
-        return(NULL);
+        goto error;
+    }
+    if(synth_set_enabled(as->s, 1) < 0) {
+        fprintf(stderr, "Failed to enable audio.\n");
+        goto error;
     }
 
     return(as);
+
+error:
+    if(as->s != NULL) {
+        synth_free(as->s);
+    }
+    free(as);
+
+    return(NULL);
 }
 
 void free_audio_state(AudioState *as) {
