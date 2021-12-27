@@ -361,14 +361,12 @@ def load_audio(aud, harmonics):
 def log_cb_return(priv, string):
     print(string, end='')
 
-def main():
+def do_main(window, renderer, pixfmt):
     try:
         seqname = argv[1]
     except IndexError:
         seqname = DEFAULT_SEQ
 
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
-    window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
     sdlfmt = SDL_AllocFormat(pixfmt)
     sdl_red = SDL_MapRGBA(sdlfmt, 255, 0, 0, 255)
     sdl_green = SDL_MapRGBA(sdlfmt, 0, 255, 0, 255)
@@ -684,6 +682,12 @@ def main():
         for s in seq:
             aud.del_sequence(s)
         seq = None
+
+def main():
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
+    window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
+
+    do_main(window, renderer, pixfmt)
 
     SDL_DestroyRenderer(renderer)
     SDL_DestroyWindow(window)

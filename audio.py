@@ -822,6 +822,8 @@ class AudioSequencer():
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
         for channel in enumerate(self._channel):
+            if self._trace:
+                print(initial[channel[0]])
             # channel list positions are detailed in their respective _update_*
             # functions
             try:

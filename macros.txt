@@ -51,7 +51,7 @@ P_FROM _START _SPEED _TIME=102040 _START _SPEED _TIME
 ; attack can hold high or transition immediately to decay but decay shouldn't
 ; reach 0 before sustaining
 P_STARTENV _BASE_VOL _ATK_SPD _ATK_LEN _DKY_SPD _DKY_LEN _SUS_SPD _MAX_SUS=112068 0.0 _BASE_VOL _ATK_SPD _ATK_LEN \
- 2068 -_DKY_SPD _DKY_LEN \ ; ATK_LEN was met, start decay now
+ 102068 -1.0 -_DKY_SPD _DKY_LEN \ ; ATK_LEN was met, start decay now
   2048 -_SUS_SPD _MAX_SUS \ ; decay length was met, start sustain
    102028 0.0 0.0 0 0 \ ; input buffer end was reached, do silence
   0 \ ; clear input buffer reached behavior because if attack reaches its peak at the requested time, both behaviors will trigger 

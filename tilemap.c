@@ -470,14 +470,15 @@ int tilemap_add_tileset(LayerList *ll,
         return(-1);
     }
     ll->tileset = temp;
+    unsigned int item = ll->tilesetsmem;
     ll->tilesetsmem *= 2;
-    init_tileset(&(ll->tileset[i]), tex, tw, th, maxx, maxy);
     /* initialize empty excess surfaces as NULL */
-    for(j = i + 1; j < ll->tilesetsmem; j++) {
+    for(j = item; j < ll->tilesetsmem; j++) {
         ll->tileset[j].tex = NULL;
     }
+    init_tileset(&(ll->tileset[item]), tex, tw, th, maxx, maxy);
  
-    return(i);
+    return(item);
 }
 
 static Tileset *get_tileset(LayerList *ll, unsigned int index) {
@@ -589,18 +590,19 @@ int tilemap_add_tilemap(LayerList *ll,
         return(-1);
     }
     ll->tilemap = temp;
+    unsigned int item = ll->tilemapsmem;
     ll->tilemapsmem *= 2;
-    if(init_tilemap(ll, &(ll->tilemap[i]), tileset, w, h) < 0) {
+    /* initialize empty excess surfaces as NULL */
+    for(j = item; j < ll->tilemapsmem; j++) {
+        ll->tilemap[j].map = NULL;
+    }
+ 
+    if(init_tilemap(ll, &(ll->tilemap[item]), tileset, w, h) < 0) {
         return(-1);
     }
     add_tileset_ref(ts);
 
-    /* initialize empty excess surfaces as NULL */
-    for(j = i + 1; j < ll->tilemapsmem; j++) {
-        ll->tilemap[j].map = NULL;
-    }
- 
-    return(i);
+    return(item);
 }
 
 static Tilemap *get_tilemap(LayerList *ll, unsigned int index) {
@@ -1106,16 +1108,17 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
         return(-1);
     }
     ll->layer = temp;
+    unsigned int item = ll->layersmem;
     ll->layersmem *= 2;
-    init_layer(&(ll->layer[i]), tm, ts, tilemap);
-    add_tilemap_ref(tm);
-
     /* initialize empty excess surfaces as NULL */
-    for(j = i + 1; j < ll->layersmem; j++) {
+    for(j = item; j < ll->layersmem; j++) {
         ll->layer[j].tilemap = -1;
     }
  
-    return(i);
+    init_layer(&(ll->layer[item]), tm, ts, tilemap);
+    add_tilemap_ref(tm);
+
+    return(item);
 }
 
 static Layer *get_layer(LayerList *ll, unsigned int index) {

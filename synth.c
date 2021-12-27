@@ -1237,7 +1237,7 @@ static void *get_buffer_data(Synth *s, unsigned int index) {
     return(s->buffer[index - s->channels].data);
 }
 
-static int get_buffer_size(Synth *s, unsigned int index) {
+static unsigned int get_buffer_size(Synth *s, unsigned int index) {
     if(index < s->channels) {
         return(synth_get_samples_needed(s));
     }
@@ -1336,17 +1336,18 @@ int synth_add_buffer(Synth *s,
         return(-1);
     }
     s->buffer = temp;
+    unsigned int item = s->buffersmem;
     s->buffersmem *= 2;
     /* initialize empty excess buffers as empty */
-    for(j = i + 1; j < s->buffersmem; j++) {
+    for(j = item; j < s->buffersmem; j++) {
         s->buffer[j].data = NULL;
     }
 
-    if(init_buffer(s, &(s->buffer[i]), type, data, size) < 0) {
+    if(init_buffer(s, &(s->buffer[item]), type, data, size) < 0) {
         return(-1);
     }
 
-    return(s->channels + i);
+    return(s->channels + item);
 }
 
 int synth_free_buffer(Synth *s, unsigned int index) {
@@ -1551,14 +1552,15 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
         return(-1);
     }
     s->player = temp;
+    unsigned int item = s->playersmem;
     s->playersmem *= 2;
     /* initialize empty excess buffers as empty */
-    for(j = i + 1; j < s->playersmem; j++) {
+    for(j = item; j < s->playersmem; j++) {
         s->player[j].inUse = 0;
     }
 
-    init_player(s, &(s->player[i]), inBuffer);
-    return(i);
+    init_player(s, &(s->player[item]), inBuffer);
+    return(item);
 }
 
 int synth_free_player(Synth *s, unsigned int index) {
@@ -1593,7 +1595,7 @@ int synth_set_player_input_buffer(Synth *s,
     }
     p->inPos = 0.0;
     p->loopStart = 0;
-    p->loopEnd = get_buffer_size(s, index) - 1;
+    p->loopEnd = get_buffer_size(s, inBuffer) - 1;
 
     return(0);
 }
@@ -1770,7 +1772,7 @@ int synth_set_player_loop_start(Synth *s,
         loopStart = get_buffer_size(s, p->inBuffer) + loopStart;
     }
     if(loopStart < 0 ||
-       loopStart >= get_buffer_size(s, p->inBuffer)) {
+       loopStart >= (int)get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "Player loop start out of buffer range.\n");
         return(-1);
     }
@@ -1794,7 +1796,7 @@ int synth_set_player_loop_end(Synth *s,
         loopEnd = get_buffer_size(s, p->inBuffer) + loopEnd;
     }
     if(loopEnd < 0 ||
-       loopEnd >= get_buffer_size(s, p->inBuffer)) {
+       loopEnd >= (int)get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "Player loop end out of buffer range.\n");
         return(-1);
     }
@@ -1883,14 +1885,11 @@ int synth_set_player_speed_source(Synth *s,
     return(0);
 }
 
-/* another heckin' chonky overcomplicated function.  My approach here is to
- * try to figure out as many conditions and values ahead of time to keep the
- * loops tight and small and hopefully that'll help the compiler figure out
- * how to make them faster? */
 static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                                         float *o, int outPos,
-                                        int todo) {
-    int samples = 0;
+                                        unsigned int todo) {
+    unsigned int samples;
+    unsigned int t;
     float vol = pl->volume;
     float *i = get_buffer_data(syn, pl->inBuffer);
     float *idx = get_buffer_idxbuf(syn, pl->inBuffer);
@@ -1899,20 +1898,13 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
     if(pl->mode == SYNTH_MODE_ONCE &&
        pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos;
-        if(inPos < 0.0) {
-            inPos = 0.0;
-        } 
         float speed = pl->speed;
-        if(speed < 0.0) {
-            todo = MIN(todo, inPos / -speed);
-        } else {
-            todo = MIN(todo, ((float)get_buffer_size(syn, pl->inBuffer)
-                              - inPos) / speed);
-        }
-        for(samples = 0; samples < todo; samples++) {
-            idx[samples] = i[(int)inPos];
+        int inSize = get_buffer_size(syn, pl->inBuffer);
+        for(t = 0; t < todo && (int)inPos >= 0 && (int)inPos < inSize; t++) {
+            idx[t] = i[(int)inPos];
             inPos += speed;
         }
+        todo = t;
         pl->inPos = inPos;
     } else if(pl->mode == SYNTH_MODE_ONCE &&
               pl->speedMode == SYNTH_AUTO_SOURCE) {
@@ -1922,9 +1914,8 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
         int inSize = get_buffer_size(syn, pl->inBuffer);
-        int t;
         for(t = 0; t < todo && (int)inPos >= 0 && (int)inPos < inSize; t++) {
-            idx[samples] = i[(int)inPos];
+            idx[t] = i[(int)inPos];
             inPos += speed * powf(2, s[speedPos + t]);
         }
         todo = t;
@@ -2034,8 +2025,8 @@ int synth_run_player(Synth *s,
     /* Try to get the entire task done in 1 call */
     /* if it's an ouptut buffer, try to fill it as much as possible */
     if(p->outBuffer < s->channels) {
-        todo = MIN((int)reqSamples,
-                   get_buffer_size(s, p->outBuffer) - (int)outPos);
+        todo = MIN(reqSamples,
+                   get_buffer_size(s, p->outBuffer) - outPos);
 
         if((unsigned int)s->writecursor + outPos >= s->buffersize) {
             /* if it starts past the end, figure out where to start from the
@@ -2067,8 +2058,8 @@ int synth_run_player(Synth *s,
             samples = do_synth_run_player(s, p, o, outPos, todo);
         }
     } else {
-        todo = MIN((int)reqSamples,
-                   get_buffer_size(s, p->outBuffer) - (int)outPos);
+        todo = MIN(reqSamples,
+                   get_buffer_size(s, p->outBuffer) - outPos);
 
         samples = do_synth_run_player(s, p, o, outPos, todo);
     }
@@ -2085,64 +2076,58 @@ int synth_player_stopped_reason(Synth *syn,
         return(-1);
     }
 
-    if(get_buffer_size(syn, pl->outBuffer) - pl->outPos == 0) {
+    if(pl->outPos >= get_buffer_size(syn, pl->outBuffer)) {
         reason |= SYNTH_STOPPED_OUTBUFFER;
     }
 
     if(pl->mode == SYNTH_MODE_ONCE &&
        pl->speedMode == SYNTH_AUTO_CONSTANT) {
-        if((pl->speed < 0.0 && pl->inPos + pl->speed < 0.0) ||
-           (pl->speed > 0.0 && pl->inPos + pl->speed >= get_buffer_size(syn, pl->inBuffer))) {
+        if(((int)(pl->inPos) < 0) ||
+           ((unsigned int)(pl->inPos) >= get_buffer_size(syn, pl->inBuffer))) {
             reason |= SYNTH_STOPPED_INBUFFER;
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+            if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
                 reason |= SYNTH_STOPPED_VOLBUFFER;
             }
         }
     } else if(pl->mode == SYNTH_MODE_ONCE &&
               pl->speedMode == SYNTH_AUTO_SOURCE) {
-        if(pl->inPos < 0.0 || pl->inPos >= get_buffer_size(syn, pl->inBuffer)) {
+        if(((int)(pl->inPos) < 0) ||
+           ((unsigned int)(pl->inPos) >= get_buffer_size(syn, pl->inBuffer))) {
             reason |= SYNTH_STOPPED_INBUFFER;
         }
-        if(get_buffer_size(syn, pl->speedBuffer) - pl->speedPos == 0) {
+        if(pl->speedPos >= get_buffer_size(syn, pl->speedBuffer)) {
             reason |= SYNTH_STOPPED_SPEEDBUFFER;
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+            if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
                 reason |= SYNTH_STOPPED_VOLBUFFER;
             }
         }
     } else if(pl->mode == SYNTH_MODE_LOOP &&
               pl->speedMode == SYNTH_AUTO_CONSTANT) {
-        if((pl->speed < 0.0 && pl->inPos + pl->speed < 0.0) ||
-           (pl->speed > 0.0 && pl->inPos + pl->speed >= get_buffer_size(syn, pl->inBuffer))) {
-            reason |= SYNTH_STOPPED_INBUFFER;
-        }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+            if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
                 reason |= SYNTH_STOPPED_VOLBUFFER;
             }
         }
     } else if(pl->mode == SYNTH_MODE_LOOP &&
               pl->speedMode == SYNTH_AUTO_SOURCE) {
-        if(pl->inPos < 0.0 || pl->inPos >= get_buffer_size(syn, pl->inBuffer)) {
-            reason |= SYNTH_STOPPED_INBUFFER;
-        }
-        if(get_buffer_size(syn, pl->speedBuffer) - pl->speedPos == 0) {
+        if(pl->speedPos >= get_buffer_size(syn, pl->speedBuffer)) {
             reason |= SYNTH_STOPPED_SPEEDBUFFER;
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+            if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
                 reason |= SYNTH_STOPPED_VOLBUFFER;
             }
         }
     } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
-        if(get_buffer_size(syn, pl->phaseBuffer) - pl->phasePos == 0) {
+        if(pl->phasePos >= get_buffer_size(syn, pl->phaseBuffer)) {
             reason |= SYNTH_STOPPED_PHASEBUFFER;
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
-            if(get_buffer_size(syn, pl->volBuffer) - pl->volPos == 0) {
+            if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
                 reason |= SYNTH_STOPPED_VOLBUFFER;
             }
         }
@@ -2210,7 +2195,7 @@ int synth_add_filter(Synth *s,
         size = get_buffer_size(s, filterBuffer);
     }
 
-    if(get_buffer_size(s, filterBuffer) < (int)size) {
+    if(get_buffer_size(s, filterBuffer) < size) {
         LOG_PRINTF(s, "Input buffer isn't large enough for filter size.");
         return(-1);
     }
@@ -2250,16 +2235,17 @@ int synth_add_filter(Synth *s,
         return(-1);
     }
     s->filter = temp;
+    unsigned int item = s->filtersmem;
     s->filtersmem *= 2;
     /* initialize empty excess buffers as empty */
-    for(j = i + 1; j < s->filtersmem; j++) {
+    for(j = item; j < s->filtersmem; j++) {
         s->filter[j].accum = NULL;
     }
 
-    if(init_filter(s, &(s->filter[i]), filterBuffer, size) < 0) {
+    if(init_filter(s, &(s->filter[item]), filterBuffer, size) < 0) {
         return(-1);
     }
-    synth_reset_filter(s, i);
+    synth_reset_filter(s, item);
     return(i);
 }
 
@@ -2774,7 +2760,7 @@ int synth_run_filter(Synth *s,
     /* Try to get the entire task done in 1 call */
     /* if it's an ouptut buffer, try to fill it as much as possible */
     if(f->outBuffer < s->channels) {
-        todo = MIN((int)reqSamples,
+        todo = MIN(reqSamples,
                    get_buffer_size(s, f->outBuffer) - (int)outPos);
 
         if((unsigned int)s->writecursor + outPos >= s->buffersize) {
@@ -2807,7 +2793,7 @@ int synth_run_filter(Synth *s,
             samples = do_synth_run_filter(s, f, o, outPos, todo);
         }
     } else {
-        todo = MIN((int)reqSamples,
+        todo = MIN(reqSamples,
                    get_buffer_size(s, f->outBuffer) - (int)outPos);
 
         samples = do_synth_run_filter(s, f, o, outPos, todo);
