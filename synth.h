@@ -126,9 +126,13 @@ SDL_AudioFormat synth_audioformat_from_type(SynthImportType type);
  * filename A path to a WAV file to load.
  * rate     A pointer to an unsigned int that will be populated with the sample
  *          rate of the WAV file.
+ * name     optional name or NULL to use the filename
  * return   0 on success, -1 on failure
  */
-int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate);
+int synth_buffer_from_wav(Synth *s,
+                          const char *filename,
+                          unsigned int *rate,
+                          const char *name);
 
 /*
  * Output information about the provided Synth structure, all loaded buffers
@@ -333,12 +337,14 @@ void synth_consume_samples(Synth *s, unsigned int consumed);
  * type     The data format in "data"
  * data     the data
  * size     the size of the data in samples
+ * name     optional name or NULL
  * return   the buffer handle or -1 on failure
  */
 int synth_add_buffer(Synth *s,
                      SynthImportType type,
                      void *data,
-                     unsigned int size);
+                     unsigned int size,
+                     const char *name);
 /*
  * Free a buffer and its memory.
  *
@@ -401,9 +407,12 @@ int synth_silence_buffer(Synth *s,
  *
  * s        The Synth structure
  * inBuffer The initial input buffer for the new player
+ * name     optional name or NULL
  * return   the new player handle or -1 on failure
  */
-int synth_add_player(Synth *s, unsigned int inBuffer);
+int synth_add_player(Synth *s,
+                     unsigned int inBuffer,
+                     const char *name);
 /*
  * Free a player.  Doesn't free any buffers and doesn't necessarily free any
  * memory.  In fact, players are kept in an internal array that only grows
@@ -666,11 +675,13 @@ int synth_player_stopped_reason(Synth *syn, unsigned int index);
  * s        the Synth structure
  * inBuffer the buffer to apply a filter to
  * size     the size of the filter (cannot be changed)
+ * name     optional name or NULL
  * return   the new filter handle or -1 on failure;
  */
 int synth_add_filter(Synth *s,
                      unsigned int inBuffer,
-                     unsigned int size);
+                     unsigned int size,
+                     const char *name);
 /*
  * Free the filter, and any of its memory, see buffer/player for memory
  * management notes.

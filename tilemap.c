@@ -314,11 +314,11 @@ int tilemap_set_target_tileset(LayerList *ll, int tileset) {
     return(0);
 }
 
-static void init_tileset(LayerList *ll, Tileset *t,
-                         SDL_Texture *tex,
-                         unsigned int tw, unsigned int th,
-                         unsigned int maxx, unsigned int maxy,
-                         const char *name) {
+static int init_tileset(LayerList *ll, Tileset *t,
+                        SDL_Texture *tex,
+                        unsigned int tw, unsigned int th,
+                        unsigned int maxx, unsigned int maxy,
+                        const char *name) {
     t->tex = tex;
     t->tw = tw;
     t->th = th;
@@ -326,15 +326,15 @@ static void init_tileset(LayerList *ll, Tileset *t,
     t->max = maxx * maxy;
     t->refs = 0;
 
-    t->name = NULL;
-    if(name != NULL) {
-        unsigned int namelen = strlen(name) + 1;
-        t->name = malloc(namelen);
-        if(t->name == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate memory for name for tileset %s.\n", name);
-        }
-        strncpy(t->name, name, namelen);
+    unsigned int namelen = strlen(name) + 1;
+    t->name = malloc(namelen);
+    if(t->name == NULL) {
+        LOG_PRINTF(ll, "Failed to allocate memory for name for tileset %s.\n", name);
+        return(-1);
     }
+    strncpy(t->name, name, namelen);
+
+    return(0);
 }
 
 static void add_tileset_ref(Tileset *ts) {
@@ -484,14 +484,18 @@ int tilemap_add_tileset(LayerList *ll,
             return(-1);
         }
         ll->tilesetsmem = 1;
-        init_tileset(ll, &(ll->tileset[0]), tex, tw, th, maxx, maxy, name);
+        if(init_tileset(ll, &(ll->tileset[0]), tex, tw, th, maxx, maxy, name) < 0) {
+            return(-1);
+        }
         return(0);
     }
 
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->tilesetsmem; i++) {
         if(ll->tileset[i].tex == NULL) {
-            init_tileset(ll, &(ll->tileset[i]), tex, tw, th, maxx, maxy, name);
+            if(init_tileset(ll, &(ll->tileset[i]), tex, tw, th, maxx, maxy, name) < 0) {
+                return(-1);
+            }
             return(i);
         }
     }
@@ -511,7 +515,9 @@ int tilemap_add_tileset(LayerList *ll,
     for(j = item; j < ll->tilesetsmem; j++) {
         ll->tileset[j].tex = NULL;
     }
-    init_tileset(ll, &(ll->tileset[item]), tex, tw, th, maxx, maxy, name);
+    if(init_tileset(ll, &(ll->tileset[item]), tex, tw, th, maxx, maxy, name) < 0) {
+        return(-1);
+    }
  
     return(item);
 }
@@ -550,6 +556,7 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index) {
         return(-1);
     }
 
+    free(ts->name);
     SDL_DestroyTexture(ts->tex);
     ts->tex = NULL;
 
@@ -574,15 +581,13 @@ static int init_tilemap(LayerList *ll, Tilemap *t,
     t->attr_colormod = NULL;
     t->refs = 0;
 
-    t->name = NULL;
-    if(name != NULL) {
-        unsigned int namelen = strlen(name) + 1;
-        t->name = malloc(namelen);
-        if(t->name == NULL) {
-            LOG_PRINTF(ll, "%s: Failed to allocate memory for name for tilemap.\n", name);
-        }
-        strncpy(t->name, name, namelen);
+    unsigned int namelen = strlen(name) + 1;
+    t->name = malloc(namelen);
+    if(t->name == NULL) {
+        LOG_PRINTF(ll, "%s: Failed to allocate memory for name for tilemap.\n", name);
+        return(-1);
     }
+    strncpy(t->name, name, namelen);
 
     return(0);
 }
@@ -691,7 +696,6 @@ void scan_tilemap_refs(LayerList *ll, int index) {
     }
 }
 
-
 int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
@@ -725,6 +729,7 @@ int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
         SDL_DestroyTexture(tm->tex);
         tm->tex = NULL;
     }
+    free(tm->name);
 
     return(0);
 }
@@ -1124,7 +1129,7 @@ int tilemap_update_tilemap(LayerList *ll,
     return(0);
 }
 
-static void init_layer(LayerList *ll,
+static int init_layer(LayerList *ll,
                        Layer *l,
                        Tilemap *tm,
                        Tileset *ts,
@@ -1145,15 +1150,15 @@ static void init_layer(LayerList *ll,
     l->blendMode = SDL_BLENDMODE_BLEND;
     l->tilemap = tilemap;
 
-    l->name = NULL;
-    if(name != NULL) {
-        unsigned int namelen = strlen(name) + 1;
-        l->name = malloc(namelen);
-        if(l->name == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate memory for name for layer %s.\n", name);
-        }
-        strncpy(l->name, name, namelen);
+    unsigned int namelen = strlen(name) + 1;
+    l->name = malloc(namelen);
+    if(l->name == NULL) {
+        LOG_PRINTF(ll, "Failed to allocate memory for name for layer %s.\n", name);
+        return(-1);
     }
+    strncpy(l->name, name, namelen);
+
+    return(0);
 }
 
 int tilemap_add_layer(LayerList *ll,
@@ -1182,7 +1187,9 @@ int tilemap_add_layer(LayerList *ll,
             return(-1);
         }
         ll->layersmem = 1;
-        init_layer(ll, &(ll->layer[0]), tm, ts, tilemap, name);
+        if(init_layer(ll, &(ll->layer[0]), tm, ts, tilemap, name) < 0) {
+            return(-1);
+        }
         add_tilemap_ref(tm);
         return(0);
     }
@@ -1190,7 +1197,9 @@ int tilemap_add_layer(LayerList *ll,
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->layersmem; i++) {
         if(ll->layer[i].tilemap == -1) {
-            init_layer(ll, &(ll->layer[i]), tm, ts, tilemap, name);
+            if(init_layer(ll, &(ll->layer[i]), tm, ts, tilemap, name) < 0) {
+                return(-1);
+            }
             add_tilemap_ref(tm);
             return(i);
         }
@@ -1211,7 +1220,9 @@ int tilemap_add_layer(LayerList *ll,
         ll->layer[j].tilemap = -1;
     }
  
-    init_layer(ll, &(ll->layer[item]), tm, ts, tilemap, name);
+    if(init_layer(ll, &(ll->layer[item]), tm, ts, tilemap, name) < 0) {
+        return(-1);
+    }
     add_tilemap_ref(tm);
 
     return(item);
@@ -1238,6 +1249,7 @@ int tilemap_free_layer(LayerList *ll, unsigned int index) {
     }
 
     free_tilemap_ref(ll, tm);
+    free(l->name);
     l->tilemap = -1;
 
     return(0);

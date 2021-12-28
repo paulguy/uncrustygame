@@ -60,10 +60,10 @@ int load_graphic(LayerList *ll,
     /* load the graphic, if needed */
     if(*tileset < 0) {
         *tileset = tilemap_tileset_from_bmp(ll,
-                                           filename,
-                                           tWidth,
-                                           tHeight,
-                                           NULL);
+                                            filename,
+                                            tWidth,
+                                            tHeight,
+                                            NULL);
         if(*tileset < 0) {
             fprintf(stderr, "Failed to load graphic.\n");
             return(-1);

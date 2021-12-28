@@ -27,22 +27,22 @@ struct AudioState_s {
 
 int create_mix_buffers(AudioState *as) {
     /* the import type is ignored when creating empty buffers. */
-    as->mixBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
+    as->mixBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments, "mixBuffer");
     if(as->mixBuffer < 0) {
         fprintf(stderr, "Failed to create mix buffer.\n");
         return(-1);
     }
-    as->leftBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
+    as->leftBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments, "leftBuffer");
     if(as->mixBuffer < 0) {
         fprintf(stderr, "Failed to create left buffer.\n");
         return(-1);
     }
-    as->rightBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments);
+    as->rightBuffer = synth_add_buffer(as->s, SYNTH_TYPE_F32, NULL, synth_get_fragment_size(as->s) * as->fragments, "rightBuffer");
     if(as->mixBuffer < 0) {
         fprintf(stderr, "Failed to create right buffer.\n");
         return(-1);
     }
-    as->mixPlayer = synth_add_player(as->s, as->mixBuffer);
+    as->mixPlayer = synth_add_player(as->s, as->mixBuffer, "mixPlayer");
     if(as->mixPlayer < 0) {
         fprintf(stderr, "Failed to create mix player.\n");
         return(-1);
@@ -296,12 +296,12 @@ int load_sound(Synth *s,
     int player;
     unsigned int rate;
 
-    *buf = synth_buffer_from_wav(s, filename, &rate);
+    *buf = synth_buffer_from_wav(s, filename, &rate, NULL);
     if(*buf < 0) {
         fprintf(stderr, "Failed to load wave.\n");
         return(-1);
     }
-    player = synth_add_player(s, *buf);
+    player = synth_add_player(s, *buf, filename);
     if(player < 0) {
         fprintf(stderr, "Failed to create wave player.\n");
         synth_free_buffer(s, *buf);

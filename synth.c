@@ -42,6 +42,8 @@ typedef struct {
 
     /* for getting both parts of an output channel buffer */
     int getPart;
+
+    char *name;
 } SynthBuffer;
 
 typedef struct {
@@ -70,6 +72,8 @@ typedef struct {
     float speed;
     unsigned int speedBuffer;
     unsigned int speedPos;
+
+    char *name;
 } SynthPlayer;
 
 typedef struct {
@@ -96,6 +100,8 @@ typedef struct {
     float vol;
     unsigned int volBuffer;
     unsigned int volPos;
+
+    char *name;
 } SynthFilter;
 
 struct Synth_s {
@@ -139,6 +145,8 @@ struct Synth_s {
     void *log_priv;
 };
 
+static const char *NONAME = "(unnamed)";
+
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format) {
     switch(format) {
         case AUDIO_U8:
@@ -175,34 +183,41 @@ SDL_AudioFormat synth_audioformat_from_type(SynthImportType type) {
     return(0);
 }
 
-int synth_buffer_from_wav(Synth *s, const char *filename, unsigned int *rate) {
+int synth_buffer_from_wav(Synth *s,
+                          const char *filename,
+                          unsigned int *rate,
+                          const char *name) {
     SDL_AudioSpec spec;
     Uint8 *audiobuf;
     Uint32 len;
     SynthImportType type;
     int sb;
 
+    if(name == NULL) {
+        name = filename;
+    }
+
     if(SDL_LoadWAV(filename, &spec, &audiobuf, &len) == NULL) {
-        LOG_PRINTF(s, "Failed to load WAV file.\n");
+        LOG_PRINTF(s, "%s: Failed to load WAV file.\n", name);
         return(-1);
     }
 
     if(spec.channels != 1) {
-        LOG_PRINTF(s, "Buffers are mono.\n");
+        LOG_PRINTF(s, "%s: Buffers are mono.\n", name);
         SDL_FreeWAV(audiobuf);
         return(-1);
     }
 
     type = synth_type_from_audioformat(spec.format);
     if(type == SYNTH_TYPE_INVALID) {
-        LOG_PRINTF(s, "Unsupported format.\n");
+        LOG_PRINTF(s, "%s: Unsupported format.\n", name);
         SDL_FreeWAV(audiobuf);
         return(-1);
     }
 
     len = len / (SDL_AUDIO_BITSIZE(spec.format) / 8);
 
-    sb = synth_add_buffer(s, type, audiobuf, len);
+    sb = synth_add_buffer(s, type, audiobuf, len, name);
     if(rate != NULL) {
         *rate = spec.freq;
     }
@@ -1163,13 +1178,14 @@ static int init_buffer(Synth *s,
                        SynthBuffer *b,
                        SynthImportType type,
                        void *data,
-                       unsigned int size) {
+                       unsigned int size,
+                       const char *name) {
     unsigned int i;
 
     b->size = size;
     b->data = malloc(size * sizeof(float));
     if(b->data == NULL) {
-        LOG_PRINTF(s, "Failed to allocate buffer data memory.\n");
+        LOG_PRINTF(s, "%s: Failed to allocate buffer data memory.\n", name);
         return(-1);
     }
     if(data != NULL) {
@@ -1198,9 +1214,16 @@ static int init_buffer(Synth *s,
     b->ref = 0;
     b->getPart = 0;
 
+    unsigned int namelen = strlen(name) + 1;
+    b->name = malloc(namelen);
+    if(b->name == NULL) {
+        LOG_PRINTF(s, "Failed to allocate memory for name for buffer %s.\n", name);
+    }
+    strncpy(b->name, name, namelen);
+
     b->idxbuf = malloc(size * sizeof(float));
     if(b->idxbuf == NULL) {
-        LOG_PRINTF(s, "Couldn't allocate index buffer.\n");
+        LOG_PRINTF(s, "%s: Couldn't allocate index buffer.\n", name);
         free(b->data);
         return(-1);
     }
@@ -1245,6 +1268,14 @@ static unsigned int get_buffer_size(Synth *s, unsigned int index) {
     return(s->buffer[index - s->channels].size);
 }
 
+static const char *get_buffer_name(Synth *s, unsigned int index) {
+    if(index < s->channels) {
+        return(s->channelbuffer[index].name);
+    }
+
+    return(s->buffer[index - s->channels].name);
+}
+
 static float *get_buffer_idxbuf(Synth *s, unsigned int index) {
     if(index < s->channels) {
         return(NULL);
@@ -1262,7 +1293,7 @@ static void add_buffer_ref(Synth *s, unsigned int index) {
 static void free_buffer_ref(Synth *s, unsigned int index) {
     if(index >= s->channels) {
         if(s->buffer[index - s->channels].ref == 0) {
-            LOG_PRINTF(s, "WARNING: Attenpt to free reference to buffer with no references.\n");
+            LOG_PRINTF(s, "%s: WARNING: Attenpt to free reference to buffer with no references.\n", s->buffer[index - s->channels].name);
             return;
         }
         s->buffer[index - s->channels].ref--;
@@ -1280,9 +1311,14 @@ static unsigned int get_buffer_ref(Synth *s, unsigned int index) {
 int synth_add_buffer(Synth *s,
                      SynthImportType type,
                      void *data,
-                     unsigned int size) {
+                     unsigned int size,
+                     const char *name) {
     unsigned int i, j;
     SynthBuffer *temp;
+
+    if(name == NULL) {
+        name = NONAME;
+    }
 
     switch(type) {
         case SYNTH_TYPE_U8:
@@ -1291,13 +1327,13 @@ int synth_add_buffer(Synth *s,
         case SYNTH_TYPE_F64:
             break;
         default:
-            LOG_PRINTF(s, "Invalid buffer type.\n");
+            LOG_PRINTF(s, "%s: Invalid buffer type.\n", name);
             return(-1);
     }
 
     /* so loop start and loop end can have valid values. */
     if(size < 2) {
-        LOG_PRINTF(s, "Buffer size too small, must be at least 2 samples long.\n");
+        LOG_PRINTF(s, "%s: Buffer size too small, must be at least 2 samples long.\n", name);
         return(-1);
     }
 
@@ -1305,12 +1341,12 @@ int synth_add_buffer(Synth *s,
     if(s->buffersmem == 0) {
         s->buffer = malloc(sizeof(SynthBuffer));
         if(s->buffer == NULL) {
-            LOG_PRINTF(s, "Failed to allocate buffers memory.\n");
+            LOG_PRINTF(s, "%s: Failed to allocate buffers memory.\n", name);
             return(-1);
         }
         s->buffersmem = 1;
 
-        if(init_buffer(s, &(s->buffer[0]), type, data, size) < 0) {
+        if(init_buffer(s, &(s->buffer[0]), type, data, size, name) < 0) {
             return(-1);
         }
 
@@ -1320,7 +1356,7 @@ int synth_add_buffer(Synth *s,
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->buffersmem; i++) {
         if(s->buffer[i].data == NULL) {
-            if(init_buffer(s, &(s->buffer[i]), type, data, size) < 0) {
+            if(init_buffer(s, &(s->buffer[i]), type, data, size, name) < 0) {
                 return(-1);
             }
 
@@ -1332,7 +1368,7 @@ int synth_add_buffer(Synth *s,
     temp = realloc(s->buffer,
                    sizeof(SynthBuffer) * s->buffersmem * 2);
     if(temp == NULL) {
-        LOG_PRINTF(s, "Failed to allocate buffers memory.\n");
+        LOG_PRINTF(s, "%s: Failed to allocate buffers memory.\n", name);
         return(-1);
     }
     s->buffer = temp;
@@ -1343,7 +1379,7 @@ int synth_add_buffer(Synth *s,
         s->buffer[j].data = NULL;
     }
 
-    if(init_buffer(s, &(s->buffer[item]), type, data, size) < 0) {
+    if(init_buffer(s, &(s->buffer[item]), type, data, size, name) < 0) {
         return(-1);
     }
 
@@ -1355,10 +1391,12 @@ int synth_free_buffer(Synth *s, unsigned int index) {
         return(-1);
     }
     if(get_buffer_ref(s, index) != 0) {
-        LOG_PRINTF(s, "Buffer %u is still referenced.\n", index);
+        LOG_PRINTF(s, "%s: Buffer still referenced.\n", get_buffer_name(s, index));
         return(-1);
     }
     free(s->buffer[index - s->channels].data);
+    free(s->buffer[index - s->channels].idxbuf);
+    free(s->buffer[index - s->channels].name);
     s->buffer[index - s->channels].data = NULL;
 
     return(0);
@@ -1464,7 +1502,7 @@ int synth_silence_buffer(Synth *s,
 
     if(start >= os ||
        start + length > os) {
-        LOG_PRINTF(s, "Bound(s) out of buffer range. %u + %u > %u\n", start, length, os);
+        LOG_PRINTF(s, "%s: Bound(s) out of buffer range. %u + %u > %u\n", get_buffer_name(s, index), start, length, os);
         return(-1);
     }
     o = &(o[start]);
@@ -1474,9 +1512,10 @@ int synth_silence_buffer(Synth *s,
     return(0);
 }
 
-static void init_player(Synth *s,
+static int init_player(Synth *s,
                         SynthPlayer *p,
-                        unsigned int inBuffer) {
+                        unsigned int inBuffer,
+                        const char *name) {
     p->inUse = 1;
     p->inBuffer = inBuffer;
     add_buffer_ref(s, inBuffer);
@@ -1503,6 +1542,16 @@ static void init_player(Synth *s,
     p->speedBuffer = inBuffer; /* same */
     add_buffer_ref(s, inBuffer);
     p->speedPos = 0;
+
+    unsigned int namelen = strlen(name) + 1;
+    p->name = malloc(namelen);
+    if(p->name == NULL) {
+        LOG_PRINTF(s, "Failed to allocate memory for name for buffer %s.\n", name);
+        return(-1);
+    }
+    strncpy(p->name, name, namelen);
+
+    return(0);
 }
 
 static SynthPlayer *get_player(Synth *s, unsigned int index) {
@@ -1515,9 +1564,15 @@ static SynthPlayer *get_player(Synth *s, unsigned int index) {
     return(&(s->player[index]));
 }
 
-int synth_add_player(Synth *s, unsigned int inBuffer) {
+int synth_add_player(Synth *s,
+                     unsigned int inBuffer,
+                     const char *name) {
     unsigned int i, j;
     SynthPlayer *temp;
+
+    if(name == NULL) {
+        name = NONAME;
+    }
 
     if(!is_valid_buffer(s, inBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
@@ -1527,19 +1582,23 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
     if(s->playersmem == 0) {
         s->player = malloc(sizeof(SynthPlayer));
         if(s->player == NULL) {
-            LOG_PRINTF(s, "Failed to allocate buffers memory.\n");
+            LOG_PRINTF(s, "%s: Failed to allocate buffers memory.\n", name);
             return(-1);
         }
         s->playersmem = 1;
 
-        init_player(s, &(s->player[0]), inBuffer);
+       if(init_player(s, &(s->player[0]), inBuffer, name) < 0) {
+           return(-1);
+       }
         return(0);
     }
 
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->playersmem; i++) {
         if(s->player[i].inUse == 0) {
-            init_player(s, &(s->player[i]), inBuffer);
+            if(init_player(s, &(s->player[i]), inBuffer, name) < 0) {
+                return(-1);
+            }
             return(i);
         }
     }
@@ -1548,7 +1607,7 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
     temp = realloc(s->player,
                    sizeof(SynthPlayer) * s->playersmem * 2);
     if(temp == NULL) {
-        LOG_PRINTF(s, "Failed to allocate buffers memory.\n");
+        LOG_PRINTF(s, "%s: Failed to allocate buffers memory.\n", name);
         return(-1);
     }
     s->player = temp;
@@ -1559,7 +1618,9 @@ int synth_add_player(Synth *s, unsigned int inBuffer) {
         s->player[j].inUse = 0;
     }
 
-    init_player(s, &(s->player[item]), inBuffer);
+    if(init_player(s, &(s->player[item]), inBuffer, name) < 0) {
+        return(-1);
+    }
     return(item);
 }
 
@@ -1573,6 +1634,7 @@ int synth_free_player(Synth *s, unsigned int index) {
     free_buffer_ref(s, p->volBuffer);
     free_buffer_ref(s, p->phaseBuffer);
     free_buffer_ref(s, p->speedBuffer);
+    free(p->name);
     p->inUse = 0;
 
     return(0);
@@ -1612,7 +1674,7 @@ int synth_set_player_input_buffer_pos(Synth *s,
         inPos = (float)bufsize + inPos;
     }
     if(inPos < 0.0 || (unsigned int)inPos >= bufsize) {
-        LOG_PRINTF(s, "Input position out of buffer bounds.\n");
+        LOG_PRINTF(s, "%s: Input position out of buffer bounds.\n", p->name);
         return(-1);
     }
     p->inPos = inPos;
@@ -1657,7 +1719,7 @@ int synth_set_player_output_buffer_pos(Synth *s,
      * an issue doing this since a full buffer won't be overfilled anyway.
      * Normal buffers can't have a bufsize of 0. */
     if(outPos < 0 || ((unsigned int)outPos >= bufsize && bufsize > 0 && outPos > 0)) {
-        LOG_PRINTF(s, "Player %u output position past end of buffer (%u > %u).\n", index, outPos, bufsize);
+        LOG_PRINTF(s, "%s: Player %u output position past end of buffer (%u > %u).\n", p->name, index, outPos, bufsize);
         return(-1);
     }
     p->outPos = outPos;
@@ -1678,7 +1740,7 @@ int synth_set_player_output_mode(Synth *s,
         case SYNTH_OUTPUT_ADD:
             break;
         default:
-            LOG_PRINTF(s, "Invalid player output mode.\n");
+            LOG_PRINTF(s, "%s: Invalid player output mode.\n", p->name);
             return(-1);
     }
     p->outOp = outOp;
@@ -1699,7 +1761,7 @@ int synth_set_player_volume_mode(Synth *s,
         case SYNTH_AUTO_SOURCE:
             break;
         default:
-            LOG_PRINTF(s, "Invalid player volume mode.\n");
+            LOG_PRINTF(s, "%s: Invalid player volume mode.\n", p->name);
             return(-1);
     }
     p->volMode = volMode;
@@ -1753,7 +1815,7 @@ int synth_set_player_mode(Synth *s,
         case SYNTH_MODE_PHASE_SOURCE:
             break;
         default:
-            LOG_PRINTF(s, "Invalid player output mode.\n");
+            LOG_PRINTF(s, "%s: Invalid player output mode.\n", p->name);
             return(-1);
     }
     p->mode = mode;
@@ -1773,11 +1835,11 @@ int synth_set_player_loop_start(Synth *s,
     }
     if(loopStart < 0 ||
        loopStart >= (int)get_buffer_size(s, p->inBuffer)) {
-        LOG_PRINTF(s, "Player loop start out of buffer range.\n");
+        LOG_PRINTF(s, "%s: Player loop start out of buffer range.\n", p->name);
         return(-1);
     }
     if((unsigned int)loopStart > p->loopEnd) {
-        LOG_PRINTF(s, "Loop start must be before loop end.\n");
+        LOG_PRINTF(s, "%s: Loop start must be before loop end.\n", p->name);
         return(-1);
     }
     p->loopStart = loopStart;
@@ -1797,11 +1859,11 @@ int synth_set_player_loop_end(Synth *s,
     }
     if(loopEnd < 0 ||
        loopEnd >= (int)get_buffer_size(s, p->inBuffer)) {
-        LOG_PRINTF(s, "Player loop end out of buffer range.\n");
+        LOG_PRINTF(s, "%s: Player loop end out of buffer range.\n", p->name);
         return(-1);
     }
     if((unsigned int)loopEnd < p->loopStart) {
-        LOG_PRINTF(s, "Loop end must be after loop start.\n");
+        LOG_PRINTF(s, "%s: Loop end must be after loop start.\n", p->name);
         return(-1);
     }
     p->loopEnd = loopEnd;
@@ -1842,7 +1904,7 @@ int synth_set_player_speed_mode(Synth *s,
         case SYNTH_AUTO_SOURCE:
             break;
         default:
-            LOG_PRINTF(s, "Invalid player speed mode.\n");
+            LOG_PRINTF(s, "%s: Invalid player speed mode.\n", p->name);
             return(-1);
     }
     p->speedMode = speedMode;
@@ -2139,10 +2201,11 @@ int synth_player_stopped_reason(Synth *syn,
 static int init_filter(Synth *s,
                        SynthFilter *f,
                        unsigned int filterBuffer,
-                       unsigned int size) {
+                       unsigned int size,
+                       const char *name) {
     f->accum = malloc(sizeof(float) * size);
     if(f->accum == NULL) {
-        LOG_PRINTF(s, "Failed to allocate filter accumulation buffer.\n");
+        LOG_PRINTF(s, "%s: Failed to allocate filter accumulation buffer.\n", name);
         return(-1);
     }
     f->size = size;
@@ -2168,6 +2231,14 @@ static int init_filter(Synth *s,
     add_buffer_ref(s, filterBuffer);
     f->volPos = 0;
 
+    unsigned int namelen = strlen(name) + 1;
+    f->name = malloc(namelen);
+    if(f->name == NULL) {
+        LOG_PRINTF(s, "Failed to allocate memory for name for buffer %s.\n", name);
+        return(-1);
+    }
+    strncpy(f->name, name, namelen);
+
     return(0);
 }
 
@@ -2183,9 +2254,14 @@ static SynthFilter *get_filter(Synth *s, unsigned int index) {
 
 int synth_add_filter(Synth *s,
                      unsigned int filterBuffer,
-                     unsigned int size) {
+                     unsigned int size,
+                     const char *name) {
     unsigned int i, j;
     SynthFilter *temp;
+
+    if(name == NULL) {
+        name = NONAME;
+    }
 
     if(!is_valid_buffer(s, filterBuffer, BUFFER_INPUT_ONLY)) {
         return(-1);
@@ -2196,7 +2272,7 @@ int synth_add_filter(Synth *s,
     }
 
     if(get_buffer_size(s, filterBuffer) < size) {
-        LOG_PRINTF(s, "Input buffer isn't large enough for filter size.");
+        LOG_PRINTF(s, "%s: Input buffer isn't large enough for filter size.", name);
         return(-1);
     }
 
@@ -2204,12 +2280,12 @@ int synth_add_filter(Synth *s,
     if(s->filtersmem == 0) {
         s->filter = malloc(sizeof(SynthFilter));
         if(s->filter == NULL) {
-            LOG_PRINTF(s, "Failed to allocate filters memory.\n");
+            LOG_PRINTF(s, "%s: Failed to allocate filters memory.\n", name);
             return(-1);
         }
         s->filtersmem = 1;
 
-        if(init_filter(s, &(s->filter[0]), filterBuffer, size) < 0) {
+        if(init_filter(s, &(s->filter[0]), filterBuffer, size, name) < 0) {
             return(-1);
         }
         synth_reset_filter(s, 0);
@@ -2219,7 +2295,7 @@ int synth_add_filter(Synth *s,
     /* find first NULL buffer and assign it */
     for(i = 0; i < s->filtersmem; i++) {
         if(s->filter[i].accum == NULL) {
-            if(init_filter(s, &(s->filter[i]), filterBuffer, size) < 0) {
+            if(init_filter(s, &(s->filter[i]), filterBuffer, size, name) < 0) {
                 return(-1);
             }
             synth_reset_filter(s, i);
@@ -2231,7 +2307,7 @@ int synth_add_filter(Synth *s,
     temp = realloc(s->filter,
                    sizeof(SynthFilter) * s->filtersmem * 2);
     if(temp == NULL) {
-        LOG_PRINTF(s, "Failed to allocate filters memory.\n");
+        LOG_PRINTF(s, "%s: Failed to allocate filters memory.\n", name);
         return(-1);
     }
     s->filter = temp;
@@ -2242,7 +2318,7 @@ int synth_add_filter(Synth *s,
         s->filter[j].accum = NULL;
     }
 
-    if(init_filter(s, &(s->filter[item]), filterBuffer, size) < 0) {
+    if(init_filter(s, &(s->filter[item]), filterBuffer, size, name) < 0) {
         return(-1);
     }
     synth_reset_filter(s, item);
@@ -2260,6 +2336,7 @@ int synth_free_filter(Synth *s, unsigned int index) {
     free_buffer_ref(s, f->sliceBuffer);
     free_buffer_ref(s, f->outBuffer);
     free_buffer_ref(s, f->volBuffer);
+    free(f->name);
     free(f->accum);
     f->accum = NULL;
 
@@ -2309,7 +2386,7 @@ int synth_set_filter_input_buffer_pos(Synth *s,
         inPos = bufsize + inPos;
     }
     if(inPos < 0 || (unsigned int)inPos >= bufsize) {
-        LOG_PRINTF(s, "Input position out of buffer bounds.\n");
+        LOG_PRINTF(s, "%s: Input position out of buffer bounds.\n", f->name);
         return(-1);
     }
     f->inPos = inPos;
@@ -2352,7 +2429,7 @@ int synth_set_filter_buffer_start(Synth *s,
     }
     if(startPos < 0 ||
        (unsigned int)startPos + (f->size * f->slices) > bufsize) {
-        LOG_PRINTF(s, "Buffer start would make slices exceed buffer size.\n");
+        LOG_PRINTF(s, "%s: Buffer start would make slices exceed buffer size.\n", f->name);
         return(-1);
     }
     f->startPos = startPos;
@@ -2370,7 +2447,7 @@ int synth_set_filter_slices(Synth *s,
     unsigned int bufsize = get_buffer_size(s, f->filterBuffer);
     unsigned int neededsize = f->startPos + (f->size * slices);
     if(neededsize > bufsize) {
-        LOG_PRINTF(s, "Slices count would exceed buffer size (%u + (%u * %u) = %u > %u.\n",
+        LOG_PRINTF(s, "%s: Slices count would exceed buffer size (%u + (%u * %u) = %u > %u.\n", f->name,
                    f->startPos, f->size, slices, neededsize, bufsize);
         return(-1);
     }
@@ -2393,7 +2470,7 @@ int synth_set_filter_mode(Synth *s,
         case SYNTH_AUTO_SOURCE:
             break;
         default:
-            LOG_PRINTF(s, "Invalid filter mode.\n");
+            LOG_PRINTF(s, "%s: Invalid filter mode.\n", f->name);
             return(-1);
     }
     f->mode = mode;
@@ -2412,7 +2489,7 @@ int synth_set_filter_slice(Synth *s,
         slice = f->slices + slice;
     }
     if(slice < 0 || (unsigned int)slice >= f->slices) {
-        LOG_PRINTF(s, "Slice is greater than configured slices.\n");
+        LOG_PRINTF(s, "%s: Slice is greater than configured slices.\n", f->name);
         return(-1);
     }
     f->slice = slice;
@@ -2473,7 +2550,7 @@ int synth_set_filter_output_buffer_pos(Synth *s,
     }
     /* see note in synth_set_player_output_buffer_pos */
     if(outPos < 0 || ((unsigned int)outPos >= bufsize && bufsize > 0 && outPos > 0)) {
-        LOG_PRINTF(s, "Filter %u output position past end of buffer (%u > %u).\n", index, outPos, bufsize);
+        LOG_PRINTF(s, "%s: Filter %u output position past end of buffer (%u > %u).\n", f->name, index, outPos, bufsize);
         return(-1);
     }
     f->outPos = outPos;
@@ -2494,7 +2571,7 @@ int synth_set_filter_output_mode(Synth *s,
         case SYNTH_OUTPUT_ADD:
             break;
         default:
-            LOG_PRINTF(s, "Invalid filter output mode.\n");
+            LOG_PRINTF(s, "%s: Invalid filter output mode.\n", f->name);
             return(-1);
     }
     f->outOp = outOp;
@@ -2515,7 +2592,7 @@ int synth_set_filter_volume_mode(Synth *s,
         case SYNTH_AUTO_SOURCE:
             break;
         default:
-            LOG_PRINTF(s, "Invalid volume mode.\n");
+            LOG_PRINTF(s, "%s: Invalid volume mode.\n", f->name);
             return(-1);
     }
     f->volMode = volMode;
