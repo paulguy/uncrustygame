@@ -332,28 +332,28 @@ def load_audio(aud, harmonics):
     rate = aud.rate
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
                           array.array('f', create_sqrt_slope(0.0, 1.0, rate)),
-                          rate)
+                          rate, "EnvSlope")
     benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
                                array.array('f', create_sqrt_slope(1.0, 0.5, rate)),
-                               rate)
+                               rate, "BendDownSlope")
     bendupslope = aud.buffer(cg.SYNTH_TYPE_F32,
                              array.array('f', create_sqrt_slope(1.0, 2.0, rate)),
-                             rate)
+                             rate, "BendUpSlope")
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
                        array.array('f', create_random_noise(-1.0, 1.0, rate)),
-                       rate)
+                       rate, "Noise")
 
     print("Generating filters...")
     filt = make_filter(rate, lowpass=True)
-    lpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
+    lpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt), "Lowpass Filters")
     filt = make_filter(rate, lowpass=False)
-    hpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt))
+    hpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt), "Highpass Filters")
 
     wave = WaveGen(rate)
-    sine = aud.buffer(cg.SYNTH_TYPE_F32, wave.sine(440), rate)
-    square = aud.buffer(cg.SYNTH_TYPE_F32, wave.square(harmonics, 440), rate)
-    triangle = aud.buffer(cg.SYNTH_TYPE_F32, wave.triangle(harmonics, 440), rate)
-    saw = aud.buffer(cg.SYNTH_TYPE_F32, wave.sawtooth(harmonics, 440), rate)
+    sine = aud.buffer(cg.SYNTH_TYPE_F32, wave.sine(440), rate, "Sine")
+    square = aud.buffer(cg.SYNTH_TYPE_F32, wave.square(harmonics, 440), rate, "Square")
+    triangle = aud.buffer(cg.SYNTH_TYPE_F32, wave.triangle(harmonics, 440), rate, "Triangle")
+    saw = aud.buffer(cg.SYNTH_TYPE_F32, wave.sawtooth(harmonics, 440), rate, "Saw")
 
     return envslope, benddownslope, bendupslope, noise, lpfilt, hpfilt, sine, square, triangle, saw
 
@@ -380,10 +380,10 @@ def do_main(window, renderer, pixfmt):
     if ll.renderer != renderer:
         print("Got different renderer back from layerlist")
 
-    ts1 = cg.Tileset(ll, 32, 32, sdl_blue, 16, 16)
-    ts2 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8)
+    ts1 = cg.Tileset(ll, 32, 32, sdl_blue, 16, 16, "Blue")
+    ts2 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8, None)
     surface = SDL_CreateRGBSurfaceWithFormat(0, 64, 64, 32, pixfmt)
-    ts3 = cg.Tileset(ll, surface, 64, 64)
+    ts3 = cg.Tileset(ll, surface, 64, 64, "Square")
     SDL_FreeSurface(surface)
 
     try:
@@ -409,8 +409,8 @@ def do_main(window, renderer, pixfmt):
     except TypeError:
         pass
 
-    tm1 = cg.Tilemap(ll, ts1, 4, 4)
-    tm1.tileset(ts2)
+    tm1 = cg.Tilemap(ll, ts1, 4, 4, "Test 2")
+    tm1.tileset(ts2, "Test 2")
     SDL_RenderPresent(renderer)
 
     del tm1
@@ -418,22 +418,22 @@ def do_main(window, renderer, pixfmt):
     del ts2
     del ts1
 
-    ts1 = ll.Tileset("cdemo/font.bmp", 8, 8)
-    tm1 = ll.Tilemap(ts1, 8, 8)
+    ts1 = ll.tileset("cdemo/font.bmp", 8, 8, None)
+    tm1 = ll.tilemap(ts1, 8, 8, "DVD Video")
     tm1.map(2, 2, 5, 5, 2, array.array('u', "oediV DVD "))
     tm1.attr_flags(2, 2, 0, 5, 2, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
     tm1.attr_colormod(2, 2, 4, 5, 2, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red)))
     tm1.update(0, 0, 8, 8)
-    l1 = cg.Layer(ll, tm1);
+    l1 = cg.Layer(ll, tm1, "DVD Video");
     l1.window(40, 16)
     l1.scroll_pos(16, 16)
     l1.rotation_center(20, 8)
     l1.rotation(180)
     l1.colormod(transparent_rg)
     l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
-    ts2 = ll.Tileset(64, 64, sdl_blue, 64, 64)
-    tm2 = ts2.Tilemap(1, 1)
-    l2 = tm2.Layer()
+    ts2 = ll.tileset(64, 64, sdl_blue, 64, 64, "Blue Box")
+    tm2 = ts2.tilemap(1, 1, "Blue Box")
+    l2 = tm2.layer("Blue Box")
     l2.scale(4.0, 4.0)
 
     random.seed(None)

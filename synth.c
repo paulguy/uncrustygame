@@ -146,6 +146,7 @@ struct Synth_s {
 };
 
 static const char *NONAME = "(unnamed)";
+static const char *CHANNEL_PREFIX = "Channel";
 
 SynthImportType synth_type_from_audioformat(SDL_AudioFormat format) {
     switch(format) {
@@ -227,6 +228,9 @@ int synth_buffer_from_wav(Synth *s,
 }
 
 #define PRINT_BUFFER_STATS(BUF) \
+    if((BUF).data != NULL) { \
+        LOG_PRINTF(s, " Name: %s\n", (BUF).name); \
+    } \
     LOG_PRINTF(s, " Size: %u\n", (BUF).size); \
     LOG_PRINTF(s, " Refcount: %u\n", (BUF).ref);
 
@@ -259,6 +263,7 @@ int synth_buffer_from_wav(Synth *s,
     LOG_PRINTF(s, " In Use: "); \
     if((PLR).inUse) { \
         LOG_PRINTF(s, "Yes\n"); \
+        LOG_PRINTF(s, "Name: %s\n", (PLR).name); \
     } else { \
         LOG_PRINTF(s, "No\n"); \
     } \
@@ -297,6 +302,9 @@ int synth_buffer_from_wav(Synth *s,
     LOG_PRINTF(s, " Speed Source Buffer Pos: %u\n", (PLR).speedPos);
 
 #define PRINT_FILTER_STATS(FLT) \
+    if((FLT).accum != NULL) { \
+        LOG_PRINTF(s, " Name: %s\n", (FLT).name); \
+    } \
     LOG_PRINTF(s, " Size: %u\n", (FLT).size); \
     LOG_PRINTF(s, " Accumulator Position: %u\n", (FLT).accumPos); \
     LOG_PRINTF(s, " Input Buffer: %u\n", (FLT).inBuffer); \
@@ -1111,6 +1119,7 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         if(s->fragments != fragments) {
             for(i = 0; (unsigned int)i < s->channels; i++) {
                 free(s->channelbuffer[i].data);
+                free(s->channelbuffer[i].name);
             }
             free(s->channelbuffer);
             s->channelbuffer = NULL;
@@ -1125,10 +1134,11 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         s->channelbuffer = malloc(sizeof(SynthBuffer) * s->channels);
         if(s->channelbuffer == NULL) {
             LOG_PRINTF(s, "Failed to allocate channel buffers.\n");
-            return(-1);
+            goto error;
         }
         for(i = 0; (unsigned int)i < s->channels; i++) {
             s->channelbuffer[i].data = NULL;
+            s->channelbuffer[i].name = NULL;
         }
     }
 
@@ -1143,6 +1153,13 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
             goto error;
         }
         memset(s->channelbuffer[i].data, 0, sizeof(float) * s->buffersize);
+
+        s->channelbuffer[i].name = malloc(strlen(CHANNEL_PREFIX) + 4 + 1);
+        if(s->channelbuffer[i].name == NULL) {
+            LOG_PRINTF(s, "Failed to allocate memory for channel name.\n");
+            goto error;
+        }
+        snprintf(s->channelbuffer[i].name, strlen(CHANNEL_PREFIX) + 4 + 1, "%s%04u", CHANNEL_PREFIX, i);
     }
 
     if(s->outbuf != NULL) {
@@ -1164,6 +1181,9 @@ error:
     for(i = 0; i < (int)s->channels; i++) {
         if(s->channelbuffer[i].data != NULL) {
             free(s->channelbuffer[i].data);
+        }
+        if(s->channelbuffer[i].name != NULL) {
+            free(s->channelbuffer[i].name);
         }
     }
     free(s->channelbuffer);

@@ -801,17 +801,19 @@ class AudioSequencer():
         newbuffer = [[None, rate, b, 0] for b in channels]
         newbuffer.extend(self._buffer)
         self._buffer = newbuffer
-        for buffer in self._buffer:
+        for buffer in enumerate(self._buffer):
+            num = buffer[0]
+            buffer = buffer[1]
             if buffer[0] == None:
                 # nothing to do for output buffers
                 pass
             elif isinstance(buffer[0], int):
                 # silent buffer
                 length = int(buffer[0] * self._samplesms)
-                buffer[2] = s.buffer(cg.SYNTH_TYPE_F32, None, length)
+                buffer[2] = s.buffer(cg.SYNTH_TYPE_F32, None, length, "silence {}".format(num))
             elif isinstance(buffer[0], str):
                 # filename
-                b = s.buffer(buffer[0])
+                b = s.buffer(buffer[0], None)
                 buffer[2] = b
             elif isinstance(buffer[0], cg.Buffer):
                 # external buffer
@@ -840,7 +842,7 @@ class AudioSequencer():
                     inbuf -= self._seqChannels
                     inbuf += self._channels
                     b = self._buffer[inbuf][2]
-                    player = [b.player(), 0, None, None, None, None, None, None, None, None, 0]
+                    player = [b.player("Player {}".format(channel[0])), 0, None, None, None, None, None, None, None, None, 0]
                     self._update_player(player, initial[channel[0]])
                     player[1] = 0
                     self._localChannels.append(player)
@@ -849,7 +851,7 @@ class AudioSequencer():
                     filterbuf -= self._seqChannels
                     filterbuf += self._channels
                     b = self._buffer[filterbuf][2]
-                    flt = [b.filter(initial[channel[0]][20]), 0, None, None, None, None, None, None, 0, 0]
+                    flt = [b.filter(initial[channel[0]][20], "Filter {}".format(channel[0])), 0, None, None, None, None, None, None, 0, 0]
                     self._update_filter(flt, initial[channel[0]])
                     flt[1] = 0
                     self._localChannels.append(flt)
@@ -1179,8 +1181,8 @@ class AudioSystem():
     def channels(self):
         return self._s.channels()
 
-    def buffer(self, audioType, data, size):
-        return self._s.buffer(audioType, data, size)
+    def buffer(self, audioType, data, size, name):
+        return self._s.buffer(audioType, data, size, name)
 
     def _inc_fragments(self):
         self._s.enabled(False)

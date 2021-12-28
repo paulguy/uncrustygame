@@ -376,12 +376,12 @@ static PyObject *LayerList_LL_Tileset(LayerListObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(nargs == 3) {
-        arglist = PyTuple_Pack(4, self, args[0], args[1], args[2]);
-    } else if(nargs == 5) {
-        arglist = PyTuple_Pack(6, self, args[0], args[1], args[2], args[3], args[4]);
+    if(nargs == 4) {
+        arglist = PyTuple_Pack(5, self, args[0], args[1], args[2], args[3]);
+    } else if(nargs == 6) {
+        arglist = PyTuple_Pack(7, self, args[0], args[1], args[2], args[3], args[4], args[5]);
     } else {
-        PyErr_SetString(PyExc_TypeError, "this function needs 3 or 5 arguments");
+        PyErr_SetString(PyExc_TypeError, "this function needs 4 or 6 arguments");
         return(NULL);
     }
 
@@ -411,12 +411,12 @@ static PyObject *LayerList_LL_Tilemap(LayerListObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(nargs < 3) {
-        PyErr_SetString(PyExc_TypeError, "this function needs 3 arguments");
+    if(nargs < 4) {
+        PyErr_SetString(PyExc_TypeError, "this function needs 4 arguments");
         return(NULL);
     }
 
-    arglist = PyTuple_Pack(4, self, args[0], args[1], args[2]);
+    arglist = PyTuple_Pack(5, self, args[0], args[1], args[2], args[3]);
     if(arglist == NULL) {
         return(NULL);
     }
@@ -441,12 +441,12 @@ static PyMethodDef LayerList_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the tileset to render to or the default render target if less than 0."},
     {
-        "Tileset",
+        "tileset",
         (PyCMethod) LayerList_LL_Tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Tileset from this LayerList."},
     {
-        "Tilemap",
+        "tilemap",
         (PyCMethod) LayerList_LL_Tilemap,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Tilemap from this LayerList."},
@@ -513,6 +513,8 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     const char *filename;
     PyObject *py_surface = NULL;
     SDL_Surface *surface = NULL;
+    PyObject *name = NULL;
+    const char *cname;
     PyObject *etype, *evalue, *etraceback;
 
     if(self->ll != NULL) {
@@ -525,8 +527,8 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     /* first try to see if a blank tileset is requested, as it has the most
      * number of arguments and would definitely fail if the wrong amount of
      * arguments was provided */
-    if(!PyArg_ParseTuple(args, "OIIIII",
-                         &(self->ll), &w, &h, &color, &tw, &th)) {
+    if(!PyArg_ParseTuple(args, "OIIIIIO",
+                         &(self->ll), &w, &h, &color, &tw, &th, &name)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         /* don't care too much to inspect what went wrong, just try something
          * else anyway */
@@ -535,12 +537,23 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
         Py_XDECREF(etraceback);
     } else {
         Py_XINCREF(self->ll);
+        Py_XINCREF(name);
         if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
             PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
             goto error;
         }
 
-        self->tileset = tilemap_blank_tileset(self->ll->ll, w, h, color, tw, th);
+        if(name == Py_None) {
+            cname = NULL;
+        } else {
+            cname = PyUnicode_AsUTF8(name);
+            if(cname == NULL) {
+                goto error;
+            }
+        }
+
+        self->tileset = tilemap_blank_tileset(self->ll->ll, w, h, color, tw, th, cname);
+        Py_CLEAR(name);
         if(self->tileset < 0) {
             PyErr_SetString(state->CrustyException, "tilemap_blank_tileset failed");
             goto error;
@@ -550,22 +563,34 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     }
 
     /* now check if a string is provided, and if so use it as a filename */
-    if(!PyArg_ParseTuple(args, "OsII",
-                         &(self->ll), &filename, &tw, &th)) {
+    if(!PyArg_ParseTuple(args, "OsIIO",
+                         &(self->ll), &filename, &tw, &th, &name)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
         Py_XDECREF(etraceback);
     } else {
         Py_XINCREF(self->ll);
+        Py_XINCREF(name);
         if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
             PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
             goto error;
         }
 
+        if(name == Py_None) {
+            cname = NULL;
+        } else {
+            cname = PyUnicode_AsUTF8(name);
+            if(cname == NULL) {
+                goto error;
+            }
+        }
+
         self->tileset = tilemap_tileset_from_bmp(self->ll->ll,
                                                  filename,
-                                                 tw, th);
+                                                 tw, th,
+                                                 cname);
+        Py_CLEAR(name);
         if(self->tileset < 0) {
             PyErr_SetString(state->CrustyException, "tilemap_tileset_from_bmp failed");
             goto error;
@@ -578,8 +603,8 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
      * hopes SDL_Surface can't be made in to a string, and the first one would
      * succeed, where this one can't be first because it'd catch any object
      * then fail anyway */
-    if(!PyArg_ParseTuple(args, "OOII",
-                         &(self->ll), &py_surface, &tw, &th)) {
+    if(!PyArg_ParseTuple(args, "OOIIO",
+                         &(self->ll), &py_surface, &tw, &th, &name)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
@@ -587,6 +612,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     } else {
         Py_XINCREF(self->ll);
         Py_XINCREF(py_surface);
+        Py_XINCREF(name);
         if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
             PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
             goto error;
@@ -601,7 +627,17 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
             goto error;
         }
 
-        self->tileset = tilemap_add_tileset(self->ll->ll, surface, tw, th);
+        if(name == Py_None) {
+            cname = NULL;
+        } else {
+            cname = PyUnicode_AsUTF8(name);
+            if(cname == NULL) {
+                goto error;
+            }
+        }
+
+        self->tileset = tilemap_add_tileset(self->ll->ll, surface, tw, th, cname);
+        Py_CLEAR(name);
         if(self->tileset < 0) {
             PyErr_SetString(state->CrustyException, "tilemap_add_tileset failed");
             goto error;
@@ -615,6 +651,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     PyErr_SetString(PyExc_TypeError, "invalid arguments for tileset creation");
 
 error:
+    Py_XDECREF(name);
     Py_XDECREF(py_surface);
     Py_CLEAR(self->ll);
     return(-1);
@@ -628,7 +665,7 @@ static void Tileset_dealloc(TilesetObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
-static PyObject *LayerList_TS_Tilemap(TilesetObject *self,
+static PyObject *LayerList_TS_tilemap(TilesetObject *self,
                                       PyTypeObject *defining_class,
                                       PyObject *const *args,
                                       Py_ssize_t nargs,
@@ -643,12 +680,12 @@ static PyObject *LayerList_TS_Tilemap(TilesetObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(nargs < 2) {
-        PyErr_SetString(PyExc_TypeError, "this function needs 2 arguments");
+    if(nargs < 3) {
+        PyErr_SetString(PyExc_TypeError, "this function needs 3 arguments");
         return(NULL);
     }
 
-    arglist = PyTuple_Pack(4, self->ll, self, args[0], args[1]);
+    arglist = PyTuple_Pack(5, self->ll, self, args[0], args[1], args[2]);
     if(arglist == NULL) {
         return(NULL);
     }
@@ -663,8 +700,8 @@ static PyObject *LayerList_TS_Tilemap(TilesetObject *self,
 
 static PyMethodDef Tileset_methods[] = {
     {
-        "Tilemap",
-        (PyCMethod) LayerList_TS_Tilemap,
+        "tilemap",
+        (PyCMethod) LayerList_TS_tilemap,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Tilemap from this Tileset."},
     {NULL}
@@ -703,6 +740,8 @@ static PyObject *Tilemap_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
 static int Tilemap_init(TilemapObject *self, PyObject *args, PyObject *kwds) {
     unsigned int w, h;
+    PyObject *name = NULL;
+    const char *cname;
 
     if(self->ll != NULL) {
         PyErr_SetString(PyExc_TypeError, "Tilemap already initialized");
@@ -711,11 +750,12 @@ static int Tilemap_init(TilemapObject *self, PyObject *args, PyObject *kwds) {
 
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OOII", &(self->ll), &(self->ts), &w, &h)) {
+    if(!PyArg_ParseTuple(args, "OOIIO", &(self->ll), &(self->ts), &w, &h, &name)) {
         return(-1);
     }
     Py_XINCREF(self->ll);
     Py_XINCREF(self->ts);
+    Py_XINCREF(name);
     if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
         PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
         goto error;
@@ -725,7 +765,17 @@ static int Tilemap_init(TilemapObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    self->tilemap = tilemap_add_tilemap(self->ll->ll, self->ts->tileset, w, h);
+    if(name == Py_None) {
+        cname = NULL;
+    } else {
+        cname = PyUnicode_AsUTF8(name);
+        if(cname == NULL) {
+            goto error;
+        }
+    }
+
+    self->tilemap = tilemap_add_tilemap(self->ll->ll, self->ts->tileset, w, h, cname);
+    Py_CLEAR(name);
     if(self->tilemap < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_add_tilemap failed");
         goto error;
@@ -734,6 +784,7 @@ static int Tilemap_init(TilemapObject *self, PyObject *args, PyObject *kwds) {
     return(0);
 
 error:
+    Py_XDECREF(name);
     Py_CLEAR(self->ts);
     Py_CLEAR(self->ll);
     return(-1);
@@ -1002,7 +1053,7 @@ static PyObject *Tilemap_update(TilemapObject *self,
     Py_RETURN_NONE;
 }
 
-static PyObject *LayerList_TM_Layer(TilemapObject *self,
+static PyObject *LayerList_TM_layer(TilemapObject *self,
                                     PyTypeObject *defining_class,
                                     PyObject *const *args,
                                     Py_ssize_t nargs,
@@ -1017,7 +1068,12 @@ static PyObject *LayerList_TM_Layer(TilemapObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    arglist = PyTuple_Pack(2, self->ll, self);
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+
+    arglist = PyTuple_Pack(3, self->ll, self, args[0]);
     if(arglist == NULL) {
         return(NULL);
     }
@@ -1057,8 +1113,8 @@ static PyMethodDef Tilemap_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Redraw a region of the tilemap."},
     {
-        "Layer",
-        (PyCMethod) LayerList_TM_Layer,
+        "layer",
+        (PyCMethod) LayerList_TM_layer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Layer from this Tilemap."},
     {NULL}
@@ -1096,6 +1152,9 @@ static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
+    PyObject *name = NULL;
+    const char *cname;
+
     if(self->ll != NULL) {
         PyErr_SetString(PyExc_TypeError, "Layer already initialized");
         return(-1);
@@ -1103,11 +1162,12 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
 
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OO", &(self->ll), &(self->tm))) {
+    if(!PyArg_ParseTuple(args, "OOO", &(self->ll), &(self->tm), &name)) {
         return(-1);
     }
     Py_XINCREF(self->ll);
     Py_XINCREF(self->tm);
+    Py_XINCREF(name);
     if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
         PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
         goto error;
@@ -1117,7 +1177,17 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    self->layer = tilemap_add_layer(self->ll->ll, self->tm->tilemap);
+    if(name == Py_None) {
+        cname = NULL;
+    } else {
+        cname = PyUnicode_AsUTF8(name);
+        if(cname == NULL) {
+            goto error;
+        }
+    }
+
+    self->layer = tilemap_add_layer(self->ll->ll, self->tm->tilemap, cname);
+    Py_CLEAR(name);
     if(self->layer < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_add_layer failed");
         goto error;
@@ -1126,6 +1196,7 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
     return(0);
 
 error:
+    Py_XDECREF(name);
     Py_CLEAR(self->tm);
     Py_CLEAR(self->ll);
     return(-1);
@@ -1607,7 +1678,7 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
         self->outputBuffers[i] = NULL;
     }
     for(i = 0; i < self->channels; i++) {
-        arglist = Py_BuildValue("OiII", self, SYNTH_TYPE_F32, i, 0);
+        arglist = Py_BuildValue("OiIIO", self, SYNTH_TYPE_F32, i, 0, Py_None);
         if(arglist == NULL) {
             goto error;
         }
@@ -1961,12 +2032,12 @@ static PyObject *Synth_buffer(SynthObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(nargs == 1) {
-        arglist = PyTuple_Pack(2, self, args[0]);
-    } else if(nargs == 3) {
-        arglist = PyTuple_Pack(4, self, args[0], args[1], args[2]);
+    if(nargs == 2) {
+        arglist = PyTuple_Pack(3, self, args[0], args[1]);
+    } else if(nargs == 4) {
+        arglist = PyTuple_Pack(5, self, args[0], args[1], args[2], args[3]);
     } else {
-        PyErr_SetString(PyExc_TypeError, "this function needs 1 or 3 arguments");
+        PyErr_SetString(PyExc_TypeError, "this function needs 2 or 4 arguments");
         return(NULL);
     }
     if(arglist == NULL) {
@@ -2089,6 +2160,8 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
     Py_buffer bufmem;
     Py_buffer *buf = NULL;
     unsigned int size = 0;
+    PyObject *name = NULL;
+    const char *cname;
     PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
@@ -2100,23 +2173,37 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OIOI",
+    if(!PyArg_ParseTuple(args, "OIOIO",
                          &(self->s),
                          &type,
                          &data,
-                         &size)) {
+                         &size,
+                         &name)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
         Py_XDECREF(etraceback);
 
-        if(!PyArg_ParseTuple(args, "Os",
+        if(!PyArg_ParseTuple(args, "OsO",
                             &(self->s),
-                            &filename)) {
+                            &filename,
+                            &name)) {
             goto error;
         } else {
+            Py_XINCREF(name);
             Py_XINCREF(self->s);
-            self->buffer = synth_buffer_from_wav(self->s->s, filename, &(self->rate));
+
+            if(name == Py_None) {
+                cname = NULL;
+            } else {
+                cname = PyUnicode_AsUTF8(name);
+                if(cname == NULL) {
+                    goto error;
+                }
+            }
+
+            self->buffer = synth_buffer_from_wav(self->s->s, filename, &(self->rate), cname);
+            Py_CLEAR(name);
             if(self->buffer < 0) {
                 PyErr_SetString(state->CrustyException, "synth_buffer_from_wav returned an error");
                 goto error;
@@ -2125,12 +2212,22 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
             return(0);
         }
     }
-
+    Py_XINCREF(name);
     Py_XINCREF(self->s);
     Py_XINCREF(data);
+
     if(!PyObject_TypeCheck(self->s, state->SynthType)) {
         PyErr_SetString(PyExc_TypeError, "first argument must be a Synth");
         goto error;
+    }
+
+    if(name == Py_None) {
+        cname = NULL;
+    } else {
+        cname = PyUnicode_AsUTF8(name);
+        if(cname == NULL) {
+            goto error;
+        }
     }
 
     self->rate = synth_get_rate(self->s->s);
@@ -2139,7 +2236,8 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
         self->buffer = PyLong_AsLong(data);
     } else if(data == Py_None) {
         /* silence buffers */
-        self->buffer = synth_add_buffer(self->s->s, type, NULL, size);
+        self->buffer = synth_add_buffer(self->s->s, type, NULL, size, cname);
+        Py_CLEAR(name);
         if(self->buffer < 0) {
             PyErr_SetString(state->CrustyException, "synth_add_buffer returned an error");
             goto error;
@@ -2202,7 +2300,8 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
             }
         }
 
-        self->buffer = synth_add_buffer(self->s->s, type, buf->buf, size);
+        self->buffer = synth_add_buffer(self->s->s, type, buf->buf, size, cname);
+        Py_CLEAR(name);
         if(self->buffer < 0) {
             PyErr_SetString(state->CrustyException, "synth_add_buffer returned an error");
             goto error;
@@ -2215,6 +2314,7 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
     return(0);
 
 error:
+    Py_XDECREF(name);
     if(buf != NULL) {
         PyBuffer_Release(buf);
     }
@@ -2315,7 +2415,12 @@ static PyObject *Synth_B_player(BufferObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    arglist = PyTuple_Pack(2, self->s, self);
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+
+    arglist = PyTuple_Pack(3, self->s, self, args[0]);
     if(arglist == NULL) {
         return(NULL);
     }
@@ -2343,10 +2448,13 @@ static PyObject *Synth_B_filter(BufferObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(nargs >= 1) {
+    if(nargs >= 2) {
+        arglist = PyTuple_Pack(4, self->s, self, args[0], args[1]);
+    } else if(nargs == 1) {
         arglist = PyTuple_Pack(3, self->s, self, args[0]);
     } else {
-        arglist = PyTuple_Pack(2, self->s, self);
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
     }
     if(arglist == NULL) {
         return(NULL);
@@ -2558,6 +2666,8 @@ static PyObject *Player_new(PyTypeObject *type, PyObject *args, PyObject *kwds) 
 
 static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
     BufferObject *buffer = NULL;
+    PyObject *name = NULL;
+    const char *cname;
 
     if(self->s != NULL) {
         PyErr_SetString(PyExc_TypeError, "Player already initialized");
@@ -2568,11 +2678,13 @@ static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OO",
+    if(!PyArg_ParseTuple(args, "OOO",
                          &(self->s),
-                         &buffer)) {
+                         &buffer,
+                         &name)) {
         return(-1);
     }
+    Py_XINCREF(name);
     Py_XINCREF(self->s);
     Py_XINCREF(buffer);
     if(!PyObject_TypeCheck(self->s, state->SynthType)) {
@@ -2596,7 +2708,17 @@ static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
     Py_XINCREF(self->speedBuffer);
     Py_CLEAR(buffer);
 
-    self->player = synth_add_player(self->s->s, self->inBuffer->buffer);
+    if(name == Py_None) {
+        cname = NULL;
+    } else {
+        cname = PyUnicode_AsUTF8(name);
+        if(cname == NULL) {
+            goto error;
+        }
+    }
+
+    self->player = synth_add_player(self->s->s, self->inBuffer->buffer, cname);
+    Py_CLEAR(name);
     if(self->player < 0) {
         PyErr_SetString(state->CrustyException, "synth_add_player returned an error");
         goto error;
@@ -2605,6 +2727,7 @@ static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
     return(0);
 
 error:
+    Py_XDECREF(name);
     Py_CLEAR(self->speedBuffer);
     Py_CLEAR(self->phaseBuffer);
     Py_CLEAR(self->volBuffer);
@@ -3296,6 +3419,8 @@ static PyObject *Filter_new(PyTypeObject *type, PyObject *args, PyObject *kwds) 
 static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
     BufferObject *buffer = NULL;
     unsigned int size;
+    PyObject *name = NULL;
+    const char *cname;
     PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
@@ -3307,26 +3432,29 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
      * other type.  Not sure the consequences there... */
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OOI",
+    if(!PyArg_ParseTuple(args, "OOIO",
                          &(self->s),
                          &buffer,
-                         &size)) {
+                         &size,
+                         &name)) {
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
         Py_XDECREF(etraceback);
 
-        if(!PyArg_ParseTuple(args, "OO",
+        if(!PyArg_ParseTuple(args, "OOO",
                              &(self->s),
-                             &buffer)) {
+                             &buffer,
+                             &name)) {
             goto error;
         } else {
             size = 0;
         }
     }
-
+    Py_XINCREF(name);
     Py_XINCREF(self->s);
     Py_XINCREF(buffer);
+
     if(!PyObject_TypeCheck(self->s, state->SynthType)) {
         PyErr_SetString(PyExc_TypeError, "first argument must be a Synth");
         goto error;
@@ -3348,7 +3476,17 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
     Py_XINCREF(self->volBuffer);
     Py_CLEAR(buffer);
 
-    self->filter = synth_add_filter(self->s->s, self->inBuffer->buffer, size);
+    if(name == Py_None) {
+        cname = NULL;
+    } else {
+        cname = PyUnicode_AsUTF8(name);
+        if(cname == NULL) {
+            goto error;
+        }
+    }
+
+    self->filter = synth_add_filter(self->s->s, self->inBuffer->buffer, size, cname);
+    Py_CLEAR(name);
     if(self->filter < 0) {
         PyErr_SetString(state->CrustyException, "synth_add_filter returned an error");
         goto error;
@@ -3357,6 +3495,7 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
     return(0);
 
 error:
+    Py_XDECREF(name);
     Py_CLEAR(self->volBuffer);
     Py_CLEAR(self->outBuffer);
     Py_CLEAR(self->sliceBuffer);
