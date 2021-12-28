@@ -56,13 +56,14 @@ int load_graphic(LayerList *ll,
                  const unsigned int *values,
                  const unsigned int *colormod,
                  unsigned int tmWidth, unsigned int tmHeight,
-                 float layerScale) {
+                 float layerScale, const char *name) {
     /* load the graphic, if needed */
     if(*tileset < 0) {
         *tileset = tilemap_tileset_from_bmp(ll,
                                            filename,
                                            tWidth,
-                                           tHeight);
+                                           tHeight,
+                                           NULL);
         if(*tileset < 0) {
             fprintf(stderr, "Failed to load graphic.\n");
             return(-1);
@@ -70,7 +71,7 @@ int load_graphic(LayerList *ll,
     }
     /* create the tilemap, if needed */
     if(*tilemap < 0) {
-        *tilemap = tilemap_add_tilemap(ll, (unsigned int)*tileset, tmWidth, tmHeight);
+        *tilemap = tilemap_add_tilemap(ll, (unsigned int)*tileset, tmWidth, tmHeight, name);
         if(*tilemap < 0) {
             fprintf(stderr, "Failed to make tilemap.\n");
             return(-1);
@@ -114,7 +115,7 @@ int load_graphic(LayerList *ll,
     }
     /* create a layer if needed */
     if(*layer < 0) {
-        *layer = tilemap_add_layer(ll, *tilemap);
+        *layer = tilemap_add_layer(ll, *tilemap, name);
         if(*layer < 0) {
             fprintf(stderr, "Failed to create layer.\n");
             return(-1);
@@ -133,10 +134,11 @@ int load_graphic(LayerList *ll,
 int create_sprite(LayerList *ll,
                   unsigned int spritemap,
                   unsigned int size,
-                  unsigned int scale) {
+                  unsigned int scale,
+                  const char *name) {
     int sprite;
 
-    sprite = tilemap_add_layer(ll, spritemap);
+    sprite = tilemap_add_layer(ll, spritemap, name);
     if(sprite < 0) {
         fprintf(stderr, "Failed to add layer for sprite.\n");
         return(-1);
@@ -459,7 +461,8 @@ int create_color_box(ColorBox *cboxes, int pTileset,
                     cboxTilemap,
                     NULL,
                     cboxTileWidth, cboxTileHeight,
-                    cboxes->scale) < 0) {
+                    cboxes->scale,
+                    "colorbox") < 0) {
         return(-1);
     }
     if(tilemap_set_layer_blendmode(cboxes->ll, cbox->layer,

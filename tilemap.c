@@ -34,6 +34,8 @@
 
 const SDL_Point ZEROZERO = {.x = 0, .y = 0};
 
+const char *NONAME = "(unnamed)";
+
 typedef struct {
     SDL_Texture *tex;
     unsigned int tw;
@@ -42,6 +44,8 @@ typedef struct {
     unsigned int max;
 
     unsigned int refs; /* tilemaps referencing this tileset */
+
+    char *name;
 } Tileset;
 
 typedef struct {
@@ -54,6 +58,8 @@ typedef struct {
     SDL_Texture *tex; /* cached surface */
 
     unsigned int refs; /* layers referencing this tileset */
+
+    char *name;
 } Tilemap;
 
 typedef struct {
@@ -70,6 +76,8 @@ typedef struct {
     double angle;
     Uint32 colormod;
     SDL_BlendMode blendMode;
+
+    char *name;
 } Layer;
 
 typedef struct LayerList_t {
@@ -102,7 +110,8 @@ static unsigned int find_power_of_two(unsigned int val) {
 int tilemap_tileset_from_bmp(LayerList *ll,
                              const char *filename,
                              unsigned int tw,
-                             unsigned int th) {
+                             unsigned int th,
+                             const char *name) {
     SDL_Surface *surface;
     int tileset;
 
@@ -114,7 +123,8 @@ int tilemap_tileset_from_bmp(LayerList *ll,
 
     tileset = tilemap_add_tileset(ll,
                                   surface,
-                                  tw, th);
+                                  tw, th,
+                                  name == NULL ? filename : name);
     SDL_FreeSurface(surface);
     return(tileset);
 }
@@ -124,16 +134,21 @@ int tilemap_blank_tileset(LayerList *ll,
                           unsigned int h,
                           Uint32 color,
                           unsigned int tw,
-                          unsigned int th) {
+                          unsigned int th,
+                          const char *name) {
     SDL_Surface *surface;
     Uint32 rmask, gmask, bmask, amask;
     int bpp;
     int ret;
 
+    if(name == NULL) {
+        name = NONAME;
+    }
+
     /* get the masks from the pixel format */
     if(SDL_PixelFormatEnumToMasks(ll->format, &bpp,
                                   &rmask, &gmask, &bmask, &amask) == SDL_FALSE) {
-        LOG_PRINTF(ll, "Failed to get format masks.\n");
+        LOG_PRINTF(ll, "%s: Failed to get format masks.\n", name);
         return(-1);
     }
 
@@ -141,18 +156,18 @@ int tilemap_blank_tileset(LayerList *ll,
     surface = SDL_CreateRGBSurface(0, w, h, bpp,
                                    rmask, gmask, bmask, amask);
     if(surface == NULL) {
-        LOG_PRINTF(ll, "Failed to create surface.\n");
+        LOG_PRINTF(ll, "%s: Failed to create surface.\n", name);
         return(-1);
     }
 
     /* fill it */
     if(SDL_FillRect(surface, NULL, color) < 0) {
-        LOG_PRINTF(ll, "Failed to fill surface with color.\n");
+        LOG_PRINTF(ll, "%s: Failed to fill surface with color.\n", name);
         return(-1);
     }
 
     /* create the tilemap, free the no longer needed surface and return */
-    ret = tilemap_add_tileset(ll, surface, tw, th);
+    ret = tilemap_add_tileset(ll, surface, tw, th, name);
     SDL_FreeSurface(surface);
     return(ret);
 }
@@ -290,24 +305,36 @@ int tilemap_set_target_tileset(LayerList *ll, int tileset) {
     }
 
     if(SDL_SetRenderTarget(ll->renderer, texture) < 0) {
-        LOG_PRINTF(ll, "Failed to set render target: %s\n",
-                   SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to set render target: %s\n",
+                       ll->tileset[tileset].name,
+                       SDL_GetError());
         return(-1);
     }
 
     return(0);
 }
 
-static void init_tileset(Tileset *t,
+static void init_tileset(LayerList *ll, Tileset *t,
                          SDL_Texture *tex,
                          unsigned int tw, unsigned int th,
-                         unsigned int maxx, unsigned int maxy) {
+                         unsigned int maxx, unsigned int maxy,
+                         const char *name) {
     t->tex = tex;
     t->tw = tw;
     t->th = th;
     t->maxx = maxx;
     t->max = maxx * maxy;
     t->refs = 0;
+
+    t->name = NULL;
+    if(name != NULL) {
+        unsigned int namelen = strlen(name) + 1;
+        t->name = malloc(namelen);
+        if(t->name == NULL) {
+            LOG_PRINTF(ll, "Failed to allocate memory for name for tileset %s.\n", name);
+        }
+        strncpy(t->name, name, namelen);
+    }
 }
 
 static void add_tileset_ref(Tileset *ts) {
@@ -316,7 +343,7 @@ static void add_tileset_ref(Tileset *ts) {
 
 static void free_tileset_ref(LayerList *ll, Tileset *ts) {
     if(ts->refs == 0) {
-        LOG_PRINTF(ll, "WARNING: Attenpt to free reference to tileset with no references.\n");
+        LOG_PRINTF(ll, "WARNING: Attenpt to free reference to tileset %s with no references.\n", ts->name);
         return;
     }
 
@@ -326,7 +353,8 @@ static void free_tileset_ref(LayerList *ll, Tileset *ts) {
 int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,
                         unsigned int tw,
-                        unsigned int th) {
+                        unsigned int th,
+                        const char *name) {
     Tileset *temp;
     SDL_Surface *surface2 = NULL;
     SDL_Texture *targetTexture;
@@ -338,15 +366,19 @@ int tilemap_add_tileset(LayerList *ll,
     unsigned int w = surface->w;
     unsigned int h = surface->h;
 
+    if(name == NULL) {
+        name = NONAME;
+    }
+
     /* tiles should at least be 1x1 */
     if(tw == 0 || th == 0) {
-        LOG_PRINTF(ll, "Tile dimensions are 0.\n");
+        LOG_PRINTF(ll, "%s: Tile dimensions are 0.\n", name);
         return(-1);
     }
 
     /* check if there would be 0 tiles */
     if(tw > w || th > h) {
-        LOG_PRINTF(ll, "Tile dimensions greater than set.\n");
+        LOG_PRINTF(ll, "%s: Tile dimensions greater than set.\n", name);
         return(-1);
     }
 
@@ -366,13 +398,14 @@ int tilemap_add_tileset(LayerList *ll,
                                         surface->format->Bmask,
                                         surface->format->Amask);
         if(surface2 == NULL) {
-            LOG_PRINTF(ll, "Failed to create power of two surface.\n");
+            LOG_PRINTF(ll, "%s: Failed to create power of two surface.\n", name);
             return(-1);
         }
         src.x = 0; src.y = 0; src.w = surface->w; src.h = surface->h;
         dest.x = 0; dest.y = 0; dest.w = surface2->w; dest.h = surface2->h;
         if(SDL_BlitSurface(surface, &src, surface2, &dest) < 0) {
-            LOG_PRINTF(ll, "Failed to copy to power of two surface: %s.\n", SDL_GetError());
+            LOG_PRINTF(ll, "%s: Failed to copy to power of two surface: %s.\n",
+                           name, SDL_GetError());
             SDL_FreeSurface(surface2);
             return(-1);
         }
@@ -387,7 +420,8 @@ int tilemap_add_tileset(LayerList *ll,
         SDL_FreeSurface(surface2);
     }
     if(tex == NULL) {
-        LOG_PRINTF(ll, "Failed to create texture from surface: %s.\n", SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to create texture from surface: %s.\n",
+                       name, SDL_GetError());
         return(-1);
     }
     /* need to create a new texture to copy to because creating a texture from
@@ -399,33 +433,34 @@ int tilemap_add_tileset(LayerList *ll,
                              texw,
                              texh);
     if(tex2 == NULL) {
-        LOG_PRINTF(ll, "Failed to create texture: %s.\n", SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to create texture: %s.\n",
+                       name, SDL_GetError());
         SDL_DestroyTexture(tex);
         return(-1);
     }
     targetTexture = SDL_GetRenderTarget(ll->renderer);
     if(SDL_SetRenderTarget(ll->renderer, tex2) < 0) {
-        LOG_PRINTF(ll, "Failed to set render target to copy texture: %s.\n",
-                       SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to set render target to copy texture: %s.\n",
+                       name, SDL_GetError());
         SDL_DestroyTexture(tex2);
         SDL_DestroyTexture(tex);
         return(-1);
     }
     if(SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE) < 0) {
-        LOG_PRINTF(ll, "Failed to set blend mode.\n");
+        LOG_PRINTF(ll, "%s: Failed to set blend mode.\n", name);
         SDL_DestroyTexture(tex);
         return(-1);
     }
     if(SDL_RenderCopy(ll->renderer, tex, NULL, NULL) < 0) {
-        LOG_PRINTF(ll, "Failed to copy texture: %s.\n",
-                       SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to copy texture: %s.\n",
+                       name, SDL_GetError());
         SDL_DestroyTexture(tex2);
         SDL_DestroyTexture(tex);
         return(-1);
     }
     if(SDL_SetRenderTarget(ll->renderer, targetTexture) < 0) {
-        LOG_PRINTF(ll, "Failed to set render target to screen: %s.\n",
-                       SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to set render target to screen: %s.\n",
+                       name, SDL_GetError());
         SDL_DestroyTexture(tex2);
         SDL_DestroyTexture(tex);
         return(-1);
@@ -435,7 +470,7 @@ int tilemap_add_tileset(LayerList *ll,
 
     /* make values overwrite existing values */
     if(SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE) < 0) {
-        LOG_PRINTF(ll, "Failed to set blend mode.\n");
+        LOG_PRINTF(ll, "%s: Failed to set blend mode.\n", name);
         SDL_DestroyTexture(tex);
         return(-1);
     }
@@ -444,19 +479,19 @@ int tilemap_add_tileset(LayerList *ll,
     if(ll->tilesetsmem == 0) {
         ll->tileset = malloc(sizeof(Tileset));
         if(ll->tileset == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate tileset.\n");
+            LOG_PRINTF(ll, "%s: Failed to allocate tileset.\n", name);
             SDL_DestroyTexture(tex);
             return(-1);
         }
         ll->tilesetsmem = 1;
-        init_tileset(&(ll->tileset[0]), tex, tw, th, maxx, maxy);
+        init_tileset(ll, &(ll->tileset[0]), tex, tw, th, maxx, maxy, name);
         return(0);
     }
 
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->tilesetsmem; i++) {
         if(ll->tileset[i].tex == NULL) {
-            init_tileset(&(ll->tileset[i]), tex, tw, th, maxx, maxy);
+            init_tileset(ll, &(ll->tileset[i]), tex, tw, th, maxx, maxy, name);
             return(i);
         }
     }
@@ -465,7 +500,7 @@ int tilemap_add_tileset(LayerList *ll,
     temp = realloc(ll->tileset,
             sizeof(Tileset) * ll->tilesetsmem * 2);
     if(temp == NULL) {
-        LOG_PRINTF(ll, "Failed to allocate tileset.\n");
+        LOG_PRINTF(ll, "%s: Failed to allocate tileset.\n", name);
         SDL_DestroyTexture(tex);
         return(-1);
     }
@@ -476,7 +511,7 @@ int tilemap_add_tileset(LayerList *ll,
     for(j = item; j < ll->tilesetsmem; j++) {
         ll->tileset[j].tex = NULL;
     }
-    init_tileset(&(ll->tileset[item]), tex, tw, th, maxx, maxy);
+    init_tileset(ll, &(ll->tileset[item]), tex, tw, th, maxx, maxy, name);
  
     return(item);
 }
@@ -491,13 +526,27 @@ static Tileset *get_tileset(LayerList *ll, unsigned int index) {
     return(&(ll->tileset[index]));
 }
 
+void scan_tileset_refs(LayerList *ll, int index) {
+    unsigned int i;
+
+    LOG_PRINTF(ll, "Scanning for references...\n");
+    for(i = 0; i < ll->tilemapsmem; i++) {
+        if(ll->tilemap[i].map != NULL) {
+            if(ll->tilemap[i].tileset == index) {
+                LOG_PRINTF(ll, " %u %s\n", i, ll->tilemap[i].name);
+            }
+        }
+    }
+}
+
 int tilemap_free_tileset(LayerList *ll, unsigned int index) {
     Tileset *ts = get_tileset(ll, index);
     if(ts == NULL) {
         return(-1);
     }
     if(ts->refs > 0) {
-        LOG_PRINTF(ll, "Tileset index referenced.\n");
+        LOG_PRINTF(ll, "%s: Tileset index referenced.\n", ts->name);
+        scan_tileset_refs(ll, index);
         return(-1);
     }
 
@@ -509,10 +558,11 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index) {
 
 static int init_tilemap(LayerList *ll, Tilemap *t,
                         unsigned int tileset,
-                        unsigned int w, unsigned int h) {
+                        unsigned int w, unsigned int h,
+                        const char *name) {
     t->map = malloc(sizeof(unsigned int) * w * h);
     if(t->map == NULL) {
-        LOG_PRINTF(ll, "Failed to allocate first tilemap map.\n");
+        LOG_PRINTF(ll, "%s: Failed to allocate first tilemap map.\n", name);
         return(-1);
     }
     memset(t->map, 0, sizeof(unsigned int) * w * h);
@@ -524,6 +574,16 @@ static int init_tilemap(LayerList *ll, Tilemap *t,
     t->attr_colormod = NULL;
     t->refs = 0;
 
+    t->name = NULL;
+    if(name != NULL) {
+        unsigned int namelen = strlen(name) + 1;
+        t->name = malloc(namelen);
+        if(t->name == NULL) {
+            LOG_PRINTF(ll, "%s: Failed to allocate memory for name for tilemap.\n", name);
+        }
+        strncpy(t->name, name, namelen);
+    }
+
     return(0);
 }
 
@@ -533,7 +593,7 @@ static void add_tilemap_ref(Tilemap *tm) {
 
 static void free_tilemap_ref(LayerList *ll, Tilemap *tm) {
     if(tm->refs == 0) {
-        LOG_PRINTF(ll, "WARNING: Attenpt to free reference to tilemap with no references.\n");
+        LOG_PRINTF(ll, "%s: WARNING: Attenpt to free reference to tilemap with no references.\n", tm->name);
         return;
     }
 
@@ -543,7 +603,8 @@ static void free_tilemap_ref(LayerList *ll, Tilemap *tm) {
 int tilemap_add_tilemap(LayerList *ll,
                         unsigned int tileset,
                         unsigned int w,
-                        unsigned int h) {
+                        unsigned int h,
+                        const char *name) {
     Tilemap *temp;
     unsigned int i, j;
     Tileset *ts = get_tileset(ll, tileset);
@@ -551,8 +612,12 @@ int tilemap_add_tilemap(LayerList *ll,
         return(-1);
     }
 
+    if(name == NULL) {
+        name = NONAME;
+    }
+
     if(w == 0 || h == 0) {
-        LOG_PRINTF(ll, "Tilemap must have area.\n");
+        LOG_PRINTF(ll, "%s: Tilemap must have area.\n", name);
         return(-1);
     }
 
@@ -560,11 +625,11 @@ int tilemap_add_tilemap(LayerList *ll,
     if(ll->tilemapsmem == 0) {
         ll->tilemap = malloc(sizeof(Tilemap));
         if(ll->tilemap == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate first tilemap.\n");
+            LOG_PRINTF(ll, "%s: Failed to allocate first tilemap.\n", name);
             return(-1);
         }
         ll->tilemapsmem = 1;
-        if(init_tilemap(ll, &(ll->tilemap[0]), tileset, w, h) < 0) {
+        if(init_tilemap(ll, &(ll->tilemap[0]), tileset, w, h, name) < 0) {
             return(-1);
         }
         add_tileset_ref(ts);
@@ -574,7 +639,7 @@ int tilemap_add_tilemap(LayerList *ll,
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->tilemapsmem; i++) {
         if(ll->tilemap[i].map == NULL) {
-            if(init_tilemap(ll, &(ll->tilemap[i]), tileset, w, h) < 0) {
+            if(init_tilemap(ll, &(ll->tilemap[i]), tileset, w, h, name) < 0) {
                 return(-1);
             }
             add_tileset_ref(ts);
@@ -586,7 +651,7 @@ int tilemap_add_tilemap(LayerList *ll,
     temp = realloc(ll->tilemap,
             sizeof(Tilemap) * ll->tilemapsmem * 2);
     if(temp == NULL) {
-        LOG_PRINTF(ll, "Failed to expand tilemap space.\n");
+        LOG_PRINTF(ll, "%s: Failed to expand tilemap space.\n", name);
         return(-1);
     }
     ll->tilemap = temp;
@@ -597,7 +662,7 @@ int tilemap_add_tilemap(LayerList *ll,
         ll->tilemap[j].map = NULL;
     }
  
-    if(init_tilemap(ll, &(ll->tilemap[item]), tileset, w, h) < 0) {
+    if(init_tilemap(ll, &(ll->tilemap[item]), tileset, w, h, name) < 0) {
         return(-1);
     }
     add_tileset_ref(ts);
@@ -615,13 +680,26 @@ static Tilemap *get_tilemap(LayerList *ll, unsigned int index) {
     return(&(ll->tilemap[index]));
 }
 
+void scan_tilemap_refs(LayerList *ll, int index) {
+    unsigned int i;
+
+    LOG_PRINTF(ll, "Scanning for references...\n");
+    for(i = 0; i < ll->layersmem; i++) {
+        if(ll->layer[i].tilemap == index) {
+            LOG_PRINTF(ll, " %u %s\n", i, ll->layer[i].name);
+        }
+    }
+}
+
+
 int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
         return(-1);
     }
     if(tm->refs > 0) {
-        LOG_PRINTF(ll, "Tilemap index referenced.\n");
+        LOG_PRINTF(ll, "%s: Tilemap index referenced.\n", tm->name);
+        scan_tilemap_refs(ll, index);
         return(-1);
     }
 
@@ -709,7 +787,7 @@ int tilemap_set_tilemap_map(LayerList *ll,
 
     if(((((unsigned int)h - 1) * (unsigned int)pitch) +
         (unsigned int)w) > size) {
-        LOG_PRINTF(ll, "Buffer too small to hold tilemap.\n");
+        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap.\n", tm->name);
         return(-1);
     }
 
@@ -717,9 +795,9 @@ int tilemap_set_tilemap_map(LayerList *ll,
      * range */
     if(x > tm->w || y > tm->h ||
        x + w > tm->w || y + h > tm->h) {
-        LOG_PRINTF(ll, "Position/size would expand outside of "
+        LOG_PRINTF(ll, "%s: Position/size would expand outside of "
                        "tilemap. x:%d->%d, y:%d->%d\n",
-                       x, w, y, h);
+                       tm->name, x, w, y, h);
         return(-1);
     }
 
@@ -761,7 +839,7 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
 
     if(((((unsigned int)h - 1) * (unsigned int)pitch) +
         (unsigned int)w) > size) {
-        LOG_PRINTF(ll, "Buffer too small to hold tilemap.\n");
+        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap.\n", tm->name);
         return(-1);
     }
 
@@ -769,8 +847,8 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
      * range */
     if(x > tm->w || y > tm->h ||
        x + w > tm->w || y + h > tm->h) {
-        LOG_PRINTF(ll, "Position/size would expand outside of "
-                       "tilemap.\n");
+        LOG_PRINTF(ll, "%s: Position/size would expand outside of "
+                       "tilemap.\n", tm->name);
         return(-1);
     }
     
@@ -778,7 +856,7 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
     if(tm->attr_flags == NULL) {
         tm->attr_flags = malloc(sizeof(unsigned int) * tm->w * tm->h);
         if(tm->attr_flags == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate tilemap attribute map.\n");
+            LOG_PRINTF(ll, "%s: Failed to allocate tilemap attribute map.\n", tm->name);
             return(-1);
         }
         memset(tm->attr_flags, 0, sizeof(unsigned int) * tm->w * tm->h);
@@ -822,7 +900,7 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
 
     if(((((unsigned int)h - 1) * (unsigned int)pitch) +
         (unsigned int)w) > size) {
-        LOG_PRINTF(ll, "Buffer too small to hold tilemap.\n");
+        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap.\n", tm->name);
         return(-1);
     }
 
@@ -830,8 +908,8 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
      * range */
     if(x > tm->w || y > tm->h ||
        x + w > tm->w || y + h > tm->h) {
-        LOG_PRINTF(ll, "Position/size would expand outside of "
-                       "tilemap.\n");
+        LOG_PRINTF(ll, "%s: Position/size would expand outside of "
+                       "tilemap.\n", tm->name);
         return(-1);
     }
     
@@ -840,7 +918,7 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
         tm->attr_colormod =
             malloc(sizeof(unsigned int) * tm->w * tm->h);
         if(tm->attr_colormod == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate tilemap attribute map.\n");
+            LOG_PRINTF(ll, "%s: Failed to allocate tilemap attribute map.\n", tm->name);
             return(-1);
         }
         memset(tm->attr_colormod, 0,
@@ -890,7 +968,7 @@ int tilemap_update_tilemap(LayerList *ll,
     /* make sure the range specified is within the map */
     if(x > tm->w || x + w > tm->w ||
        y > tm->h || y + h > tm->h) {
-        LOG_PRINTF(ll, "Dimensions extens outside of tilemap.\n");
+        LOG_PRINTF(ll, "%s: Dimensions extend outside of tilemap.\n", tm->name);
         return(-1);
     }
 
@@ -906,32 +984,32 @@ int tilemap_update_tilemap(LayerList *ll,
                                     texw,
                                     texh);
         if(tm->tex == NULL) {
-            LOG_PRINTF(ll, "Failed to create texture.\n");
+            LOG_PRINTF(ll, "%s: Failed to create texture.\n", tm->name);
             return(-1);
         }
         if(SDL_RenderClear(ll->renderer) < 0) {
-            LOG_PRINTF(ll, "Failed to clear texture.\n");
+            LOG_PRINTF(ll, "%s: Failed to clear texture.\n", tm->name);
             return(-1);
         }
     }
     /* set it to be rendered to */
     targetTexture = SDL_GetRenderTarget(ll->renderer);
     if(SDL_SetRenderTarget(ll->renderer, tm->tex) < 0) {
-        LOG_PRINTF(ll, "Failed to set render target: %s.\n",
-                       SDL_GetError());
+        LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
+                       tm->name, SDL_GetError());
         return(-1);
     }
 
     if(SDL_SetRenderDrawColor(ll->renderer,
                               0, 0, 0,
                               SDL_ALPHA_TRANSPARENT) < 0) {
-        LOG_PRINTF(ll, "Failed to set render draw color.\n");
+        LOG_PRINTF(ll, "%s: Failed to set render draw color.\n", tm->name);
         return(-1);
     }
     dest.x = x * ts->tw; dest.y = y * ts->th;
     dest.w = w * ts->tw; dest.h = h * ts->th;
     if(SDL_RenderFillRect(ll->renderer, &dest) < 0) {
-        LOG_PRINTF(ll, "Failed to clear region.\n");
+        LOG_PRINTF(ll, "%s: Failed to clear region.\n", tm->name);
         return(-1);
     }
     
@@ -947,7 +1025,7 @@ int tilemap_update_tilemap(LayerList *ll,
             /* src.x can't be negative, because tm->map is unsigned,
              * silences a warning */
             if((unsigned int)(src.x) > ts->max) {
-                LOG_PRINTF(ll, "Tilemap index beyond tileset: %u\n", src.x);
+                LOG_PRINTF(ll, "%s: Tilemap index beyond tileset %s: %u\n", tm->name, ts->name, src.x);
                 return(-1);
             }
             /* calculate the source texture coords and render */
@@ -960,12 +1038,12 @@ int tilemap_update_tilemap(LayerList *ll,
                         (colormod & TILEMAP_RMASK) >> TILEMAP_RSHIFT,
                         (colormod & TILEMAP_GMASK) >> TILEMAP_GSHIFT,
                         (colormod & TILEMAP_BMASK) >> TILEMAP_BSHIFT) < 0) {
-                    LOG_PRINTF(ll, "Failed to set tile colormod.\n");
+                    LOG_PRINTF(ll, "%s: Failed to set tile colormod.\n", tm->name);
                     return(-1);
                 }
                 if(SDL_SetTextureAlphaMod(ts->tex,
                         (colormod & TILEMAP_AMASK) >> TILEMAP_ASHIFT) < 0) {
-                    LOG_PRINTF(ll, "Failed to set tile alphamod.\n");
+                    LOG_PRINTF(ll, "%s: Failed to set tile alphamod.\n", tm->name);
                     return(-1);
                 }
             }
@@ -984,8 +1062,8 @@ int tilemap_update_tilemap(LayerList *ll,
                     angle = 0.0;
                 } else if((attr & TILEMAP_ROTATE_MASK) == TILEMAP_ROTATE_90) {
                     if(ts->tw != ts->th) {
-                        LOG_PRINTF(ll, "Invalid rotation for rectangular "
-                                       "tilemap.\n");
+                        LOG_PRINTF(ll, "%s: Invalid rotation for rectangular "
+                                       "tilemap.\n", tm->name);
                         return(-1);
                     }
                     angle = 90.0;
@@ -996,8 +1074,8 @@ int tilemap_update_tilemap(LayerList *ll,
                     finaldest.y += ts->th;
                 } else { /* TILEMAP_ROTATE_270 */
                      if(ts->tw != ts->th) {
-                        LOG_PRINTF(ll, "Invalid rotation for rectangular "
-                                       "tilemap.\n");
+                        LOG_PRINTF(ll, "%s: Invalid rotation for rectangular "
+                                       "tilemap.\n", tm->name);
                         return(-1);
                     }
                     angle = 270.0;
@@ -1010,7 +1088,7 @@ int tilemap_update_tilemap(LayerList *ll,
                                     angle,
                                     &ZEROZERO,
                                     flip) < 0) {
-                    LOG_PRINTF(ll, "Failed to render tile.\n");
+                    LOG_PRINTF(ll, "%s: Failed to render tile.\n", tm->name);
                     return(-1);
                 }
             } else {
@@ -1018,17 +1096,17 @@ int tilemap_update_tilemap(LayerList *ll,
                                   ts->tex,
                                   &src,
                                   &dest) < 0) {
-                    LOG_PRINTF(ll, "Failed to render tile.\n");
+                    LOG_PRINTF(ll, "%s: Failed to render tile.\n", tm->name);
                     return(-1);
                 }
             }
             if(tm->attr_colormod) {
                 if(SDL_SetTextureColorMod(ts->tex, 255, 255, 255) < 0) {
-                    LOG_PRINTF(ll, "Failed to set tile colormod.\n");
+                    LOG_PRINTF(ll, "%s: Failed to set tile colormod.\n", tm->name);
                     return(-1);
                 }
                 if(SDL_SetTextureAlphaMod(ts->tex, 255) < 0) {
-                    LOG_PRINTF(ll, "Failed to set tile alphamod.\n");
+                    LOG_PRINTF(ll, "%s: Failed to set tile alphamod.\n", tm->name);
                     return(-1);
                 }
             }
@@ -1039,17 +1117,19 @@ int tilemap_update_tilemap(LayerList *ll,
 
     /* restore render target */
     if(SDL_SetRenderTarget(ll->renderer, targetTexture) < 0) {
-        LOG_PRINTF(ll, "Failed to restore render target.\n");
+        LOG_PRINTF(ll, "%s: Failed to restore render target.\n", tm->name);
         return(-1);
     }
 
     return(0);
 }
 
-static void init_layer(Layer *l,
+static void init_layer(LayerList *ll,
+                       Layer *l,
                        Tilemap *tm,
                        Tileset *ts,
-                       unsigned int tilemap) {
+                       unsigned int tilemap,
+                       const char *name) {
     l->x = 0;
     l->y = 0;
     l->w = tm->w * ts->tw;
@@ -1064,9 +1144,21 @@ static void init_layer(Layer *l,
     l->colormod = TILEMAP_COLOR(255, 255, 255, 255);
     l->blendMode = SDL_BLENDMODE_BLEND;
     l->tilemap = tilemap;
+
+    l->name = NULL;
+    if(name != NULL) {
+        unsigned int namelen = strlen(name) + 1;
+        l->name = malloc(namelen);
+        if(l->name == NULL) {
+            LOG_PRINTF(ll, "Failed to allocate memory for name for layer %s.\n", name);
+        }
+        strncpy(l->name, name, namelen);
+    }
 }
 
-int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
+int tilemap_add_layer(LayerList *ll,
+                      unsigned int tilemap,
+                      const char *name) {
     Layer *temp;
     unsigned int i, j;
     Tilemap *tm = get_tilemap(ll, tilemap);
@@ -1078,15 +1170,19 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
         return(-1);
     }
 
+    if(name == NULL) {
+        name = NONAME;
+    }
+
     /* first created layer, so do some initial setup */
     if(ll->layersmem == 0) {
         ll->layer = malloc(sizeof(Layer));
         if(ll->layer == NULL) {
-            LOG_PRINTF(ll, "Failed to allocate first layer.\n");
+            LOG_PRINTF(ll, "%s: Failed to allocate first layer.\n", name);
             return(-1);
         }
         ll->layersmem = 1;
-        init_layer(&(ll->layer[0]), tm, ts, tilemap);
+        init_layer(ll, &(ll->layer[0]), tm, ts, tilemap, name);
         add_tilemap_ref(tm);
         return(0);
     }
@@ -1094,7 +1190,7 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->layersmem; i++) {
         if(ll->layer[i].tilemap == -1) {
-            init_layer(&(ll->layer[i]), tm, ts, tilemap);
+            init_layer(ll, &(ll->layer[i]), tm, ts, tilemap, name);
             add_tilemap_ref(tm);
             return(i);
         }
@@ -1104,7 +1200,7 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
     temp = realloc(ll->layer,
             sizeof(Layer) * ll->layersmem * 2);
     if(temp == NULL) {
-        LOG_PRINTF(ll, "Failed to expand layer memory.\n");
+        LOG_PRINTF(ll, "%s: Failed to expand layer memory.\n", name);
         return(-1);
     }
     ll->layer = temp;
@@ -1115,7 +1211,7 @@ int tilemap_add_layer(LayerList *ll, unsigned int tilemap) {
         ll->layer[j].tilemap = -1;
     }
  
-    init_layer(&(ll->layer[item]), tm, ts, tilemap);
+    init_layer(ll, &(ll->layer[item]), tm, ts, tilemap, name);
     add_tilemap_ref(tm);
 
     return(item);
@@ -1188,7 +1284,7 @@ int tilemap_set_layer_window(LayerList *ll,
     }
 
     if(w > tmw || h > tmh) {
-        LOG_PRINTF(ll, "Layer window out of range.\n");
+        LOG_PRINTF(ll, "%s: Layer window out of range.\n", l->name);
         return(-1);
     }
  
@@ -1220,7 +1316,7 @@ int tilemap_set_layer_scroll_pos(LayerList *ll,
     tmh = tm->h * ts->th;
 
     if(scroll_x > tmw - 1 || scroll_y > tmh - 1) {
-        LOG_PRINTF(ll, "Layer scroll pos out of range.\n");
+        LOG_PRINTF(ll, "%s: Layer scroll pos out of range.\n", l->name);
         return(-1);
     }
  
@@ -1242,7 +1338,7 @@ int tilemap_set_layer_scale(LayerList *ll,
     /* SDL doesn't seem to allow negative rect coords and just clamps to 0 so
      * to avoid unexpected behavior, just throw a warning to the user. */
     if(scale_x < 0.0 || scale_y < 0.0) {
-        LOG_PRINTF(ll, "WARNING: Negative scale.\n");
+        LOG_PRINTF(ll, "%s: WARNING: Negative scale.\n", l->name);
     }
 
     l->scale_x = scale_x;
@@ -1314,7 +1410,7 @@ int tilemap_set_layer_blendmode(LayerList *ll, unsigned int index, int blendMode
                                            SDL_BLENDOPERATION_ADD);
             break;
         default:
-            LOG_PRINTF(ll, "Invalid blend mode: %d\n", blendMode);
+            LOG_PRINTF(ll, "%s: Invalid blend mode: %d\n", l->name, blendMode);
             return(-1);
     }
 
@@ -1342,7 +1438,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
 
     /* Make sure it's a layer with graphics */
     if(tm->tex == NULL) {
-        LOG_PRINTF(ll, "Layer without graphics: %d\n", index);
+        LOG_PRINTF(ll, "%s: Layer without graphics: %d\n", l->name, index);
         return(-1);
     }
 
@@ -1350,12 +1446,12 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
             (l->colormod & TILEMAP_RMASK) >> TILEMAP_RSHIFT,
             (l->colormod & TILEMAP_GMASK) >> TILEMAP_GSHIFT,
             (l->colormod & TILEMAP_BMASK) >> TILEMAP_BSHIFT) < 0) {
-        LOG_PRINTF(ll, "Failed to set layer colormod.\n");
+        LOG_PRINTF(ll, "%s: Failed to set layer colormod.\n", l->name);
         return(-1);
     }
     if(SDL_SetTextureAlphaMod(tm->tex,
             (l->colormod & TILEMAP_AMASK) >> TILEMAP_ASHIFT) < 0) {
-        LOG_PRINTF(ll, "Failed to set tile alphamod.\n");
+        LOG_PRINTF(ll, "%s: Failed to set tile alphamod.\n", l->name);
         return(-1);
     }
 
@@ -1390,7 +1486,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
                           tm->tex,
                           &src,
                           &dest) < 0) {
-            LOG_PRINTF(ll, "Failed to render layer.\n");
+            LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
             return(-1);
         }
         if(overRight > 0) {
@@ -1406,7 +1502,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
                               tm->tex,
                               &src,
                               &dest) < 0) {
-                LOG_PRINTF(ll, "Failed to render layer.\n");
+                LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
                 return(-1);
             }
         }
@@ -1423,7 +1519,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
                               tm->tex,
                               &src,
                               &dest) < 0) {
-                LOG_PRINTF(ll, "Failed to render layer.\n");
+                LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
                 return(-1);
             }
         }
@@ -1440,7 +1536,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
                               tm->tex,
                               &src,
                               &dest) < 0) {
-                LOG_PRINTF(ll, "Failed to render layer.\n");
+                LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
                 return(-1);
             }
         }
@@ -1452,7 +1548,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
                             l->angle,
                             &(l->center),
                             SDL_FLIP_NONE) < 0) {
-            LOG_PRINTF(ll, "Failed to render layer.\n");
+            LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
             return(-1);
         }
     }

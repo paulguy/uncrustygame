@@ -517,7 +517,8 @@ int create_enemy(GameState *gs,
     }
 
     gs->enemy[i].sprite = create_sprite(gs->ll, gs->tilemap,
-                                        TEST_SPRITE_DIM, SPRITE_SCALE);
+                                        TEST_SPRITE_DIM, SPRITE_SCALE,
+                                        "enemy");
     if(gs->enemy[i].sprite < 0) {
         return(-1);
     }
@@ -848,7 +849,8 @@ int toggle_cat_mode(GameState *gs) {
         }
 
         gs->zzzlayer = create_sprite(gs->ll, gs->tilemap,
-                                     TEST_SPRITE_DIM, SPRITE_SCALE);
+                                     TEST_SPRITE_DIM, SPRITE_SCALE,
+                                     "zzzlayer");
         if(gs->zzzlayer < 0) {
             return(-1);
         }
@@ -1193,18 +1195,20 @@ int main(int argc, char **argv) {
                     TEST_SPRITESHEET_VALUES,
                     TEST_SPRITESHEET_COLORMOD,
                     ARRAY_COUNT(TEST_SPRITESHEET_VALUES), 1,
-                    1.0) < 0) {
+                    1.0, "spritesheet") < 0) {
         goto error_synth;
     }
 
     gs.catlayer = create_sprite(gs.ll, gs.tilemap,
-                                TEST_SPRITE_DIM, SPRITE_SCALE);
+                                TEST_SPRITE_DIM, SPRITE_SCALE,
+                                "catlayer");
     if(gs.catlayer < 0) {
         goto error_synth;
     }
 
     gs.spawnerSprite = create_sprite(gs.ll, gs.tilemap,
-                                     TEST_SPRITE_DIM, SPRITE_SCALE);
+                                     TEST_SPRITE_DIM, SPRITE_SCALE,
+                                     "spawnerSprite");
     if(gs.spawnerSprite < 0) {
         goto error_synth;
     }
@@ -1217,7 +1221,7 @@ int main(int argc, char **argv) {
                     NULL,
                     NULL,
                     HUD_WIDTH, HUD_HEIGHT,
-                    HUD_SCALE) < 0) {
+                    HUD_SCALE, "font") < 0) {
         goto error_synth;
     }
 
@@ -1229,7 +1233,7 @@ int main(int argc, char **argv) {
                     &titleTilemap,
                     NULL,
                     1, 1,
-                    SPRITE_SCALE) < 0) {
+                    SPRITE_SCALE, "title") < 0) {
         goto error_synth;
     }
     if(tilemap_set_layer_pos(gs.ll, gs.titleLayer,
@@ -1252,7 +1256,7 @@ int main(int argc, char **argv) {
                     bgTilemap,
                     NULL,
                     WINDOW_TILE_WIDTH, WINDOW_TILE_HEIGHT,
-                    SPRITE_SCALE) < 0) {
+                    SPRITE_SCALE, "background") < 0) {
         goto error_synth;
     }
     if(tilemap_set_layer_blendmode(gs.ll, gs.lBackground,
@@ -1299,7 +1303,8 @@ int main(int argc, char **argv) {
         goto error_synth;
     }
     gs.goreSprite = create_sprite(gs.ll, gs.tilemap,
-                                  TEST_SPRITE_DIM, SPRITE_SCALE);
+                                  TEST_SPRITE_DIM, SPRITE_SCALE,
+                                  "goreSprite");
     if(gs.goreSprite < 0) {
         goto error_synth;
     }
@@ -1555,6 +1560,7 @@ int main(int argc, char **argv) {
     tilemap_free_layer(gs.ll, gs.lBackground);
     tilemap_free_tilemap(gs.ll, tmBackground);
     tilemap_free_layer(gs.ll, gs.goreSprite);
+    tilemap_free_layer(gs.ll, gs.spawnerSprite);
     tilemap_free_layer(gs.ll, gs.catlayer);
     tilemap_free_tilemap(gs.ll, gs.tilemap);
     tilemap_free_tileset(gs.ll, gs.tileset);

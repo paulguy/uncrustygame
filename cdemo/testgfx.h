@@ -12,11 +12,11 @@ int load_graphic(LayerList *ll,
                  const unsigned int *values,
                  const unsigned int *colormod,
                  unsigned int tmWidth, unsigned int tmHeight,
-                 float layerScale);
+                 float layerScale, const char *name);
 int create_sprite(LayerList *ll,
                   unsigned int spritemap,
                   unsigned int size,
-                  unsigned int scale);
+                  unsigned int scale, const char *name);
 int select_sprite(LayerList *ll,
                   unsigned int layer,
                   unsigned int sprite,

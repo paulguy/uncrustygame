@@ -105,12 +105,14 @@ typedef struct LayerList_t LayerList;
  * ll       the LayerList context
  * filename the path to the BMP file
  * tw, th   dimensions of tiles
+ * name     optional tileset name, otherwise it'll use filename
  * return   the tileset handle or -1 on failuer
  */
 int tilemap_tileset_from_bmp(LayerList *ll,
                              const char *filename,
                              unsigned int tw,
-                             unsigned int th);
+                             unsigned int th,
+                             const char *name);
 /*
  * Create a new blank tileset filled with some color.
  * See: tilemap_add_tileset
@@ -120,6 +122,7 @@ int tilemap_tileset_from_bmp(LayerList *ll,
  * color    the color the tileset will be initialized to, use something like
  *          SDL_MapRGBA or something
  * tw, th   dimensions of tiles
+ * name     optional name or NULL
  * return   the tileset handle or -1 on failure
  */
 int tilemap_blank_tileset(LayerList *ll,
@@ -127,7 +130,8 @@ int tilemap_blank_tileset(LayerList *ll,
                           unsigned int h,
                           Uint32 color,
                           unsigned int tw,
-                          unsigned int th);
+                          unsigned int th,
+                          const char *name);
 
 /*
  * Create a new LayerList context.
@@ -186,12 +190,14 @@ int tilemap_set_target_tileset(LayerList *ll, int tileset);
  * ll       the LayerList
  * surface  the SDL_Surface to transfer to the tileset.
  * tw, th   the tile dimensions
+ * name     optional name or NULL
  * return   the tileset handle or -1 on failure
  */
 int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,
                         unsigned int tw,
-                        unsigned int th);
+                        unsigned int th,
+                        const char *name);
 /*
  * Free a tileset and any resources.
  * NOTE: there's a logarithmically growing array of structures which is grown
@@ -213,12 +219,14 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index);
  * ll       the LayerList
  * tileset  the tileset applied to this tilemap
  * w, h     the tilemap dimensions in tiles
+ * name     optional name or NULL
  * return   the tilemap handle or -1 on failure
  */
 int tilemap_add_tilemap(LayerList *ll,
                         unsigned int tileset,
                         unsigned int w,
-                        unsigned int h);
+                        unsigned int h,
+                        const char *name);
 /*
  * Free a tilemap and any resources.
  * See: tilemap_free_tileset NOTE
@@ -337,10 +345,12 @@ int tilemap_update_tilemap(LayerList *ll,
  *
  * ll       the LayerList
  * tilemap  the tilemap which the layer will display.
+ * name     optional name or NULL
  * return   the layer handle or -1 on failure
  */
 int tilemap_add_layer(LayerList *ll,
-                      unsigned int tilemap);
+                      unsigned int tilemap,
+                      const char *name);
 /*
  * Free a layer.
  * See: tilemap_free_tileset NOTE
