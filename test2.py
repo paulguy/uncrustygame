@@ -357,6 +357,54 @@ def load_audio(aud, harmonics):
 
     return envslope, benddownslope, bendupslope, noise, lpfilt, hpfilt, sine, square, triangle, saw
 
+class Scope():
+    def __init__(self, renderer, seq, num, pixfmt, w, h):
+        self._renderer = renderer
+        self._seq = seq
+        self._num = num
+        self._w = w
+        self._h = h
+        self._array = numpy.zeros(shape=w * 2, dtype=numpy.float32)
+        self._array[:w*2:2] = numpy.arange(0, w)
+        self._tex = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, w, h)
+
+    @property
+    def texture(self):
+        return self._tex
+
+    def _get_buffers(self):
+        # keep this as short as possible so the audio device is unlocked as
+        # soon as possible
+        first = numpy.copy(self._seq.internal(self._num))
+        second = numpy.copy(self._seq.internal(self._num))
+
+        return first, second
+
+    def update(self):
+        first, second = self._get_buffers()
+
+        if len(first) < self._w:
+            pos = len(first) * 2 + 1
+            self._array[1:pos:2] = first
+            if len(first) + len(second) < self._w:
+                pos2 = pos + len(first) * 2
+                self._array[pos:pos2:2] = second
+                self._array[pos2::2].fill(0)
+            else:
+                self._array[pos::2] = second[:self._w - len(first)]
+        else:
+            self._array[1:self._w*2:2] = first[:self._w]
+
+        self._array[1::2] *= self._h
+
+        origtarget = SDL_GetRenderTarget(self._renderer)
+        if SDL_SetRenderTarget(self._renderer, self._tex) < 0:
+            raise Exception("Failed to set render target")
+        # call crustygame version
+        cg.SDL_RenderDrawLinesF(self._renderer, self._array)
+        if SDL_SetRenderTarget(self._renderer, origtarget) < 0:
+            raise Exception("Failed to restore render target")
+
 
 def log_cb_return(priv, string):
     print(string, end='')
@@ -455,6 +503,7 @@ def do_main(window, renderer, pixfmt):
 
     wavout = False
     seq = None
+    scope = None
     running = True
     playing = True
     lastTime = time.monotonic()
@@ -470,11 +519,19 @@ def do_main(window, renderer, pixfmt):
             if seq != None:
                 for s in seq:
                     aud.del_sequence(s)
+                scope = None
                 seq = None
             _, exc = aud.error
             print_tb(exc.__traceback__)
             print(exc)
             aud.enabled(True)
+
+        if scope != None:
+            # possible race condition between this and aud.frame() but it'll
+            # just result in missed samples, no big deal
+            scope.update()
+            if SDL_RenderCopy(renderer, scope.texture, None, None) < 0:
+                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
 
         if seq != None:
             for s in seq:
@@ -483,6 +540,7 @@ def do_main(window, renderer, pixfmt):
                     seq.remove(s)
                     print("Sequence ended")
             if len(seq) == 0:
+                scope = None
                 seq = None
 
         event = SDL_Event()
@@ -498,6 +556,7 @@ def do_main(window, renderer, pixfmt):
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
+                        scope = None
                         seq = None
                     macros = (("FILTER_SIZE", (), str(FILTER_TAPS)),
                               ("FILTER_SLICES", (), str(SLICES)))
@@ -548,10 +607,13 @@ def do_main(window, renderer, pixfmt):
                                 print(e)
                                 seq = None
                                 break
+                    scope = Scope(renderer, seq[0], 0, pixfmt, 100, 100)
+
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
+                        scope = None
                         seq = None
                 elif event.key.keysym.sym == SDLK_r:
                     aud.enabled(True)
@@ -681,6 +743,7 @@ def do_main(window, renderer, pixfmt):
     if seq != None:
         for s in seq:
             aud.del_sequence(s)
+        scope = None
         seq = None
 
 def main():

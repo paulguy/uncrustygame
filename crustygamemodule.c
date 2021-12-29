@@ -2468,6 +2468,34 @@ static PyObject *Synth_B_filter(BufferObject *self,
     return(filter);
 }
 
+static PyObject *Synth_internal(BufferObject *self,
+                                PyTypeObject *defining_class,
+                                PyObject *const *args,
+                                Py_ssize_t nargs,
+                                PyObject *kwnames) {
+    PyObject *arglist;
+    PyObject *internal;
+
+    if(self->s == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    arglist = PyTuple_Pack(2, self->s, self);
+    if(arglist == NULL) {
+        return(NULL);
+    }
+    internal = PyObject_CallObject((PyObject *)(state->InternalBufferType), arglist);
+    Py_DECREF(arglist);
+    if(internal == NULL) {
+        return(NULL);
+    }
+
+    return(internal);
+}
+
 static PyMethodDef Buffer_methods[] = {
     {
         "size",
@@ -2494,6 +2522,11 @@ static PyMethodDef Buffer_methods[] = {
         (PyCMethod) Synth_B_filter,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience function to make a filter from this buffer."},
+    {
+        "internal",
+        (PyCMethod) Synth_internal,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get an internal buffer handle from this buffer."},
     {NULL}
 };
 
@@ -2574,6 +2607,10 @@ static void InternalBuffer_dealloc(InternalBufferObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
+static Py_ssize_t InternalBuffer_length(InternalBufferObject *self) {
+    return(self->size);
+}
+
 static int InternalBuffer_getbuffer(InternalBufferObject *self, Py_buffer *view, int flags) {
     if(self->s == NULL) {
         PyErr_SetString(PyExc_BufferError, "this Buffer is not initialized");
@@ -2624,7 +2661,7 @@ error:
 }
 
 static void InternalBuffer_releasebuffer(InternalBufferObject *self, Py_buffer *view) {
-    Py_DECREF(view->obj);
+    return;
 }
 
 static PyType_Slot InternalBufferSlots[] = {
@@ -2632,6 +2669,7 @@ static PyType_Slot InternalBufferSlots[] = {
     {Py_tp_init, (initproc)InternalBuffer_init},
     {Py_tp_dealloc, (destructor)InternalBuffer_dealloc},
     {Py_tp_traverse, heap_type_traverse},
+    {Py_sq_length, (lenfunc)InternalBuffer_length},
     {Py_bf_getbuffer, (getbufferproc)InternalBuffer_getbuffer},
     {Py_bf_releasebuffer, (releasebufferproc)InternalBuffer_releasebuffer},
     {0, NULL}
@@ -4552,6 +4590,7 @@ static PyObject *RenderDrawPoints(PyObject *self,
     Py_buffer *buf = NULL;
     PyObject *py_renderer = NULL;
     SDL_Renderer *renderer;
+    unsigned int len;
 
     crustygame_state *state = PyModule_GetState(self);
 
@@ -4578,22 +4617,24 @@ static PyObject *RenderDrawPoints(PyObject *self,
     }
     buf = &bufmem;
 
-    if(buf->ndim != 2) {
-        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+    if(buf->ndim == 1 && buf->shape[0] >= 4) {
+        if(buf->shape[0] * sizeof(int) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0] / 2;
+    } else if (buf->ndim == 2 && buf->shape[1] == 2 && buf->shape[0] >= 2) {
+        if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0];
+    } else {
+        PyErr_SetString(PyExc_BufferError, "Shape must be either 1-D or 2-D with at least 2 contiugous pairs of values.");
         goto error;
     }
 
-    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
-        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
-        goto error;
-    }
-
-    if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
-        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
-        goto error;
-    }
-
-    if(SDL_RenderDrawPoints(renderer, buf->buf, buf->shape[0]) < 0) {
+    if(SDL_RenderDrawPoints(renderer, buf->buf, len) < 0) {
         PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawPoints returned failure");
         goto error;
     }
@@ -4617,6 +4658,7 @@ static PyObject *RenderDrawLines(PyObject *self,
     Py_buffer *buf = NULL;
     PyObject *py_renderer = NULL;
     SDL_Renderer *renderer;
+    unsigned int len;
 
     crustygame_state *state = PyModule_GetState(self);
 
@@ -4643,22 +4685,24 @@ static PyObject *RenderDrawLines(PyObject *self,
     }
     buf = &bufmem;
 
-    if(buf->ndim != 2) {
-        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+    if(buf->ndim == 1 && buf->shape[0] >= 4) {
+        if(buf->shape[0] * sizeof(int) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0] / 2;
+    } else if (buf->ndim == 2 && buf->shape[1] == 2 && buf->shape[0] >= 2) {
+        if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0];
+    } else {
+        PyErr_SetString(PyExc_BufferError, "Shape must be either 1-D or 2-D with at least 2 contiugous pairs of values.");
         goto error;
     }
 
-    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
-        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
-        goto error;
-    }
-
-    if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
-        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
-        goto error;
-    }
-
-    if(SDL_RenderDrawLines(renderer, buf->buf, buf->shape[0]) < 0) {
+    if(SDL_RenderDrawLines(renderer, buf->buf, len) < 0) {
         PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawPoints returned failure");
         goto error;
     }
@@ -4682,6 +4726,7 @@ static PyObject *RenderDrawRects(PyObject *self,
     Py_buffer *buf = NULL;
     PyObject *py_renderer = NULL;
     SDL_Renderer *renderer;
+    unsigned int len;
 
     crustygame_state *state = PyModule_GetState(self);
 
@@ -4708,22 +4753,24 @@ static PyObject *RenderDrawRects(PyObject *self,
     }
     buf = &bufmem;
 
-    if(buf->ndim != 2) {
-        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+    if(buf->ndim == 1 && buf->shape[0] >= 4) {
+        if(buf->shape[0] * sizeof(int) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0] / 4;
+    } else if (buf->ndim == 2 && buf->shape[1] == 4 && buf->shape[0] >= 1) {
+        if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0];
+    } else {
+        PyErr_SetString(PyExc_BufferError, "Shape must be either 1-D or 2-D with at least 2 contiugous pairs of values.");
         goto error;
     }
 
-    if(buf->shape[0] < 2 || buf->shape[1] != 4) {
-        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
-        goto error;
-    }
-
-    if(buf->shape[0] * 4 * sizeof(int) != (unsigned int)buf->len) {
-        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
-        goto error;
-    }
-
-    if(SDL_RenderDrawRects(renderer, buf->buf, buf->shape[0]) < 0) {
+    if(SDL_RenderDrawRects(renderer, buf->buf, len) < 0) {
         PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawRects returned failure");
         goto error;
     }
@@ -4747,6 +4794,7 @@ static PyObject *RenderDrawPointsF(PyObject *self,
     Py_buffer *buf = NULL;
     PyObject *py_renderer = NULL;
     SDL_Renderer *renderer;
+    unsigned int len;
 
     crustygame_state *state = PyModule_GetState(self);
 
@@ -4773,22 +4821,24 @@ static PyObject *RenderDrawPointsF(PyObject *self,
     }
     buf = &bufmem;
 
-    if(buf->ndim != 2) {
-        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+    if(buf->ndim == 1 && buf->shape[0] >= 4) {
+        if(buf->shape[0] * sizeof(float) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0] / 2;
+    } else if (buf->ndim == 2 && buf->shape[1] == 2 && buf->shape[0] >= 2) {
+        if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0];
+    } else {
+        PyErr_SetString(PyExc_BufferError, "Shape must be either 1-D or 2-D with at least 2 contiugous pairs of values.");
         goto error;
     }
 
-    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
-        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
-        goto error;
-    }
-
-    if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
-        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
-        goto error;
-    }
-
-    if(SDL_RenderDrawPointsF(renderer, buf->buf, buf->shape[0]) < 0) {
+    if(SDL_RenderDrawPointsF(renderer, buf->buf, len) < 0) {
         PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawPointsF returned failure");
         goto error;
     }
@@ -4812,6 +4862,7 @@ static PyObject *RenderDrawLinesF(PyObject *self,
     Py_buffer *buf = NULL;
     PyObject *py_renderer = NULL;
     SDL_Renderer *renderer;
+    unsigned int len;
 
     crustygame_state *state = PyModule_GetState(self);
 
@@ -4838,22 +4889,24 @@ static PyObject *RenderDrawLinesF(PyObject *self,
     }
     buf = &bufmem;
 
-    if(buf->ndim != 2) {
-        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+    if(buf->ndim == 1 && buf->shape[0] >= 4) {
+        if(buf->shape[0] * sizeof(float) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0] / 2;
+    } else if (buf->ndim == 2 && buf->shape[1] == 2 && buf->shape[0] >= 2) {
+        if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0];
+    } else {
+        PyErr_SetString(PyExc_BufferError, "Shape must be either 1-D or 2-D with at least 2 contiugous pairs of values.");
         goto error;
     }
 
-    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
-        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
-        goto error;
-    }
-
-    if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
-        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
-        goto error;
-    }
-
-    if(SDL_RenderDrawLinesF(renderer, buf->buf, buf->shape[0]) < 0) {
+    if(SDL_RenderDrawLinesF(renderer, buf->buf, len) < 0) {
         PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawLinesF returned failure");
         goto error;
     }
@@ -4877,6 +4930,7 @@ static PyObject *RenderDrawRectsF(PyObject *self,
     Py_buffer *buf = NULL;
     PyObject *py_renderer = NULL;
     SDL_Renderer *renderer;
+    unsigned int len;
 
     crustygame_state *state = PyModule_GetState(self);
 
@@ -4903,22 +4957,24 @@ static PyObject *RenderDrawRectsF(PyObject *self,
     }
     buf = &bufmem;
 
-    if(buf->ndim != 2) {
-        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+    if(buf->ndim == 1 && buf->shape[0] >= 4) {
+        if(buf->shape[0] * sizeof(float) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0] / 4;
+    } else if (buf->ndim == 2 && buf->shape[1] == 4 && buf->shape[0] >= 1) {
+        if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
+            PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+            goto error;
+        }
+        len = buf->shape[0];
+    } else {
+        PyErr_SetString(PyExc_BufferError, "Shape must be either 1-D or 2-D with at least 2 contiugous pairs of values.");
         goto error;
     }
 
-    if(buf->shape[0] < 2 || buf->shape[1] != 4) {
-        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
-        goto error;
-    }
-
-    if(buf->shape[0] * 4 * sizeof(float) != (unsigned int)buf->len) {
-        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
-        goto error;
-    }
-
-    if(SDL_RenderDrawRectsF(renderer, buf->buf, buf->shape[0]) < 0) {
+    if(SDL_RenderDrawRectsF(renderer, buf->buf, len) < 0) {
         PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawRectsF returned failure");
         goto error;
     }

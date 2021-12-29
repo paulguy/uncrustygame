@@ -874,6 +874,12 @@ class AudioSequencer():
             buffer[2] = None
         self._loaded = False
 
+    def internal(self, bufnum):
+        if not self._loaded:
+            raise Exception("sequence not loaded, so buffers don't exist.")
+
+        return self._buffer[bufnum][2].internal()
+
     def reset(self):
         """
         Reset everything, frees all buffers and reloads them fresh, so they're
