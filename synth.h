@@ -270,10 +270,11 @@ unsigned int synth_get_fragment_size(Synth *s);
  */
 int synth_has_underrun(Synth *s);
 /*
- * Set the enabled state of the synth, 0 to stop the synth and non-zero to start
- * it.  On the first call, the frame callback will be called to fill the buffers
- * up completely, so this should be called only when things are set up and ready
- * to start generating audio.
+ * Set the enabled state of the output, 0 to stop the output and non-zero to]
+ * start it.  Nothing happens other than some internal state being set up.
+ * The next call to synth frame will try to request buffers filled, then start
+ * the audio output.
+ * This doesn't do anything if there's no device being output to.
  *
  * s        the Synth structure
  * enabled  0 to stop, non-zero to start
@@ -281,12 +282,12 @@ int synth_has_underrun(Synth *s);
  */
 int synth_set_enabled(Synth *s, int enabled);
 /*
- * Indicate that it's a good time for the frame callback to be run.  May result
- * in the frame callback being called once or many times or not at all.
+ * Indicate that it's a good time for the frame callback to be run to fill up
+ * the buffers.
  *
  * s        the Synth structure
- * return   0 on success, -1 on failure, including frame callback failures,
- *          >0 during WAV-only mode to indicate amount of samples output
+ * return   negative on failure, including frame callback failures
+ *          >=0 to indicate amount of samples output
  */
 int synth_frame(Synth *s);
 /*

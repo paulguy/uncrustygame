@@ -762,6 +762,9 @@ void synth_free(Synth *s) {
             if(s->channelbuffer[i].data != NULL) {
                 free(s->channelbuffer[i].data);
             }
+            if(s->channelbuffer[i].name != NULL) {
+                free(s->channelbuffer[i].name);
+            }
         }
         free(s->channelbuffer);
     }
@@ -1054,7 +1057,8 @@ int synth_set_enabled(Synth *s, int enabled) {
 
 int synth_frame(Synth *s) {
     unsigned int needed;
-    int got;
+    /* if needed is 0, got should be 0 */
+    int got = 0;
 
     if(!audiodev_is_open(s)) {
         if(s->outbuf == NULL) {
@@ -1064,11 +1068,9 @@ int synth_frame(Synth *s) {
 
         got = s->synth_frame_cb(s->synth_frame_priv, s);
         if(got < 0) {
-            return(-1);
+            return(got);
         }
         add_samples(s, got);
-
-        return(got);
     } else {
         needed = synth_get_samples_needed(s);
         if(needed > 0) {
@@ -1076,7 +1078,7 @@ int synth_frame(Synth *s) {
             got = s->synth_frame_cb(s->synth_frame_priv, s);
             if(got < 0) {
                 unlock_audiodev(s);
-                return(-1);
+                return(got);
             }
             add_samples(s, got);
             unlock_audiodev(s);
@@ -1088,7 +1090,7 @@ int synth_frame(Synth *s) {
         }
     }
 
-    return(0);
+    return(got);
 }
 
 void synth_invalidate_buffers(Synth *s) {
