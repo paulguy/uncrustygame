@@ -270,9 +270,9 @@ unsigned int synth_get_fragment_size(Synth *s);
  */
 int synth_has_underrun(Synth *s);
 /*
- * Set the enabled state of the output, 0 to stop the output and non-zero to]
+ * Set the enabled state of the output, 0 to stop the output and non-zero to
  * start it.  Nothing happens other than some internal state being set up.
- * The next call to synth frame will try to request buffers filled, then start
+ * The next call to synth_frame will try to request buffers filled, then start
  * the audio output.
  * This doesn't do anything if there's no device being output to.
  *

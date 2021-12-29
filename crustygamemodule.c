@@ -4154,6 +4154,8 @@ static PyType_Spec FilterSpec = {
     .slots = FilterSlots
 };
 
+
+
 /* objects successfully returned by this function automatically have a new
  * reference because objects returned by the various PyObject_Call* functions
  * return with a new reference. */
@@ -4539,11 +4541,422 @@ static struct PyModuleDef_Slot crustygamemodule_slots[] = {
     {0, NULL}
 };
 
+/* PySDL2's versions of these methods would require unpacking arrays in to full
+ * Python lists of SDL_Point or SDL_Rect just to be repacked in to C arrays so
+ * just skip all that nonsense and just take buffers directly which are shaped
+ * much like arrays of SDL_Point or SDL_Rect and pass them along as-is. */
+static PyObject *RenderDrawPoints(PyObject *self,
+                                  PyObject *const *args,
+                                  Py_ssize_t nargs) {
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    PyObject *py_renderer = NULL;
+    SDL_Renderer *renderer;
+
+    crustygame_state *state = PyModule_GetState(self);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        goto error;
+    }
+
+    if(!PyObject_TypeCheck(args[0], state->LP_SDL_Renderer)) {
+        PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
+        goto error;
+    }
+    py_renderer = args[0];
+    Py_INCREF(py_renderer);
+
+    renderer = (SDL_Renderer *)get_value_from_lp_object(state, py_renderer);
+    if(renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
+    if(PyObject_GetBuffer(args[1], &bufmem, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    buf = &bufmem;
+
+    if(buf->ndim != 2) {
+        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+        goto error;
+    }
+
+    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
+        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
+        goto error;
+    }
+
+    if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
+        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+        goto error;
+    }
+
+    if(SDL_RenderDrawPoints(renderer, buf->buf, buf->shape[0]) < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawPoints returned failure");
+        goto error;
+    }
+
+    Py_DECREF(py_renderer);
+    PyBuffer_Release(buf);
+    Py_RETURN_NONE;
+
+error:
+    Py_XDECREF(py_renderer);
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
+    return(NULL);
+}
+
+static PyObject *RenderDrawLines(PyObject *self,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs) {
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    PyObject *py_renderer = NULL;
+    SDL_Renderer *renderer;
+
+    crustygame_state *state = PyModule_GetState(self);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        goto error;
+    }
+
+    if(!PyObject_TypeCheck(args[0], state->LP_SDL_Renderer)) {
+        PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
+        goto error;
+    }
+    py_renderer = args[0];
+    Py_INCREF(py_renderer);
+
+    renderer = (SDL_Renderer *)get_value_from_lp_object(state, py_renderer);
+    if(renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
+    if(PyObject_GetBuffer(args[1], &bufmem, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    buf = &bufmem;
+
+    if(buf->ndim != 2) {
+        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+        goto error;
+    }
+
+    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
+        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
+        goto error;
+    }
+
+    if(buf->shape[0] * 2 * sizeof(int) != (unsigned int)buf->len) {
+        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+        goto error;
+    }
+
+    if(SDL_RenderDrawLines(renderer, buf->buf, buf->shape[0]) < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawPoints returned failure");
+        goto error;
+    }
+
+    Py_DECREF(py_renderer);
+    PyBuffer_Release(buf);
+    Py_RETURN_NONE;
+
+error:
+    Py_XDECREF(py_renderer);
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
+    return(NULL);
+}
+
+static PyObject *RenderDrawRects(PyObject *self,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs) {
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    PyObject *py_renderer = NULL;
+    SDL_Renderer *renderer;
+
+    crustygame_state *state = PyModule_GetState(self);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        goto error;
+    }
+
+    if(!PyObject_TypeCheck(args[0], state->LP_SDL_Renderer)) {
+        PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
+        goto error;
+    }
+    py_renderer = args[0];
+    Py_INCREF(py_renderer);
+
+    renderer = (SDL_Renderer *)get_value_from_lp_object(state, py_renderer);
+    if(renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
+    if(PyObject_GetBuffer(args[1], &bufmem, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    buf = &bufmem;
+
+    if(buf->ndim != 2) {
+        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+        goto error;
+    }
+
+    if(buf->shape[0] < 2 || buf->shape[1] != 4) {
+        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
+        goto error;
+    }
+
+    if(buf->shape[0] * 4 * sizeof(int) != (unsigned int)buf->len) {
+        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+        goto error;
+    }
+
+    if(SDL_RenderDrawRects(renderer, buf->buf, buf->shape[0]) < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawRects returned failure");
+        goto error;
+    }
+
+    Py_DECREF(py_renderer);
+    PyBuffer_Release(buf);
+    Py_RETURN_NONE;
+
+error:
+    Py_XDECREF(py_renderer);
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
+    return(NULL);
+}
+
+static PyObject *RenderDrawPointsF(PyObject *self,
+                                   PyObject *const *args,
+                                   Py_ssize_t nargs) {
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    PyObject *py_renderer = NULL;
+    SDL_Renderer *renderer;
+
+    crustygame_state *state = PyModule_GetState(self);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        goto error;
+    }
+
+    if(!PyObject_TypeCheck(args[0], state->LP_SDL_Renderer)) {
+        PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
+        goto error;
+    }
+    py_renderer = args[0];
+    Py_INCREF(py_renderer);
+
+    renderer = (SDL_Renderer *)get_value_from_lp_object(state, py_renderer);
+    if(renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
+    if(PyObject_GetBuffer(args[1], &bufmem, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    buf = &bufmem;
+
+    if(buf->ndim != 2) {
+        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+        goto error;
+    }
+
+    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
+        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
+        goto error;
+    }
+
+    if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
+        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+        goto error;
+    }
+
+    if(SDL_RenderDrawPointsF(renderer, buf->buf, buf->shape[0]) < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawPointsF returned failure");
+        goto error;
+    }
+
+    Py_DECREF(py_renderer);
+    PyBuffer_Release(buf);
+    Py_RETURN_NONE;
+
+error:
+    Py_XDECREF(py_renderer);
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
+    return(NULL);
+}
+
+static PyObject *RenderDrawLinesF(PyObject *self,
+                                  PyObject *const *args,
+                                  Py_ssize_t nargs) {
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    PyObject *py_renderer = NULL;
+    SDL_Renderer *renderer;
+
+    crustygame_state *state = PyModule_GetState(self);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        goto error;
+    }
+
+    if(!PyObject_TypeCheck(args[0], state->LP_SDL_Renderer)) {
+        PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
+        goto error;
+    }
+    py_renderer = args[0];
+    Py_INCREF(py_renderer);
+
+    renderer = (SDL_Renderer *)get_value_from_lp_object(state, py_renderer);
+    if(renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
+    if(PyObject_GetBuffer(args[1], &bufmem, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    buf = &bufmem;
+
+    if(buf->ndim != 2) {
+        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+        goto error;
+    }
+
+    if(buf->shape[0] < 2 || buf->shape[1] != 2) {
+        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
+        goto error;
+    }
+
+    if(buf->shape[0] * 2 * sizeof(float) != (unsigned int)buf->len) {
+        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+        goto error;
+    }
+
+    if(SDL_RenderDrawLinesF(renderer, buf->buf, buf->shape[0]) < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawLinesF returned failure");
+        goto error;
+    }
+
+    Py_DECREF(py_renderer);
+    PyBuffer_Release(buf);
+    Py_RETURN_NONE;
+
+error:
+    Py_XDECREF(py_renderer);
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
+    return(NULL);
+}
+
+static PyObject *RenderDrawRectsF(PyObject *self,
+                                  PyObject *const *args,
+                                  Py_ssize_t nargs) {
+    Py_buffer bufmem;
+    Py_buffer *buf = NULL;
+    PyObject *py_renderer = NULL;
+    SDL_Renderer *renderer;
+
+    crustygame_state *state = PyModule_GetState(self);
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 2 argument");
+        goto error;
+    }
+
+    if(!PyObject_TypeCheck(args[0], state->LP_SDL_Renderer)) {
+        PyErr_SetString(PyExc_TypeError, "got something not an SDL_Renderer");
+        goto error;
+    }
+    py_renderer = args[0];
+    Py_INCREF(py_renderer);
+
+    renderer = (SDL_Renderer *)get_value_from_lp_object(state, py_renderer);
+    if(renderer == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Renderer");
+        goto error;
+    }
+
+    if(PyObject_GetBuffer(args[1], &bufmem, PyBUF_CONTIG_RO) < 0) {
+        return(NULL);
+    }
+    buf = &bufmem;
+
+    if(buf->ndim != 2) {
+        PyErr_SetString(PyExc_BufferError, "Buffer must have 2 dimensions.");
+        goto error;
+    }
+
+    if(buf->shape[0] < 2 || buf->shape[1] != 4) {
+        PyErr_SetString(PyExc_BufferError, "Shape must be at least 2 on the first axis and exactly 2 on the second.");
+        goto error;
+    }
+
+    if(buf->shape[0] * 4 * sizeof(float) != (unsigned int)buf->len) {
+        PyErr_SetString(PyExc_BufferError, "computed size doesn't match length");
+        goto error;
+    }
+
+    if(SDL_RenderDrawRectsF(renderer, buf->buf, buf->shape[0]) < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "SDL_RenderDrawRectsF returned failure");
+        goto error;
+    }
+
+    Py_DECREF(py_renderer);
+    PyBuffer_Release(buf);
+    Py_RETURN_NONE;
+
+error:
+    Py_XDECREF(py_renderer);
+    if(buf != NULL) {
+        PyBuffer_Release(buf);
+    }
+    return(NULL);
+}
+
+static struct PyMethodDef crustygamefuncs[] = {
+    {"SDL_RenderDrawPoints",
+        (_PyCFunctionFast)RenderDrawPoints,  METH_FASTCALL, NULL},
+    {"SDL_RenderDrawLines",
+        (_PyCFunctionFast)RenderDrawLines,   METH_FASTCALL, NULL},
+    {"SDL_RenderDrawRects",
+        (_PyCFunctionFast)RenderDrawRects,   METH_FASTCALL, NULL},
+    {"SDL_RenderDrawPointsF",
+        (_PyCFunctionFast)RenderDrawPointsF, METH_FASTCALL, NULL},
+    {"SDL_RenderDrawLinesF",
+        (_PyCFunctionFast)RenderDrawLinesF,  METH_FASTCALL, NULL},
+    {"SDL_RenderDrawRectsF",
+        (_PyCFunctionFast)RenderDrawRectsF,  METH_FASTCALL, NULL},
+    {NULL}
+};
+
 static struct PyModuleDef crustygamemodule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "crustygame",
     .m_doc = NULL,
     .m_size = sizeof(crustygame_state),
+    .m_methods = crustygamefuncs,
     .m_slots = crustygamemodule_slots,
     .m_free = (freefunc)crustygame_free
 };
