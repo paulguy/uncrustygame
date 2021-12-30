@@ -1156,12 +1156,12 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
         }
         memset(s->channelbuffer[i].data, 0, sizeof(float) * s->buffersize);
 
-        s->channelbuffer[i].name = malloc(strlen(CHANNEL_PREFIX) + 4 + 1);
+        s->channelbuffer[i].name = malloc(strlen(CHANNEL_PREFIX) + 10 + 1);
         if(s->channelbuffer[i].name == NULL) {
             LOG_PRINTF(s, "Failed to allocate memory for channel name.\n");
             goto error;
         }
-        snprintf(s->channelbuffer[i].name, strlen(CHANNEL_PREFIX) + 4 + 1, "%s%04u", CHANNEL_PREFIX, i);
+        snprintf(s->channelbuffer[i].name, strlen(CHANNEL_PREFIX) + 10 + 1, "%s%04u", CHANNEL_PREFIX, i);
     }
 
     if(s->outbuf != NULL) {
