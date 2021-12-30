@@ -130,25 +130,31 @@ def make_color(r, g, b, a):
            (int(b) << cg.TILEMAP_BSHIFT) |
            (int(a) << cg.TILEMAP_ASHIFT))
 
+def unmake_color(color):
+    return int(color) & cg.TILEMAP_RMASK >> cg.TILEMAP_RSHIFT, \
+           int(color) & cg.TILEMAP_GMASK >> cg.TILEMAP_GSHIFT, \
+           int(color) & cg.TILEMAP_BMASK >> cg.TILEMAP_BSHIFT, \
+           int(color) & cg.TILEMAP_AMASK >> cg.TILEMAP_ASHIFT
+
 def color_from_rad(rad, cmin, cmax):
     if rad >= 0 and rad < (numpy.pi * 2 / 6):
         rad = (rad * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
-        return make_color(cmax, rad, cmin, 255)
+        return cmax, rad, cmin
     elif rad >= (numpy.pi * 2 / 6) and rad < (numpy.pi * 2 / 6 * 2):
         rad = cmax - ((rad - (numpy.pi * 2 / 6)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
-        return make_color(rad, cmax, cmin, 255)
+        return rad, cmax, cmin
     elif rad >= (numpy.pi * 2 / 6 * 2) and rad < (numpy.pi * 2 / 6 * 3):
         rad = ((rad - (numpy.pi * 2 / 6 * 2)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
-        return make_color(cmin, cmax, rad, 255)
+        return cmin, cmax, rad
     elif rad >= (numpy.pi * 2 / 6 * 3) and rad < (numpy.pi * 2 / 6 * 4):
         rad = cmax - ((rad - (numpy.pi * 2 / 6 * 3)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
-        return make_color(cmin, rad, cmax, 255)
+        return cmin, rad, cmax
     elif rad >= (numpy.pi * 2 / 6 * 4) and rad < (numpy.pi * 2 / 6 * 5):
         rad = ((rad - (numpy.pi * 2 / 6 * 4)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
-        return make_color(rad, cmin, cmax, 255)
+        return rad, cmin, cmax
 
     rad = cmax - ((rad - (numpy.pi * 2 / 6 * 5)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
-    return make_color(cmax, cmin, rad, 255)
+    return cmax, cmin, rad
 
 # this is probably bad but whichever
 def string_to_ints(string):
@@ -395,7 +401,7 @@ class Scope():
             raise Exception("Failed to set render target")
         if SDL_SetRenderDrawColor(self._renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT) < 0:
             raise Exception()
-        if SDL_RenderFillRect(self._renderer, None) < 0:
+        if SDL_RenderClear(self._renderer) < 0:
             raise Exception()
         if SDL_SetRenderDrawColor(self._renderer, 255, 255, 255, SDL_ALPHA_OPAQUE) < 0:
             raise Exception()
@@ -495,6 +501,25 @@ def do_main(window, renderer, pixfmt):
     y2speed = random.uniform(0.0, 64.0)
     blendmode = cg.TILEMAP_BLENDMODE_ADD
     colorrad = 0.0
+
+    if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_OPAQUE) < 0:
+        raise(Exception())
+    osc1 = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, 320, 240)
+    if SDL_SetRenderTarget(renderer, osc1) < 0:
+        raise Exception("Failed to set render target")
+    if SDL_RenderClear(ll.renderer) < 0:
+        raise(Exception())
+    if SDL_SetTextureBlendMode(osc1, SDL_BLENDMODE_NONE) < 0:
+        raise Exception("Couldn't set scope texture blend mode.")
+    osc2 = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, 320, 240)
+    if SDL_SetRenderTarget(renderer, osc2) < 0:
+        raise Exception("Failed to set render target")
+    if SDL_RenderClear(renderer) < 0:
+        raise(Exception())
+    if SDL_SetRenderTarget(renderer, None) < 0:
+        raise Exception("Failed to set render target")
+    osccenter = SDL_Point(160, 120)
+    oscdst = SDL_Rect(-20, -20, 360, 280)
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
@@ -722,12 +747,29 @@ def do_main(window, renderer, pixfmt):
         colorrad = colorrad + (numpy.pi * timetaken)
         if colorrad >= numpy.pi * 2:
             colorrad = colorrad - (numpy.pi * 2)
-        l1.colormod(color_from_rad(colorrad, 0, 255))
+        modr, modg, modb = color_from_rad(colorrad, 0, 255)
+        l1.colormod(make_color(modr, modg, modb, 255))
 
         clear_frame(ll, 32, 128, 192)
         if scope != None:
+            if SDL_SetRenderTarget(renderer, osc1) < 0:
+                raise Exception("Failed to set render target")
+            if SDL_RenderCopy(renderer, osc2, None, None) < 0:
+                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+            if SDL_SetRenderTarget(renderer, osc2) < 0:
+                raise Exception("Failed to set render target")
+            modr, modg, modb = color_from_rad(colorrad, 0, 240)
+            if SDL_SetTextureColorMod(osc2, int(modr), int(modg), int(modb)) < 0:
+                raise Exception("Couldn't set texture colormod.")
+            if SDL_RenderCopyEx(renderer, osc1, None, oscdst, 1, osccenter, SDL_FLIP_NONE) < 0:
+                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
             if SDL_RenderCopy(renderer, scope.texture, None, None) < 0:
                 raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+            if SDL_SetRenderTarget(renderer, None) < 0:
+                raise Exception("Failed to restore render target")
+            if SDL_RenderCopy(renderer, osc2, None, None) < 0:
+                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+
         l1.pos(int(x2), int(y2))
         l2.pos(int(x), int(y))
         ll.target_tileset(ts2)
