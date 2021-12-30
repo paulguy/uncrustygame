@@ -683,11 +683,10 @@ class AudioSequencer():
             f.input(b[2])
         if status[1] != None:
             pos = status[1]
-            # input buffer position is natively float, so don't convert to int
             if pos < 0:
-                pos = (pos * flt[8][3]) + (flt[8][3] - 1)
+                pos = int((pos * flt[8][3]) + (flt[8][3] - 1))
             else:
-                pos = pos * flt[8][3]
+                pos = int(pos * flt[8][3])
             f.input_pos(pos)
         if status[2] != None:
             buf = status[2]
