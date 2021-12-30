@@ -123,8 +123,6 @@ def clear_frame(ll, r, g, b):
         raise(Exception())
     if SDL_RenderClear(ll.renderer) < 0:
         raise(Exception())
-    if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT) < 0:
-        raise(Exception())
 
 def make_color(r, g, b, a):
     return((int(r) << cg.TILEMAP_RSHIFT) |
@@ -151,14 +149,6 @@ def color_from_rad(rad, cmin, cmax):
 
     rad = cmax - ((rad - (numpy.pi * 2 / 6 * 5)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
     return make_color(cmax, cmin, rad, 255)
-
-def clear_frame(ll, r, g, b):
-    if SDL_SetRenderDrawColor(ll.renderer, r, g, b, SDL_ALPHA_OPAQUE) < 0:
-        raise(Exception())
-    if SDL_RenderClear(ll.renderer) < 0:
-        raise(Exception())
-    if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT) < 0:
-        raise(Exception())
 
 # this is probably bad but whichever
 def string_to_ints(string):
@@ -367,6 +357,8 @@ class Scope():
         self._array = numpy.zeros(shape=w * 2, dtype=numpy.float32)
         self._array[:w*2:2] = numpy.arange(0, w)
         self._tex = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, w, h)
+        if SDL_SetTextureBlendMode(self._tex, SDL_BLENDMODE_BLEND) < 0:
+            raise Exception("Couldn't set scope texture blend mode.")
 
     @property
     def texture(self):
@@ -395,11 +387,18 @@ class Scope():
         else:
             self._array[1:self._w*2:2] = first[:self._w]
 
-        self._array[1::2] *= self._h
+        self._array[1::2] *= self._h / 2
+        self._array[1::2] += self._h / 2
 
         origtarget = SDL_GetRenderTarget(self._renderer)
         if SDL_SetRenderTarget(self._renderer, self._tex) < 0:
             raise Exception("Failed to set render target")
+        if SDL_SetRenderDrawColor(self._renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT) < 0:
+            raise Exception()
+        if SDL_RenderFillRect(self._renderer, None) < 0:
+            raise Exception()
+        if SDL_SetRenderDrawColor(self._renderer, 255, 255, 255, SDL_ALPHA_OPAQUE) < 0:
+            raise Exception()
         # call crustygame version
         cg.SDL_RenderDrawLinesF(self._renderer, self._array)
         if SDL_SetRenderTarget(self._renderer, origtarget) < 0:
@@ -530,8 +529,6 @@ def do_main(window, renderer, pixfmt):
             # possible race condition between this and aud.frame() but it'll
             # just result in missed samples, no big deal
             scope.update()
-            if SDL_RenderCopy(renderer, scope.texture, None, None) < 0:
-                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
 
         if seq != None:
             for s in seq:
@@ -607,7 +604,7 @@ def do_main(window, renderer, pixfmt):
                                 print(e)
                                 seq = None
                                 break
-                    scope = Scope(renderer, seq[0], 0, pixfmt, 100, 100)
+                    scope = Scope(renderer, seq[0], 0, pixfmt, 320, 240)
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
@@ -728,6 +725,9 @@ def do_main(window, renderer, pixfmt):
         l1.colormod(color_from_rad(colorrad, 0, 255))
 
         clear_frame(ll, 32, 128, 192)
+        if scope != None:
+            if SDL_RenderCopy(renderer, scope.texture, None, None) < 0:
+                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
         l1.pos(int(x2), int(y2))
         l2.pos(int(x), int(y))
         ll.target_tileset(ts2)
