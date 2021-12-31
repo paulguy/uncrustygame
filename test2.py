@@ -520,6 +520,8 @@ def do_main(window, renderer, pixfmt):
         raise Exception("Failed to set render target")
     osccenter = SDL_Point(160, 120)
     oscdst = SDL_Rect(-20, -20, 360, 280)
+    scopeldst = SDL_Rect(0, 40, 320, 120)
+    scoperdst = SDL_Rect(0, 80, 320, 120)
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
@@ -527,7 +529,8 @@ def do_main(window, renderer, pixfmt):
 
     wavout = False
     seq = None
-    scope = None
+    scopel = None
+    scoper = None
     running = True
     playing = True
     lastTime = time.monotonic()
@@ -543,17 +546,19 @@ def do_main(window, renderer, pixfmt):
             if seq != None:
                 for s in seq:
                     aud.del_sequence(s)
-                scope = None
+                scopel = None
+                scoper = None
                 seq = None
             _, exc = aud.error
             print_tb(exc.__traceback__)
             print(exc)
             aud.enabled(True)
 
-        if scope != None:
+        if scopel != None:
             # possible race condition between this and aud.frame() but it'll
             # just result in missed samples, no big deal
-            scope.update()
+            scopel.update()
+            scoper.update()
 
         if seq != None:
             for s in seq:
@@ -562,7 +567,8 @@ def do_main(window, renderer, pixfmt):
                     seq.remove(s)
                     print("Sequence ended")
             if len(seq) == 0:
-                scope = None
+                scopel = None
+                scoper = None
                 seq = None
 
         event = SDL_Event()
@@ -578,7 +584,8 @@ def do_main(window, renderer, pixfmt):
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
-                        scope = None
+                        scopel = None
+                        scoper = None
                         seq = None
                     macros = (("FILTER_SIZE", (), str(FILTER_TAPS)),
                               ("FILTER_SLICES", (), str(SLICES)))
@@ -629,13 +636,15 @@ def do_main(window, renderer, pixfmt):
                                 print(e)
                                 seq = None
                                 break
-                    scope = Scope(renderer, seq[0], 0, pixfmt, 320, 240)
+                    scopel = Scope(renderer, seq[0], 0, pixfmt, 320, 120)
+                    scoper = Scope(renderer, seq[0], 1, pixfmt, 320, 120)
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
-                        scope = None
+                        scopel = None
+                        scoper = None
                         seq = None
                 elif event.key.keysym.sym == SDLK_r:
                     aud.enabled(True)
@@ -751,19 +760,21 @@ def do_main(window, renderer, pixfmt):
         l1.colormod(make_color(modr, modg, modb, 255))
 
         clear_frame(ll, 32, 128, 192)
-        if scope != None:
+        if scopel != None:
             if SDL_SetRenderTarget(renderer, osc1) < 0:
                 raise Exception("Failed to set render target")
             if SDL_RenderCopy(renderer, osc2, None, None) < 0:
                 raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
             if SDL_SetRenderTarget(renderer, osc2) < 0:
                 raise Exception("Failed to set render target")
-            modr, modg, modb = color_from_rad(colorrad, 0, 240)
+            modr, modg, modb = color_from_rad(colorrad, 0, 250)
             if SDL_SetTextureColorMod(osc2, int(modr), int(modg), int(modb)) < 0:
                 raise Exception("Couldn't set texture colormod.")
             if SDL_RenderCopyEx(renderer, osc1, None, oscdst, 1, osccenter, SDL_FLIP_NONE) < 0:
                 raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
-            if SDL_RenderCopy(renderer, scope.texture, None, None) < 0:
+            if SDL_RenderCopy(renderer, scopel.texture, None, scopeldst) < 0:
+                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+            if SDL_RenderCopy(renderer, scoper.texture, None, scoperdst) < 0:
                 raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
             if SDL_SetRenderTarget(renderer, None) < 0:
                 raise Exception("Failed to restore render target")
