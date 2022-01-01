@@ -381,17 +381,19 @@ class Scope():
     def update(self):
         first, second = self._get_buffers()
 
-        if len(first) < self._w:
+        if len(first) < self._w and len(first) != 0:
             pos = len(first) * 2 + 1
             self._array[1:pos:2] = first
-            if len(first) + len(second) < self._w:
-                pos2 = pos + len(first) * 2
-                self._array[pos:pos2:2] = second
-                self._array[pos2::2].fill(0)
-            else:
-                self._array[pos::2] = second[:self._w - len(first)]
+            if len(second) != 0:
+                if len(first) + len(second) < self._w:
+                    pos2 = pos + len(first) * 2
+                    self._array[pos:pos2:2] = second
+                    self._array[pos2::2].fill(0)
+                else:
+                    self._array[pos::2] = second[:self._w - len(first)]
         else:
-            self._array[1:self._w*2:2] = first[:self._w]
+            if len(first) != 0:
+                self._array[1:self._w*2:2] = first[:self._w]
 
         self._array[1::2] *= self._h / 2
         self._array[1::2] += self._h / 2
@@ -501,6 +503,7 @@ def do_main(window, renderer, pixfmt):
     y2speed = random.uniform(0.0, 64.0)
     blendmode = cg.TILEMAP_BLENDMODE_ADD
     colorrad = 0.0
+    colorrad2 = 0.25
 
     if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_OPAQUE) < 0:
         raise(Exception())
@@ -520,8 +523,8 @@ def do_main(window, renderer, pixfmt):
         raise Exception("Failed to set render target")
     osccenter = SDL_Point(160, 120)
     oscdst = SDL_Rect(-20, -20, 360, 280)
-    scopeldst = SDL_Rect(0, 40, 320, 120)
-    scoperdst = SDL_Rect(0, 80, 320, 120)
+    scopeldst = SDL_Rect(0, 30, 320, 120)
+    scoperdst = SDL_Rect(0, 90, 320, 120)
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
@@ -636,8 +639,9 @@ def do_main(window, renderer, pixfmt):
                                 print(e)
                                 seq = None
                                 break
-                    scopel = Scope(renderer, seq[0], 0, pixfmt, 320, 120)
-                    scoper = Scope(renderer, seq[0], 1, pixfmt, 320, 120)
+                    if seq != None:
+                        scopel = Scope(renderer, seq[0], 0, pixfmt, 320, 120)
+                        scoper = Scope(renderer, seq[0], 1, pixfmt, 320, 120)
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
@@ -756,30 +760,36 @@ def do_main(window, renderer, pixfmt):
         colorrad = colorrad + (numpy.pi * timetaken)
         if colorrad >= numpy.pi * 2:
             colorrad = colorrad - (numpy.pi * 2)
+        colorrad2 = colorrad2 + (numpy.pi * timetaken)
+        if colorrad2 >= numpy.pi * 2:
+            colorrad2 = colorrad2 - (numpy.pi * 2)
         modr, modg, modb = color_from_rad(colorrad, 0, 255)
         l1.colormod(make_color(modr, modg, modb, 255))
 
         clear_frame(ll, 32, 128, 192)
+        if SDL_SetRenderTarget(renderer, osc1) < 0:
+            raise Exception("Failed to set render target")
+        if SDL_RenderCopy(renderer, osc2, None, None) < 0:
+            raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+        if SDL_SetRenderTarget(renderer, osc2) < 0:
+            raise Exception("Failed to set render target")
+        if SDL_RenderCopyEx(renderer, osc1, None, oscdst, 5, osccenter, SDL_FLIP_NONE) < 0:
+            raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
         if scopel != None:
-            if SDL_SetRenderTarget(renderer, osc1) < 0:
-                raise Exception("Failed to set render target")
-            if SDL_RenderCopy(renderer, osc2, None, None) < 0:
-                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
-            if SDL_SetRenderTarget(renderer, osc2) < 0:
-                raise Exception("Failed to set render target")
             modr, modg, modb = color_from_rad(colorrad, 0, 250)
-            if SDL_SetTextureColorMod(osc2, int(modr), int(modg), int(modb)) < 0:
+            if SDL_SetTextureColorMod(scopel.texture, int(modr), int(modg), int(modb)) < 0:
                 raise Exception("Couldn't set texture colormod.")
-            if SDL_RenderCopyEx(renderer, osc1, None, oscdst, 1, osccenter, SDL_FLIP_NONE) < 0:
-                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
             if SDL_RenderCopy(renderer, scopel.texture, None, scopeldst) < 0:
                 raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+            modr, modg, modb = color_from_rad(colorrad2, 0, 250)
+            if SDL_SetTextureColorMod(scoper.texture, int(modr), int(modg), int(modb)) < 0:
+                raise Exception("Couldn't set texture colormod.")
             if SDL_RenderCopy(renderer, scoper.texture, None, scoperdst) < 0:
                 raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
-            if SDL_SetRenderTarget(renderer, None) < 0:
-                raise Exception("Failed to restore render target")
-            if SDL_RenderCopy(renderer, osc2, None, None) < 0:
-                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+        if SDL_SetRenderTarget(renderer, None) < 0:
+            raise Exception("Failed to restore render target")
+        if SDL_RenderCopy(renderer, osc2, None, None) < 0:
+            raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
 
         l1.pos(int(x2), int(y2))
         l2.pos(int(x), int(y))
