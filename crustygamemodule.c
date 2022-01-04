@@ -58,6 +58,7 @@ typedef struct {
     PyObject_HEAD
     LayerListObject *ll;
     TilemapObject *tm;
+    PyObject *tex;
     int layer;
 } LayerObject;
 
@@ -1073,7 +1074,7 @@ static PyObject *LayerList_TM_layer(TilemapObject *self,
         return(NULL);
     }
 
-    arglist = PyTuple_Pack(3, self->ll, self, args[0]);
+    arglist = PyTuple_Pack(4, self->ll, self, Py_None, args[0]);
     if(arglist == NULL) {
         return(NULL);
     }
@@ -1146,6 +1147,7 @@ static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     }
     self->ll = NULL;
     self->tm = NULL;
+    self->tex = NULL;
     self->layer = -1;
 
     return((PyObject *)self);
@@ -1154,6 +1156,8 @@ static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
     PyObject *name = NULL;
     const char *cname;
+    int tilemap = -1;
+    SDL_Texture *tex = NULL;
 
     if(self->ll != NULL) {
         PyErr_SetString(PyExc_TypeError, "Layer already initialized");
@@ -1162,19 +1166,41 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
 
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OOO", &(self->ll), &(self->tm), &name)) {
+    if(!PyArg_ParseTuple(args, "OOOO", &(self->ll), &(self->tm), &(self->tex), &name)) {
         return(-1);
     }
     Py_XINCREF(self->ll);
     Py_XINCREF(self->tm);
+    Py_XINCREF(self->tex);
     Py_XINCREF(name);
     if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
         PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
         goto error;
     }
-    if(!PyObject_TypeCheck(self->tm, state->TilemapType)) {
-        PyErr_SetString(PyExc_TypeError, "second argument must be a Tilemap");
-        goto error;
+    if((PyObject *)(self->tm) == Py_None) {
+        Py_CLEAR(self->tm);
+        /* tilemap is already -1 */
+    } else {
+        if(!PyObject_TypeCheck(self->tm, state->TilemapType)) {
+            PyErr_SetString(PyExc_TypeError, "second argument must be a Tilemap");
+            goto error;
+        }
+        tilemap = self->tm->tilemap;
+    }
+
+    if(self->tex == Py_None) {
+        Py_CLEAR(self->tex);
+        /* tex is already NULL */
+    } else {
+        if(!PyObject_TypeCheck(self->tex, state->LP_SDL_Texture)) {
+            PyErr_SetString(PyExc_TypeError, "layer texture must be a SDL_Texture or None.");
+            goto error;
+        }
+        tex = get_value_from_lp_object(state, self->tex);
+        if(tex == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Texture");
+            goto error;
+        }
     }
 
     if(name == Py_None) {
@@ -1186,7 +1212,7 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
         }
     }
 
-    self->layer = tilemap_add_layer(self->ll->ll, self->tm->tilemap, cname);
+    self->layer = tilemap_add_layer(self->ll->ll, tilemap, tex, cname);
     Py_CLEAR(name);
     if(self->layer < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_add_layer failed");
@@ -1197,6 +1223,7 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
 
 error:
     Py_XDECREF(name);
+    Py_CLEAR(self->tex);
     Py_CLEAR(self->tm);
     Py_CLEAR(self->ll);
     return(-1);
@@ -1206,6 +1233,7 @@ static void Layer_dealloc(LayerObject *self) {
     if(self->layer >= 0) {
         tilemap_free_layer(self->ll->ll, self->layer);
     }
+    Py_XDECREF(self->tex);
     Py_XDECREF(self->tm);
     Py_XDECREF(self->ll);
     Py_TYPE(self)->tp_free((PyObject *) self);
@@ -1479,6 +1507,39 @@ static PyObject *Tilemap_set_layer_blendmode(LayerObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *Tilemap_set_layer_relative(LayerObject *self,
+                                            PyTypeObject *defining_class,
+                                            PyObject *const *args,
+                                            Py_ssize_t nargs,
+                                            PyObject *kwnames) {
+    LayerObject *layer;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
+        return(NULL);
+    }
+    if(!PyObject_TypeCheck(args[0], state->LayerType)) {
+        PyErr_SetString(PyExc_TypeError, "relative layer type must be a Layer");
+        return(NULL);
+    }
+    layer = (LayerObject *)args[0];
+
+    if(tilemap_set_layer_relative(self->ll->ll, self->layer, layer->layer) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_blendmode failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
+
 static PyObject *Tilemap_draw_layer(LayerObject *self,
                                     PyTypeObject *defining_class,
                                     PyObject *const *args,
@@ -1540,6 +1601,11 @@ static PyMethodDef Layer_methods[] = {
         (PyCMethod) Tilemap_set_layer_blendmode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Set the layer blendmode."},
+    {
+        "relative",
+        (PyCMethod) Tilemap_set_layer_relative,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Set a layer for this layer's position and angle to be relative to."},
     {
         "draw",
         (PyCMethod) Tilemap_draw_layer,

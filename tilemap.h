@@ -345,11 +345,14 @@ int tilemap_update_tilemap(LayerList *ll,
  *
  * ll       the LayerList
  * tilemap  the tilemap which the layer will display.
+ * tex      instead of a tilemap, just refer to a texture directly.  tilemap
+ *          is ignored in this case.
  * name     optional name or NULL
  * return   the layer handle or -1 on failure
  */
 int tilemap_add_layer(LayerList *ll,
                       unsigned int tilemap,
+                      SDL_Texture *tex,
                       const char *name);
 /*
  * Free a layer.
@@ -464,6 +467,18 @@ int tilemap_set_layer_colormod(LayerList *ll,
 int tilemap_set_layer_blendmode(LayerList *ll,
                                 unsigned int index,
                                 int blendMode);
+/*
+ * Set a layer for this layer's position and angle to be relative to, or unset
+ * a relative angle (relative to screen as usual).
+ *
+ * ll       the LayerList
+ * index    the layer to update
+ * rel      the layer which this layer should relate to or -1 to unset
+ * return   0 on success, -1 on failure
+ */
+int tilemap_set_layer_relative(LayerList *ll,
+                               unsigned int index,
+                               int rel);
 /*
  * Finally, draw a layer to the screen or render target.
  *
