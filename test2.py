@@ -10,6 +10,7 @@ from traceback import print_tb
 from sys import argv
 import numpy
 from scipy import signal
+import display
 
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"
@@ -23,118 +24,6 @@ MIN_TRANS_WIDTH = 80
 TRANS_WIDTH_DIV = 500
 
 WAVEFORM_HARMONICS = 8
-
-def _driver_key(info):
-    info = info[1]
-    # everything else is in between
-    priority = 2
-    if bytes(info.name) == b'metal' or \
-       bytes(info.name) == b'direct3d11':
-        # prefer platform-specific APIs
-        priority = 0
-    elif bytes(info.name).startswith(b'opengles'):
-        # prefer opengl es over opengl because it has complete support for the
-        # uncrustygame features
-        priority = 1
-    elif info.flags & SDL_RENDERER_SOFTWARE:
-        # software will be very slow so don't prefer it, but it should display
-        # _mostly_ OK
-        priority = 9998
-
-    found_32bit_alpha = 0
-    for i in range(info.num_texture_formats):
-        if SDL_BITSPERPIXEL(info.texture_formats[i]) == 32 and \
-           SDL_ISPIXELFORMAT_ALPHA(info.texture_formats[i]):
-               found_32bit_alpha = 1
-               break
-
-    if found_32bit_alpha == 0:
-        # if something is missing the necessary formats, it's very unpreferable
-        # because there's little to no chance anything will display properly
-        priority = 9999
-
-    return priority
-
-def initialize_video(title :str,
-                     width :int, height :int,
-                     winflags :int, rendererflags :int) \
-                     -> (SDL_Window, SDL_Renderer, int):
-    """
-    Initialize video in a way that as far as I can tell is the best, preferred 
-    method to get the best functionality out of pycrustygame.
-
-    title, width, height and winflags are simply passed on to SDL_CreateWindow
-    rendererflags is passed on to SDL_CreateRenderer
-    returns window, renderer and prefered pixel format or raises RuntimeError if
-    no window or renderer could be created
-    """
-    driver = list()
-    pixfmt = SDL_PIXELFORMAT_UNKNOWN
-    drivers = SDL_GetNumRenderDrivers()
-
-    for i in range(drivers):
-        d = SDL_RendererInfo()
-        if SDL_GetRenderDriverInfo(i, d) < 0:
-            raise RuntimeError("Couldn't get video renderer info for {}".format(i))
-        driver.append((i, d))
-
-    driver = sorted(driver, key=_driver_key)
-
-    window = SDL_CreateWindow(title.encode("utf-8"), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, winflags)
-    if window == None:
-        raise RuntimeError("Couldn't create SDL window.")
-
-    renderer = None
-    for d in driver:
-        renderer = SDL_CreateRenderer(window, d[0], rendererflags)
-        # if initialization failed, continue down the priority list
-        if renderer == None:
-            continue
-
-        pixfmt = SDL_PIXELFORMAT_UNKNOWN
-        # find the most prefered format
-        for i in range(d[1].num_texture_formats):
-            if SDL_BITSPERPIXEL(d[1].texture_formats[i]) == 32 and \
-               SDL_ISPIXELFORMAT_ALPHA(d[1].texture_formats[i]):
-                pixfmt = d[1].texture_formats[i]
-                break
-
-        # otherwise, try to find something with the most color depth, although
-        # it's pretty likely to just fail.
-        if pixfmt == SDL_PIXELFORMAT_UNKNOWN:
-            maxbpp = 0
-            for i in range(d[1].num_texture_formats):
-                if SDL_BITSPERPIXEL(d[1].texture_formats[i]) > maxbpp:
-                    maxbpp = SDL_BITSPERPIXEL(d[1].texture_formats[i])
-                    pixfmt = d[1].texture_formats[i]
-
-        print("Picked {} renderer".format(d[1].name.decode("utf-8")))
-        break
-
-    if renderer == None:
-        SDL_DestroyWindow(window)
-        raise RuntimeError("Couldn't initialze any SDL video device.")
-
-    return window, renderer, pixfmt
-
-
-def clear_frame(ll, r, g, b):
-    if SDL_SetRenderDrawColor(ll.renderer, r, g, b, SDL_ALPHA_OPAQUE) < 0:
-        raise(Exception())
-    if SDL_RenderClear(ll.renderer) < 0:
-        raise(Exception())
-
-def make_color(r, g, b, a):
-    return((int(r) << cg.TILEMAP_RSHIFT) |
-           (int(g) << cg.TILEMAP_GSHIFT) |
-           (int(b) << cg.TILEMAP_BSHIFT) |
-           (int(a) << cg.TILEMAP_ASHIFT))
-
-def unmake_color(color):
-    return int(color) & cg.TILEMAP_RMASK >> cg.TILEMAP_RSHIFT, \
-           int(color) & cg.TILEMAP_GMASK >> cg.TILEMAP_GSHIFT, \
-           int(color) & cg.TILEMAP_BMASK >> cg.TILEMAP_BSHIFT, \
-           int(color) & cg.TILEMAP_AMASK >> cg.TILEMAP_ASHIFT
 
 def color_from_rad(rad, cmin, cmax):
     if rad >= 0 and rad < (numpy.pi * 2 / 6):
@@ -426,9 +315,9 @@ def do_main(window, renderer, pixfmt):
     sdl_red = SDL_MapRGBA(sdlfmt, 255, 0, 0, 255)
     sdl_green = SDL_MapRGBA(sdlfmt, 0, 255, 0, 255)
     sdl_blue = SDL_MapRGBA(sdlfmt, 0, 0, 255, 255)
-    red = make_color(255, 31, 31, 255)
-    green = make_color(31, 255, 31, 255)
-    blue = make_color(127, 127, 255, 255)
+    red = display.make_color(255, 31, 31, 255)
+    green = display.make_color(31, 255, 31, 255)
+    blue = display.make_color(127, 127, 255, 255)
     transparent_rg = SDL_MapRGBA(sdlfmt, 255, 255, 63, 191)
     ll = cg.LayerList(renderer, pixfmt, log_cb_return, None)
 
@@ -505,26 +394,26 @@ def do_main(window, renderer, pixfmt):
     colorrad = 0.0
     colorrad2 = 0.25
 
-    if SDL_SetRenderDrawColor(ll.renderer, 0, 0, 0, SDL_ALPHA_OPAQUE) < 0:
-        raise(Exception())
     osc1 = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, 320, 240)
-    if SDL_SetRenderTarget(renderer, osc1) < 0:
-        raise Exception("Failed to set render target")
-    if SDL_RenderClear(ll.renderer) < 0:
-        raise(Exception())
-    if SDL_SetTextureBlendMode(osc1, SDL_BLENDMODE_NONE) < 0:
-        raise Exception("Couldn't set scope texture blend mode.")
+    display.clear(ll, osc1, 0, 0, 0, SDL_ALPHA_OPAQUE)
+    osc1l = cg.Layer(ll, osc1, "OSC 1 Layer")
+    osc1l.pos(-20, -20)
+    osc1l.scale((320 + (20 * 2)) / 320, (240 + (20 * 2)) / 240)
+    osc1l.rotation(5)
     osc2 = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, 320, 240)
-    if SDL_SetRenderTarget(renderer, osc2) < 0:
-        raise Exception("Failed to set render target")
-    if SDL_RenderClear(renderer) < 0:
-        raise(Exception())
-    if SDL_SetRenderTarget(renderer, None) < 0:
-        raise Exception("Failed to set render target")
-    osccenter = SDL_Point(160, 120)
-    oscdst = SDL_Rect(-20, -20, 360, 280)
-    scopeldst = SDL_Rect(0, 30, 320, 120)
-    scoperdst = SDL_Rect(0, 90, 320, 120)
+    display.clear(ll, osc2, 0, 0, 0, SDL_ALPHA_OPAQUE)
+    osc2l = cg.Layer(ll, osc2, "OSC 2 Layer")
+
+    scene = display.DisplayList(ll, display.SCREEN)
+    osc2dl = display.DisplayList(ll, osc2)
+    osc2dl.append(osc1l)
+    osc1dl = display.DisplayList(ll, osc1)
+    osc1dl.append(osc2l)
+    scopelid = osc1dl.append(None)
+    scoperid = osc1dl.append(None)
+    scene.append(display.make_color(32, 128, 192, SDL_ALPHA_OPAQUE))
+    #scene.append(osc2dl)
+    #scene.append(osc1dl)
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
@@ -532,6 +421,8 @@ def do_main(window, renderer, pixfmt):
 
     wavout = False
     seq = None
+    scopell = None
+    scoperl = None
     scopel = None
     scoper = None
     running = True
@@ -549,6 +440,10 @@ def do_main(window, renderer, pixfmt):
             if seq != None:
                 for s in seq:
                     aud.del_sequence(s)
+                osc1dl.replace(scopelid, None)
+                osc1dl.replace(scoperid, None)
+                scopell = None
+                scoperl = None
                 scopel = None
                 scoper = None
                 seq = None
@@ -570,6 +465,10 @@ def do_main(window, renderer, pixfmt):
                     seq.remove(s)
                     print("Sequence ended")
             if len(seq) == 0:
+                osc1dl.replace(scopelid, None)
+                osc1dl.replace(scoperid, None)
+                scopell = None
+                scoperl = None
                 scopel = None
                 scoper = None
                 seq = None
@@ -587,6 +486,8 @@ def do_main(window, renderer, pixfmt):
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
+                        scopell = None
+                        scoperl = None
                         scopel = None
                         scoper = None
                         seq = None
@@ -641,12 +542,22 @@ def do_main(window, renderer, pixfmt):
                                 break
                     if seq != None:
                         scopel = Scope(renderer, seq[0], 0, pixfmt, 320, 120)
+                        scopell = cg.Layer(ll, scopel.texture, "Scope L Layer")
+                        scopell.pos(0, 30)
+                        osc1dl.replace(scopelid, scopell)
                         scoper = Scope(renderer, seq[0], 1, pixfmt, 320, 120)
+                        scoperl = cg.Layer(ll, scoper.texture, "Scope R Layer")
+                        scoperl.pos(0, 90)
+                        osc1dl.replace(scoperid, scoperl)
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
+                        osc1dl.replace(scopelid, None)
+                        osc1dl.replace(scoperid, None)
+                        scopell = None
+                        scoperl = None
                         scopel = None
                         scoper = None
                         seq = None
@@ -764,32 +675,17 @@ def do_main(window, renderer, pixfmt):
         if colorrad2 >= numpy.pi * 2:
             colorrad2 = colorrad2 - (numpy.pi * 2)
         modr, modg, modb = color_from_rad(colorrad, 0, 255)
-        l1.colormod(make_color(modr, modg, modb, 255))
+        l1.colormod(display.make_color(modr, modg, modb, 255))
 
-        clear_frame(ll, 32, 128, 192)
-        if SDL_SetRenderTarget(renderer, osc1) < 0:
-            raise Exception("Failed to set render target")
-        if SDL_RenderCopy(renderer, osc2, None, None) < 0:
-            raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
-        if SDL_SetRenderTarget(renderer, osc2) < 0:
-            raise Exception("Failed to set render target")
-        if SDL_RenderCopyEx(renderer, osc1, None, oscdst, 5, osccenter, SDL_FLIP_NONE) < 0:
-            raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
         if scopel != None:
             modr, modg, modb = color_from_rad(colorrad, 0, 250)
             if SDL_SetTextureColorMod(scopel.texture, int(modr), int(modg), int(modb)) < 0:
                 raise Exception("Couldn't set texture colormod.")
-            if SDL_RenderCopy(renderer, scopel.texture, None, scopeldst) < 0:
-                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
             modr, modg, modb = color_from_rad(colorrad2, 0, 250)
             if SDL_SetTextureColorMod(scoper.texture, int(modr), int(modg), int(modb)) < 0:
                 raise Exception("Couldn't set texture colormod.")
-            if SDL_RenderCopy(renderer, scoper.texture, None, scoperdst) < 0:
-                raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
-        if SDL_SetRenderTarget(renderer, None) < 0:
-            raise Exception("Failed to restore render target")
-        if SDL_RenderCopy(renderer, osc2, None, None) < 0:
-            raise Exception("Couldn't draw scope texture: {}".format(SDL_GetError()))
+
+        scene.draw()
 
         l1.pos(int(x2), int(y2))
         l2.pos(int(x), int(y))
@@ -806,12 +702,17 @@ def do_main(window, renderer, pixfmt):
     if seq != None:
         for s in seq:
             aud.del_sequence(s)
-        scope = None
+        osc1dl.replace(scopelid, None)
+        osc1dl.replace(scoperid, None)
+        scopell = None
+        scoperl = None
+        scopel= None
+        scoper= None
         seq = None
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
-    window, renderer, pixfmt = initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
+    window, renderer, pixfmt = display.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
 
     do_main(window, renderer, pixfmt)
 

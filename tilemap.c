@@ -1289,7 +1289,8 @@ int tilemap_add_layer(LayerList *ll,
 
     /* find first NULL surface and assign it */
     for(i = 0; i < ll->layersmem; i++) {
-        if(ll->layer[i].tilemap == -1) {
+        if(ll->layer[i].tilemap == -1 &&
+           ll->layer[i].tex == NULL) {
             if(init_layer(ll, &(ll->layer[i]), w, h, tilemap, tex, name) < 0) {
                 return(-1);
             }
@@ -1313,6 +1314,7 @@ int tilemap_add_layer(LayerList *ll,
     /* initialize empty excess surfaces as NULL */
     for(j = item; j < ll->layersmem; j++) {
         ll->layer[j].tilemap = -1;
+        ll->layer[j].tex = NULL;
     }
  
     if(init_layer(ll, &(ll->layer[item]), w, h, tilemap, tex, name) < 0) {
@@ -1381,6 +1383,7 @@ int tilemap_free_layer(LayerList *ll, unsigned int index) {
 
     free(l->name);
     l->tilemap = -1;
+    l->tex = NULL;
 
     return(0);
 }

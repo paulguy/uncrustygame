@@ -54,11 +54,12 @@ typedef struct {
     int tilemap;
 } TilemapObject;
 
-typedef struct {
+typedef struct LayerObject_s {
     PyObject_HEAD
     LayerListObject *ll;
     TilemapObject *tm;
     PyObject *tex;
+    struct LayerObject_s *relative;
     int layer;
 } LayerObject;
 
@@ -1223,6 +1224,7 @@ static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     self->ll = NULL;
     self->tm = NULL;
     self->tex = NULL;
+    self->relative = NULL;
     self->layer = -1;
 
     return((PyObject *)self);
@@ -1603,10 +1605,12 @@ static PyObject *Tilemap_set_layer_relative(LayerObject *self,
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_blendmode failed");
         return(NULL);
     }
+    Py_XDECREF(self->relative);
+    self->relative = layer;
+    Py_INCREF(self->relative);
 
     Py_RETURN_NONE;
 }
-
 
 static PyObject *Tilemap_draw_layer(LayerObject *self,
                                     PyTypeObject *defining_class,
