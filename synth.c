@@ -1161,7 +1161,7 @@ int synth_set_fragments(Synth *s, unsigned int fragments) {
             LOG_PRINTF(s, "Failed to allocate memory for channel name.\n");
             goto error;
         }
-        snprintf(s->channelbuffer[i].name, strlen(CHANNEL_PREFIX) + 10 + 1, "%s%04u", CHANNEL_PREFIX, i);
+        snprintf(s->channelbuffer[i].name, strlen(CHANNEL_PREFIX) + 10 + 1, "%s%u", CHANNEL_PREFIX, i);
     }
 
     if(s->outbuf != NULL) {

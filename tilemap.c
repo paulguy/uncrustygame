@@ -1619,10 +1619,6 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
         if(tm == NULL) {
             return(-1);
         }
-        Tileset *ts = get_tileset(ll, tm->tileset);
-        if(ts == NULL) {
-            return(-1);
-        }
 
         /* Make sure it's a layer with graphics */
         if(tm->tex == NULL) {

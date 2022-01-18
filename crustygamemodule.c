@@ -477,6 +477,14 @@ static PyGetSetDef LayerList_getsetters[] = {
 /* Needed for heap-based type instantiation.  Hopefully future proof for this
  * project.  Its benefits seem worth the bit of extra complexity. */
 static PyType_Slot LayerListSlots[] = {
+    {Py_tp_doc, "The base LayerList context.  Function arguments are generally documented here\n"
+                "but for detailed documentation, see the HTML docs.\n\n"
+                "LayerList(renderer, format, log_cb, log_priv)\n"
+                "renderer  An SDL_Renderer.\n"
+                "format    An integer SDL pixel format.\n"
+                "log_cb    A method to be called when the LayerList emits logging output:\n"
+                "              log_cb(log_priv, message)\n"
+                "log_priv  An object that will be passed to log_cb."},
     {Py_tp_new, LayerList_new},
     {Py_tp_init, (initproc)LayerList_init},
     {Py_tp_dealloc, (destructor)LayerList_dealloc},
@@ -709,6 +717,27 @@ static PyMethodDef Tileset_methods[] = {
 };
 
 static PyType_Slot TilesetSlots[] = {
+    {Py_tp_doc, "A Tileset.\n\n"
+                "Tileset(layerlist, width, height, fillcolor, tilewidth, tileheight, name)\n"
+                "layerlist   A LayerList\n"
+                "width       Width of the tileset\n"
+                "height      Height of the tileset\n"
+                "fillcolor   Fill color given from SDL_MapRGB and friends\n"
+                "tilewidth   Width of each tile\n"
+                "tileheight  Height of each tile\n"
+                "name        Optional name or None\n\n"
+                "Tileset(layerlist, bmpfilename, tilewidth, tileheight, name)\n"
+                "layerlist    A LayerList\n"
+                "bmpfilename  A path to a BMP file to load.\n"
+                "tilewidth    Width of each tile\n"
+                "tileheight   Height of each tile\n"
+                "name         Optional name or None\n\n"
+                "Tileset(layerlist, surface, tilewidth, tileheight, name\n"
+                "layerlist   A LayerList\n"
+                "surface     An SDL_Surface to copy from\n"
+                "tilewidth   Width of each tile\n"
+                "tileheight  Height of each tile\n"
+                "name        Optional name or None"},
     {Py_tp_new, Tileset_new},
     {Py_tp_init, (initproc)Tileset_init},
     {Py_tp_dealloc, (destructor)Tileset_dealloc},
@@ -1074,7 +1103,7 @@ static PyObject *LayerList_TM_layer(TilemapObject *self,
         return(NULL);
     }
 
-    arglist = PyTuple_Pack(4, self->ll, self, Py_None, args[0]);
+    arglist = PyTuple_Pack(3, self->ll, self, args[0]);
     if(arglist == NULL) {
         return(NULL);
     }
@@ -1122,6 +1151,13 @@ static PyMethodDef Tilemap_methods[] = {
 };
 
 static PyType_Slot TilemapSlots[] = {
+    {Py_tp_doc, "A Tilemap.\n\n"
+                "Tilemap(layerlist, tileset, width, height, name)\n"
+                "layerlist   A LayerList\n"
+                "tileset     The Tileset this tilemap will refer to\n"
+                "width       The width of the tilemap in tiles.\n"
+                "height      The height of the tilemap in tiles.\n"
+                "name        Optional name or None"},
     {Py_tp_new, Tilemap_new},
     {Py_tp_init, (initproc)Tilemap_init},
     {Py_tp_dealloc, (destructor)Tilemap_dealloc},
@@ -1154,6 +1190,7 @@ static PyObject *Layer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
+    PyObject *tmtex = NULL;
     PyObject *name = NULL;
     const char *cname;
     int tilemap = -1;
@@ -1166,39 +1203,30 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
 
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
-    if(!PyArg_ParseTuple(args, "OOOO", &(self->ll), &(self->tm), &(self->tex), &name)) {
+    if(!PyArg_ParseTuple(args, "OOO", &(self->ll), &tmtex, &name)) {
         return(-1);
     }
     Py_XINCREF(self->ll);
-    Py_XINCREF(self->tm);
-    Py_XINCREF(self->tex);
+    Py_XINCREF(tmtex);
     Py_XINCREF(name);
     if(!PyObject_TypeCheck(self->ll, state->LayerListType)) {
         PyErr_SetString(PyExc_TypeError, "first argument must be a LayerList");
         goto error;
     }
-    if((PyObject *)(self->tm) == Py_None) {
-        Py_CLEAR(self->tm);
-        /* tilemap is already -1 */
-    } else {
-        if(!PyObject_TypeCheck(self->tm, state->TilemapType)) {
-            PyErr_SetString(PyExc_TypeError, "second argument must be a Tilemap");
-            goto error;
-        }
-        tilemap = self->tm->tilemap;
-    }
 
-    if(self->tex == Py_None) {
-        Py_CLEAR(self->tex);
-        /* tex is already NULL */
+    if(PyObject_TypeCheck(tmtex, state->TilemapType)) {
+        self->tm = (TilemapObject *)tmtex;
+        tilemap = self->tm->tilemap;
     } else {
-        if(!PyObject_TypeCheck(self->tex, state->LP_SDL_Texture)) {
-            PyErr_SetString(PyExc_TypeError, "layer texture must be a SDL_Texture or None.");
-            goto error;
-        }
-        tex = get_value_from_lp_object(state, self->tex);
-        if(tex == NULL) {
-            PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Texture");
+        if(PyObject_TypeCheck(tmtex, state->LP_SDL_Texture)) {
+            self->tex = tmtex;
+            tex = get_value_from_lp_object(state, self->tex);
+            if(tex == NULL) {
+                PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Texture");
+                goto error;
+            }
+        } else {
+            PyErr_SetString(PyExc_TypeError, "second argument must be either a Tilemap or a SDL_Texture");
             goto error;
         }
     }
@@ -1223,8 +1251,9 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
 
 error:
     Py_XDECREF(name);
-    Py_CLEAR(self->tex);
-    Py_CLEAR(self->tm);
+    self->tex = NULL;
+    self->tm = NULL;
+    Py_XDECREF(tmtex);
     Py_CLEAR(self->ll);
     return(-1);
 }
@@ -1615,6 +1644,15 @@ static PyMethodDef Layer_methods[] = {
 };
 
 static PyType_Slot LayerSlots[] = {
+    {Py_tp_doc, "A Layer.\n\n"
+                "Tilemap(layerlist, tilemap, name)\n"
+                "layerlist  A LayerList\n"
+                "tilemap    A Tilemap\n"
+                "name       Optional name or None\n\n"
+                "Tilemap(layerlist, texture, name)\n"
+                "layerlist  A LayerList\n"
+                "texture    An SDL_Texture\n"
+                "name       Optional name or None"},
     {Py_tp_new, Layer_new},
     {Py_tp_init, (initproc)Layer_init},
     {Py_tp_dealloc, (destructor)Layer_dealloc},
@@ -2188,6 +2226,22 @@ static PyMethodDef Synth_methods[] = {
 };
 
 static PyType_Slot SynthSlots[] = {
+    {Py_tp_doc, "A Synth.  Function arguments will be documented here but for more detailed\n"
+                "documentation, see the HTML documentation.\n\n"
+                "Synth(outfilename, opendev, devname, frame_cb, frame_priv, log_cb, log_priv, rate, channels, fragmentsize, format)\n"
+                "outfilename   Optional filename which would be a WAV file opened and audio data output to.\n"
+                "opendev       Whether an audio device should be opened.\n"
+                "devname       Name of an SDL audio device or None to use default\n"
+                "frame_cb      Function to call when audio data is being requested:"
+                "                  frame_cb(frame_priv)\n"
+                "frame_priv    Object which will be passed to frame_cb.\n"
+                "log_cb        Function to call when the Synth needs to emit logs:"
+                "                  log_cb(log_priv, message)\n"
+                "log_priv      Object which will be passed to log_cb.\n"
+                "rate          The rate to try to use.\n"
+                "channels      The channel count to try to use.\n"
+                "fragmentsize  The fragment size to try to use.\n"
+                "format        The integer SDL_AudioFormat to try to use."},
     {Py_tp_new, Synth_new},
     {Py_tp_init, (initproc)Synth_init},
     {Py_tp_dealloc, (destructor)Synth_dealloc},
@@ -2298,8 +2352,13 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
 
     self->rate = synth_get_rate(self->s->s);
     if(PyLong_Check(data)) {
+        long buffer = PyLong_AsLong(data);
         /* for setting up output buffers */
-        self->buffer = PyLong_AsLong(data);
+        if(buffer >= self->s->channels) {
+            PyErr_SetString(PyExc_ValueError, "Tried to make output buffer with index out of range");
+            goto error;
+        }
+        self->buffer = buffer;
     } else if(data == Py_None) {
         /* silence buffers */
         self->buffer = synth_add_buffer(self->s->s, type, NULL, size, cname);
@@ -2506,6 +2565,7 @@ static PyObject *Synth_B_filter(BufferObject *self,
                                 PyObject *kwnames) {
     PyObject *arglist;
     PyObject *filter;
+    PyObject *zero = NULL;
 
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Buffer is not initialized");
@@ -2517,21 +2577,32 @@ static PyObject *Synth_B_filter(BufferObject *self,
     if(nargs >= 2) {
         arglist = PyTuple_Pack(4, self->s, self, args[0], args[1]);
     } else if(nargs == 1) {
-        arglist = PyTuple_Pack(3, self->s, self, args[0]);
+        zero = PyLong_FromLong(0);
+        if(zero == NULL) {
+            return(NULL);
+        }
+        arglist = PyTuple_Pack(4, self->s, self, args[0], zero);
     } else {
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
-        return(NULL);
+        goto error;
     }
     if(arglist == NULL) {
-        return(NULL);
+        goto error;
     }
     filter = PyObject_CallObject((PyObject *)(state->FilterType), arglist);
     Py_DECREF(arglist);
     if(filter == NULL) {
-        return(NULL);
+        goto error;
     }
 
+    Py_XDECREF(zero);
+
     return(filter);
+
+error:
+    Py_XDECREF(zero);
+
+    return(NULL);
 }
 
 static PyObject *Synth_internal(BufferObject *self,
@@ -2597,6 +2668,26 @@ static PyMethodDef Buffer_methods[] = {
 };
 
 static PyType_Slot BufferSlots[] = {
+    {Py_tp_doc, "A Buffer.\n\n"
+                "Buffer(synth, type, data, size, name)\n"
+                "synth  A Synth\n"
+                "type   The SDL_AudioFormat type of the data\n"
+                "data   A buffer containing the data (array.array, ndarray, etc)\n"
+                "size   The number of samples to use.\n"
+                "name   Optional name or None\n\n"
+                "Buffer(synth, type, None, size, name)\n"
+                "    Make a empty buffer.\n"
+                "synth  A Synth\n"
+                "type   The SDL_AudioFormat type of the data\n"
+                "size   The number of samples to use.\n"
+                "name   Optional name or None\n\n"
+                "Buffer(synth, None, channel, None, None)\n"
+                "synth    A Synth\n"
+                "channel  An output channel buffer number\n\n"
+                "Buffer(synth, filename, name)\n"
+                "synth     A Synth\n"
+                "filename  A WAV file to load\n"
+                "name      Optional name or None to use the filename"},
     {Py_tp_new, Buffer_new},
     {Py_tp_init, (initproc)Buffer_init},
     {Py_tp_dealloc, (destructor)Buffer_dealloc},
@@ -2731,6 +2822,10 @@ static void InternalBuffer_releasebuffer(InternalBufferObject *self, Py_buffer *
 }
 
 static PyType_Slot InternalBufferSlots[] = {
+    {Py_tp_doc, "A InternalBuffer.\n\n"
+                "InternalBuffer(synth, buffer)\n"
+                "synth   A Synth\n"
+                "buffer  A Buffer"},
     {Py_tp_new, InternalBuffer_new},
     {Py_tp_init, (initproc)InternalBuffer_init},
     {Py_tp_dealloc, (destructor)InternalBuffer_dealloc},
@@ -3485,6 +3580,11 @@ static PyMethodDef Player_methods[] = {
 };
 
 static PyType_Slot PlayerSlots[] = {
+    {Py_tp_doc, "A Player.\n\n"
+                "Player(synth, buffer, name)\n"
+                "synth   A Synth\n"
+                "buffer  A Buffer\n"
+                "name    Optional name or None"},
     {Py_tp_new, Player_new},
     {Py_tp_init, (initproc)Player_init},
     {Py_tp_dealloc, (destructor)Player_dealloc},
@@ -3525,7 +3625,6 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
     unsigned int size;
     PyObject *name = NULL;
     const char *cname;
-    PyObject *etype, *evalue, *etraceback;
 
     if(self->s != NULL) {
         PyErr_SetString(PyExc_TypeError, "Filter already initialized");
@@ -3541,19 +3640,7 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
                          &buffer,
                          &size,
                          &name)) {
-        PyErr_Fetch(&etype, &evalue, &etraceback);
-        Py_XDECREF(etype);
-        Py_XDECREF(evalue);
-        Py_XDECREF(etraceback);
-
-        if(!PyArg_ParseTuple(args, "OOO",
-                             &(self->s),
-                             &buffer,
-                             &name)) {
-            goto error;
-        } else {
-            size = 0;
-        }
+        goto error;
     }
     Py_XINCREF(name);
     Py_XINCREF(self->s);
@@ -4242,6 +4329,12 @@ static PyMethodDef Filter_methods[] = {
 };
 
 static PyType_Slot FilterSlots[] = {
+    {Py_tp_doc, "A Filter.\n\n"
+                "Filter(synth, buffer, size, name)\n"
+                "synth   A Synth\n"
+                "buffer  A Buffer\n"
+                "size    The size of the filter\n"
+                "name    Optional name or None"},
     {Py_tp_new, Filter_new},
     {Py_tp_init, (initproc)Filter_init},
     {Py_tp_dealloc, (destructor)Filter_dealloc},
@@ -4257,8 +4350,6 @@ static PyType_Spec FilterSpec = {
     .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .slots = FilterSlots
 };
-
-
 
 /* objects successfully returned by this function automatically have a new
  * reference because objects returned by the various PyObject_Call* functions
@@ -4289,6 +4380,7 @@ static int crustygame_exec(PyObject* m) {
     state->LayerType = NULL;
     state->SynthType = NULL;
     state->BufferType = NULL;
+    state->InternalBufferType = NULL;
     state->PlayerType = NULL;
     state->FilterType = NULL;
     state->return_ptr = NULL;
@@ -4372,6 +4464,7 @@ static int crustygame_exec(PyObject* m) {
     }
 
     /* import sdl2 to get the literal pointer types needed for type checks. */
+    /* TODO: If this fails, python will segfault on quit. */
     SDL_m = PyImport_ImportModule("sdl2");
     if(SDL_m == NULL) {
         goto error;

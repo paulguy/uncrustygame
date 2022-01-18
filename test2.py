@@ -479,7 +479,7 @@ def do_main(window, renderer, pixfmt):
     tm1.attr_flags(2, 2, 0, 5, 2, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
     tm1.attr_colormod(2, 2, 4, 5, 2, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red)))
     tm1.update(0, 0, 8, 8)
-    l1 = cg.Layer(ll, tm1, None, "DVD Video");
+    l1 = cg.Layer(ll, tm1, "DVD Video");
     l1.window(40, 16)
     l1.scroll_pos(16, 16)
     l1.rotation_center(20, 8)
