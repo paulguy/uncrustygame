@@ -450,13 +450,15 @@ static PyMethodDef LayerList_methods[] = {
         (PyCMethod) LayerList_LL_Tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Tileset from this LayerList.\n\n"
-        "tileset()"},
+        "tileset(...) -> tileset\n"
+        "...  See Tileset constructor, without layerlist argument"},
     {
         "tilemap",
         (PyCMethod) LayerList_LL_Tilemap,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Tilemap from this LayerList.\n\n"
-        "tilemap()"},
+        "tilemap(...) -> tileset\n"
+        "...  See Tilemap constructor, without layerlist argument"},
     {NULL}
 };
 
@@ -719,7 +721,8 @@ static PyMethodDef Tileset_methods[] = {
         (PyCMethod) LayerList_TS_tilemap,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Convenience method to create a Tilemap from this Tileset.\n\n"
-        "tilemap()"},
+        "tilemap(...) -> tilemap\n"
+        "...  See Tilemap constructor, without layerlist or tileset arguments"},
     {NULL}
 };
 
@@ -2120,6 +2123,8 @@ static PyObject *Synth_frame(SynthObject *self,
                              PyObject *const *args,
                              Py_ssize_t nargs,
                              PyObject *kwnames) {
+    int ret;
+
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
         return(NULL);
@@ -2127,12 +2132,13 @@ static PyObject *Synth_frame(SynthObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(synth_frame(self->s) < 0) {
+    ret = synth_frame(self->s);
+    if(ret < 0) {
         PyErr_SetString(state->CrustyException, "synth_frame failed");
         return(NULL);
     }
 
-    Py_RETURN_NONE;
+    return(PyLong_FromLong(ret));
 }
 
 static PyObject *Synth_invalidate_buffers(SynthObject *self,
@@ -2221,67 +2227,90 @@ static PyMethodDef Synth_methods[] = {
         "print_full_stats",
         (PyCMethod) Synth_print_full_stats,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Output information about the provided Synth structure."},
+        "Output information about the provided Synth structure.\n\n"
+        "print_full_stats()"},
     {
         "open_wav",
         (PyCMethod) Synth_open_wav,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Open a WAV file for output on a currently running synthesizer."},
+        "Open a WAV file for output on a currently running synthesizer.\n\n"
+        "open_wav(filename)\n"
+        "filename  WAV file to open and output to."},
     {
         "close_wav",
         (PyCMethod) Synth_close_wav,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Close an open WAV file."},
+        "Close an open WAV file.\n\n"
+        "close_wav()"},
     {
         "enabled",
         (PyCMethod) Synth_set_enabled,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the enabled state of the synth."},
+        "Set the enabled state of the synth.\n\n"
+        "enabled(enabled)\n"
+        "enabled  Boolean for whether the synth should enable."},
     {
         "needed",
         (PyCMethod) Synth_get_samples_needed,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the amount of samples necessary to top up the audio buffers."},
+        "Get the amount of samples necessary to top up the audio buffers.\n\n"
+        "needed() -> needed\n"
+        "needed  The amount of samples needed to fill the buffer."},
     {
         "rate",
         (PyCMethod) Synth_get_rate,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the sample rate the audio device was initialized with."},
+        "Get the sample rate the audio device was initialized with.\n\n"
+        "rate() -> rate\n"
+        "rate  Samples per second the audio is output at."},
     {
         "channels",
         (PyCMethod) Synth_get_channels,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the output channel objects for this Synth as a tuple."},
+        "Get the output channel objects for this Synth as a tuple.\n\n"
+        "channels() -> channels\n"
+        "channels  Number of output channels."},
     {
         "fragment_size",
         (PyCMethod) Synth_get_fragment_size,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the fragment size the audio device was initialized with."},
+        "Get the fragment size the audio device was initialized with.\n\n"
+        "fragment_size() -> fragment_size\n"
+        "fragment_size  Size of a fragment in samples."},
     {
         "underrun",
         (PyCMethod) Synth_has_underrun,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Returns whether the synth has underrun."},
+        "Returns whether the synth has underrun.\n\n"
+        "underrun() -> underrun\n"
+        "underrun  Boolean indicating if the audio output has underrun."},
     {
         "frame",
         (PyCMethod) Synth_frame,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Indicate that it's a good time for the frame callback to be run."},
+        "Indicate that it's a good time for the frame callback to be run.\n\n"
+        "frame() -> got\n"
+        "got  Number of sampels generated."},
     {
         "invalidate_buffers",
         (PyCMethod) Synth_invalidate_buffers,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Invalidate the output buffers."},
+        "Invalidate the output buffers.\n\n"
+        "invalidate_buffers()"},
     {
         "fragments",
         (PyCMethod) Synth_set_fragments,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the number of fragments that should be buffered internally."},
+        "Set the number of fragments that should be buffered internally.\n\n"
+        "fragments(fragments)\n"
+        "fragments  Number of fragments to buffer."},
     {
         "buffer",
         (PyCMethod) Synth_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience function to create a buffer from this Synth."},
+        "Convenience function to create a buffer from this Synth.\n\n"
+        "buffer(...) -> buffer\n"
+        "...  See Buffer constructor, without the synth argument"},
     {NULL}
 };
 
@@ -2292,8 +2321,8 @@ static PyType_Slot SynthSlots[] = {
                 "outfilename   Optional filename which would be a WAV file opened and audio data output to.\n"
                 "opendev       Whether an audio device should be opened.\n"
                 "devname       Name of an SDL audio device or None to use default\n"
-                "frame_cb      Function to call when audio data is being requested:"
-                "                  frame_cb(frame_priv)\n"
+                "frame_cb      Function to call when audio data is being requested, which should return the number of samples emitted:"
+                "                  frame_cb(frame_priv) -> samples\n"
                 "frame_priv    Object which will be passed to frame_cb.\n"
                 "log_cb        Function to call when the Synth needs to emit logs:"
                 "                  log_cb(log_priv, message)\n"
@@ -2698,32 +2727,48 @@ static PyMethodDef Buffer_methods[] = {
         "size",
         (PyCMethod) Synth_get_size,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the size in samples of a buffer."},
+        "Get the size in samples of a buffer.\n\n"
+        "size() -> size\n"
+        "size  The size of the buffer in samples."},
     {
         "rate",
         (PyCMethod) Synth_buffer_get_rate,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get the sample rate of the buffer if loaded from a wav, otherwise, just the Synth's rate."},
+        "Get the sample rate of the buffer if loaded from a wav, otherwise, just the Synth's rate.\n\n"
+        "rate() -> rate\n"
+        "rate  The buffer's native sample rate."},
     {
         "silence",
         (PyCMethod) Synth_silence_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Silence a buffer which contains audio."},
+        "Silence a buffer which contains audio.\n\n"
+        "silence(start, length)\n"
+        "start   Sample to start silencing on.\n"
+        "length  Number of samples to silence."},
     {
         "player",
         (PyCMethod) Synth_B_player,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience function to make a player from this buffer."},
+        "Convenience function to make a player from this buffer.\n\n"
+        "player(...) -> player\n"
+        "...  See Player constructor, without synth or buffer arguments"},
     {
         "filter",
         (PyCMethod) Synth_B_filter,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience function to make a filter from this buffer."},
+        "Convenience function to make a filter from this buffer.\n\n"
+        "filter(...) -> filter\n"
+        "...  See Filter constructor, without synth or buffer arguments"},
     {
         "internal",
         (PyCMethod) Synth_internal,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Get an internal buffer handle from this buffer."},
+        "Get an internal buffer handle from this buffer.\n"
+        "NOTE: This is kinda janky as I don't really know how this works but it works so\n"
+        "it probably won't change unless someone can really give me advice on making\n"
+        "this better.\n\n"
+        "internal() -> pybuffer\n"
+        "pybuffer  Object which can interact with other PyBuffer objects like array.array, ndarray, etc."},
     {NULL}
 };
 
@@ -3555,87 +3600,121 @@ static PyMethodDef Player_methods[] = {
         "input",
         (PyCMethod) Synth_set_player_input_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the input buffer for the player."},
+        "Set the input buffer for the player.\n\n"
+        "input(buffer)\n"
+        "buffer  Buffer to be this Player's input."},
     {
         "input_pos",
         (PyCMethod) Synth_set_player_input_buffer_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the position in samples that the input buffer should start playing from."},
+        "Set the position in samples that the input buffer should start playing from.\n\n"
+        "input_pos(pos)\n"
+        "pos  Position to start playing from."},
     {
         "output",
         (PyCMethod) Synth_set_player_output_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set a buffer to output to."},
+        "Set a buffer to output to.\n\n"
+        "output(buffer)\n"
+        "buffer  Buffer to be this Player's output."},
     {
         "output_pos",
         (PyCMethod) Synth_set_player_output_buffer_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the output buffer position."},
+        "Set the output buffer position.\n\n"
+        "output_pos(pos)\n"
+        "pos  Position to start output to."},
     {
         "output_mode",
         (PyCMethod) Synth_set_player_output_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the output mode or operation for the player."},
+        "Set the output mode or operation for the player.\n\n"
+        "output_mode(mode)\n"
+        "mode  Output mode from one of the output mode constants."},
     {
         "volume_mode",
         (PyCMethod) Synth_set_player_volume_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the volume mode."},
+        "Set the volume mode.\n\n"
+        "volume_mode(mode)\n"
+        "mode  Volume mode from one of the auto constants."},
     {
         "volume",
         (PyCMethod) Synth_set_player_volume,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the constant player volume."},
+        "Set the constant player volume.\n\n"
+        "volume(vol)\n"
+        "vol  The base output volume."},
     {
         "volume_source",
         (PyCMethod) Synth_set_player_volume_source,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the player volume source."},
+        "Set the player volume source.\n\n"
+        "volume_source(buffer)\n"
+        "buffer  The buffer used for modulating the volume."},
     {
         "mode",
         (PyCMethod) Synth_set_player_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the playback mode for the player."},
+        "Set the playback mode for the player.\n\n"
+        "mode(mode)\n"
+        "mode  The playback mode from the player mode constants."},
     {
         "loop_start",
         (PyCMethod) Synth_set_player_loop_start,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set loop start or phase source start position."},
+        "Set loop start or phase source start position.\n\n"
+        "loop_start(pos)\n"
+        "pos  The loop start position."},
     {
         "loop_end",
         (PyCMethod) Synth_set_player_loop_end,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set loop end or phase source end position."},
+        "Set loop end or phase source end position.\n\n"
+        "loop_end(pos)\n"
+        "pos  The loop end position."},
     {
         "phase_source",
         (PyCMethod) Synth_set_player_phase_source,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the buffer to read phase source samples from."},
+        "Set the buffer to read phase source samples from.\n\n"
+        "phase_source(buffer)\n"
+        "buffer  Buffer to modulate the playback position."},
     {
         "speed_mode",
         (PyCMethod) Synth_set_player_speed_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the player's speed mode."},
+        "Set the player's speed mode.\n\n"
+        "speed_mode(mode)\n"
+        "mode  The speed mode from the auto mode constants."},
     {
         "speed",
         (PyCMethod) Synth_set_player_speed,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the constant player speed."},
+        "Set the base player speed.\n\n"
+        "speed(speed)\n"
+        "speed  The base player speed."},
     {
         "speed_source",
         (PyCMethod) Synth_set_player_speed_source,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the source for playback speed."},
+        "Set the source for playback speed.\n\n"
+        "speed_source(buffer)\n"
+        "buffer  The buffer to modulate the player speed."},
     {
         "run",
         (PyCMethod) Synth_run_player,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Actually run the player."},
+        "Actually run the player.\n\n"
+        "run(request)\n"
+        "request  The amount of samples the Player should run for."},
     {
         "stop_reason",
         (PyCMethod) Synth_player_stopped_reason,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Determine criteria for why the player stopped."},
+        "Determine criteria for why the player stopped.\n\n"
+        "stop_reason() -> reason\n"
+        "reason  A bitfield of reasons from the reasons constants."},
     {NULL}
 };
 
@@ -4304,87 +4383,120 @@ static PyMethodDef Filter_methods[] = {
         "reset",
         (PyCMethod) Synth_reset_filter,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Reset the filter accumulation state."},
+        "Reset the filter accumulation state.\n\n"
+        "reset()"},
     {
         "input",
         (PyCMethod) Synth_set_filter_input_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the buffer to apply a filter to."},
+        "Set the buffer to apply a filter to.\n\n"
+        "input(buffer)\n"
+        "buffer  The buffer the filter should read from."},
     {
         "input_pos",
         (PyCMethod) Synth_set_filter_input_buffer_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the starting position on processing the input buffer"},
+        "Set the starting position on processing the input buffer\n\n"
+        "input_pos(pos)\n"
+        "pos  The sample to start reading from."},
     {
         "filter",
         (PyCMethod) Synth_set_filter_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the buffer containing the filter kernel(s) this filter should use."},
+        "Set the buffer containing the filter kernel(s) this filter should use.\n\n"
+        "filter(buffer)\n"
+        "buffer  The filter containing buffer."},
     {
         "filter_start",
         (PyCMethod) Synth_set_filter_buffer_start,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the position in the buffer where kernel(s) should start to be referenced from."},
+        "Set the position in the buffer where kernel(s) should start to be referenced from.\n\n"
+        "filter_start(pos)\n"
+        "pos  Start sample of first kernel."},
     {
         "slices",
         (PyCMethod) Synth_set_filter_slices,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the number of consecutive filter kernels starting from the start position which are in the filter buffer."},
+        "Set the number of consecutive filter kernels starting from the start position which are in the filter buffer.\n\n"
+        "slices(num)\n"
+        "num  Number of slices."},
     {
         "mode",
         (PyCMethod) Synth_set_filter_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set whether the filter slice is a constant value or whether a buffer should be read to determine which slice should be used per input sample."},
+        "Set whether the filter slice is a constant value or whether a buffer should be read to determine which slice should be used per input sample.\n\n"
+        "mode(mode)\n"
+        "mode  Filter mode from auto constants."},
     {
         "slice",
         (PyCMethod) Synth_set_filter_slice,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the filter slice value to use in constant more or the first slice in slice buffer source mode."},
+        "Set the filter slice value to use in constant more or the first slice in slice buffer source mode.\n\n"
+        "slice(num)\n"
+        "slice  Base filter slice"},
     {
         "slice_source",
         (PyCMethod) Synth_set_filter_slice_source,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Provide the source buffer for slices."},
+        "Provide the source buffer for slices.\n\n"
+        "slice_source(buffer)\n"
+        "buffer  Buffer to modulate filter slice."},
     {
         "output",
         (PyCMethod) Synth_set_filter_output_buffer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the buffer to be output to."},
+        "Set the buffer to be output to.\n\n"
+        "output(buffer)\n"
+        "buffer  Buffer to output to."},
     {
         "output_pos",
         (PyCMethod) Synth_set_filter_output_buffer_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the buffer output position."},
+        "Set the buffer output position.\n\n"
+        "output_pos(pos)\n"
+        "pos  Sample to start output from."},
     {
         "output_mode",
         (PyCMethod) Synth_set_filter_output_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the filter's output mode."},
+        "Set the filter's output mode.\n\n"
+        "output_mode(mode)\n"
+        "mode  Filter output mode from output mode constants."},
     {
         "volume_mode",
         (PyCMethod) Synth_set_filter_volume_mode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the filter's volume mode."},
+        "Set the filter's volume mode.\n\n"
+        "volume_mode(mode)\n"
+        "mode  Volume mode from auto constants."},
     {
         "volume",
         (PyCMethod) Synth_set_filter_volume,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the filter's volume."},
+        "Set the filter's volume.\n\n"
+        "volume(vol)\n"
+        "vol  Filter output volume."},
     {
         "volume_source",
         (PyCMethod) Synth_set_filter_volume_source,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the filter's volume source."},
+        "Set the filter's volume source.\n\n"
+        "volume_source(buffer)\n"
+        "buffer  Buffer to modulate output volume."},
     {
         "run",
         (PyCMethod) Synth_run_filter,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Run the filter for a certain number of samples."},
+        "Run the filter for a certain number of samples.\n\n"
+        "run(requested)\n"
+        "requested  Number of samples to run the filter for."},
     {
         "stop_reason",
         (PyCMethod) Synth_filter_stopped_reason,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Determine criteria for why the filter stopped."},
+        "Determine criteria for why the filter stopped.\n\n"
+        "stop_reason() -> reason\n"
+        "reason  Bitfield of reasons from the reasons constants."},
     {NULL}
 };
 
@@ -5212,17 +5324,41 @@ error:
 
 static struct PyMethodDef crustygamefuncs[] = {
     {"SDL_RenderDrawPoints",
-        (_PyCFunctionFast)RenderDrawPoints,  METH_FASTCALL, NULL},
+        (_PyCFunctionFast)RenderDrawPoints,  METH_FASTCALL,
+        "Wrapper for SDL_RenderDrawPoints that accepts PyBuffers.\n\n"
+        "SDL_RenderDrawPoints(renderer, array)\n"
+        "renderer  The SDL_Renderer.\n"
+        "array     A PyBuffer either as Nx2 array or even number 1D array of 32 bit integer X-Y pairs."},
     {"SDL_RenderDrawLines",
-        (_PyCFunctionFast)RenderDrawLines,   METH_FASTCALL, NULL},
+        (_PyCFunctionFast)RenderDrawLines,   METH_FASTCALL,
+        "Wrapper for SDL_RenderDrawLines that accepts PyBuffers.\n\n"
+        "SDL_RenderDrawPoints(renderer, array)\n"
+        "renderer  The SDL_Renderer.\n"
+        "array     A PyBuffer either as Nx2 array or even number 1D array of 32 bit integer X-Y pairs."},
     {"SDL_RenderDrawRects",
-        (_PyCFunctionFast)RenderDrawRects,   METH_FASTCALL, NULL},
+        (_PyCFunctionFast)RenderDrawRects,   METH_FASTCALL,
+        "Wrapper for SDL_RenderDrawRects that accepts PyBuffers.\n\n"
+        "SDL_RenderDrawPoints(renderer, array)\n"
+        "renderer  The SDL_Renderer.\n"
+        "array     A PyBuffer either as Nx4 array or multiple of four 1D array of 32 bit integer X, Y, width, height values."},
     {"SDL_RenderDrawPointsF",
-        (_PyCFunctionFast)RenderDrawPointsF, METH_FASTCALL, NULL},
+        (_PyCFunctionFast)RenderDrawPointsF, METH_FASTCALL,
+        "Wrapper for SDL_RenderDrawPointsF that accepts PyBuffers.\n\n"
+        "SDL_RenderDrawPoints(renderer, array)\n"
+        "renderer  The SDL_Renderer.\n"
+        "array     A PyBuffer either as Nx2 array or even number 1D array of 32 bit float X-Y pairs."},
     {"SDL_RenderDrawLinesF",
-        (_PyCFunctionFast)RenderDrawLinesF,  METH_FASTCALL, NULL},
+        (_PyCFunctionFast)RenderDrawLinesF,  METH_FASTCALL,
+        "Wrapper for SDL_RenderDrawLinesF that accepts PyBuffers.\n\n"
+        "SDL_RenderDrawPoints(renderer, array)\n"
+        "renderer  The SDL_Renderer.\n"
+        "array     A PyBuffer either as Nx2 array or even number 1D array of 32 bit float X-Y pairs."},
     {"SDL_RenderDrawRectsF",
-        (_PyCFunctionFast)RenderDrawRectsF,  METH_FASTCALL, NULL},
+        (_PyCFunctionFast)RenderDrawRectsF,  METH_FASTCALL,
+        "Wrapper for SDL_RenderDrawRectsF that accepts PyBuffers.\n\n"
+        "SDL_RenderDrawPoints(renderer, array)\n"
+        "renderer  The SDL_Renderer.\n"
+        "array     A PyBuffer either as Nx4 array or multiple of four 1D array of 32 bit float X, Y, width, height values."},
     {NULL}
 };
 
