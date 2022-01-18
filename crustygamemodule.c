@@ -435,22 +435,28 @@ static PyMethodDef LayerList_methods[] = {
         "default_render_target",
         (PyCMethod) LayerList_set_default_render_target,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the default texture to render to.  Isn't applied immediately, though."},
+        "Set the default texture to render to.  Isn't applied immediately, though.\n\n"
+        "default_render_target(texture)\n"
+        "texture  An SDL_Texture or None for the screen"},
     {
         "target_tileset",
         (PyCMethod) LayerList_set_target_tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the tileset to render to or the default render target if less than 0."},
+        "Set the tileset to render to or the default render target if less than 0.\n\n"
+        "target_tileset(tileset)\n"
+        "tileset  A Tileset or None to output to the default render target"},
     {
         "tileset",
         (PyCMethod) LayerList_LL_Tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience method to create a Tileset from this LayerList."},
+        "Convenience method to create a Tileset from this LayerList.\n\n"
+        "tileset()"},
     {
         "tilemap",
         (PyCMethod) LayerList_LL_Tilemap,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience method to create a Tilemap from this LayerList."},
+        "Convenience method to create a Tilemap from this LayerList.\n\n"
+        "tilemap()"},
     {NULL}
 };
 
@@ -712,7 +718,8 @@ static PyMethodDef Tileset_methods[] = {
         "tilemap",
         (PyCMethod) LayerList_TS_tilemap,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience method to create a Tilemap from this Tileset."},
+        "Convenience method to create a Tilemap from this Tileset.\n\n"
+        "tilemap()"},
     {NULL}
 };
 
@@ -1121,32 +1128,61 @@ static PyMethodDef Tilemap_methods[] = {
         "tileset",
         (PyCMethod) Tilemap_set_tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set a tileset which will be used for rendering out the tilemap."},
+        "Set a tileset which will be used for rendering out the tilemap.\n\n"
+        "tileset(tileset)\n"
+        "tileset  The Tileset."},
     {
         "map",
         (PyCMethod) Tilemap_set_map,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Update a rectangle section of the tilemap."},
+        "Update a rectangle section of the tilemap.\n\n"
+        "map(x, y, pitch, width, height, buffer)\n"
+        "x       Where to start updating from the left.\n"
+        "y       Where to start updating from the top.\n"
+        "pitch   How many items to advance each row.\n"
+        "width   How wide of a rectangle to update.\n"
+        "height  How tall of a rectangle to update.\n"
+        "buffer  The buffer. (array.array, ndarray, etc)"},
     {
         "attr_flags",
         (PyCMethod) Tilemap_set_attr_flags,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Add/update attribute flags to a tilemap."},
+        "Add/update attribute flags to a tilemap.\n\n"
+        "attr_flags(x, y, pitch, width, height, buffer)\n"
+        "x       Where to start updating from the left.\n"
+        "y       Where to start updating from the top.\n"
+        "pitch   How many items to advance each row.\n"
+        "width   How wide of a rectangle to update.\n"
+        "height  How tall of a rectangle to update.\n"
+        "buffer  The buffer. (array.array, ndarray, etc)"},
     {
         "attr_colormod",
         (PyCMethod) Tilemap_set_attr_colormod,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Add/update colormod values for a tilemap."},
+        "Add/update colormod values for a tilemap.\n\n"
+        "attr_colormod(x, y, pitch, width, height, buffer)\n"
+        "x       Where to start updating from the left.\n"
+        "y       Where to start updating from the top.\n"
+        "pitch   How many items to advance each row.\n"
+        "width   How wide of a rectangle to update.\n"
+        "height  How tall of a rectangle to update.\n"
+        "buffer  The buffer. (array.array, ndarray, etc)"},
     {
         "update",
         (PyCMethod) Tilemap_update,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Redraw a region of the tilemap."},
+        "Redraw a region of the tilemap.\n\n"
+        "update(x, y, width, height)\n"
+        "x       Where to start updating from the left.\n"
+        "y       Where to start updating from the top.\n"
+        "width   How wide of a rectangle to update.\n"
+        "height  How tall of a rectangle to update."},
     {
         "layer",
         (PyCMethod) LayerList_TM_layer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Convenience method to create a Layer from this Tilemap."},
+        "Convenience method to create a Layer from this Tilemap.\n\n"
+        "layer()"},
     {NULL}
 };
 
@@ -1594,52 +1630,76 @@ static PyMethodDef Layer_methods[] = {
         "pos",
         (PyCMethod) Tilemap_set_layer_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the on-screen position to draw the layer to."},
+        "Set the on-screen position to draw the layer to.\n\n"
+        "pos(x, y)\n"
+        "x  Position from the left of the screen/relative layer.\n"
+        "y  Position from the top of the screen/relative layer."},
     {
         "window",
         (PyCMethod) Tilemap_set_layer_window,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the window size of the view in to the tilemap to show."},
+        "Set the window size of the view in to the tilemap to show.\n\n"
+        "window(w, h)\n"
+        "w  Width of the window\n"
+        "h  Height of the window"},
     {
         "scroll_pos",
         (PyCMethod) Tilemap_set_layer_scroll_pos,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the scroll position (top-left corner) of the tilemap to show."},
+        "Set the scroll position (top-left corner) of the tilemap to show.\n\n"
+        "scroll_pos(x, y)\n"
+        "x  Position from the left of the tilemap.\n"
+        "y  Position from the top of the tilemap."},
     {
         "scale",
         (PyCMethod) Tilemap_set_layer_scale,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the scale of the layer."},
+        "Set the scale of the layer.\n\n"
+        "scale(x, y)\n"
+        "x  Scale on the X (horizontal) axis.\n"
+        "y  Scale on the Y (vertical) axis."},
     {
         "rotation_center",
         (PyCMethod) Tilemap_set_layer_rotation_center,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the point around which the layer is rotated."},
+        "Set the point around which the layer is rotated.\n\n"
+        "rotation_center(x, y)\n"
+        "x  Position from the left of the layer to rotate around.\n"
+        "y  Position from the top of the layer to rotate around."},
     {
         "rotation",
         (PyCMethod) Tilemap_set_layer_rotation,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the rotation of the layer, in degrees."},
+        "Set the rotation of the layer, in degrees.\n\n"
+        "rotation(angle)\n"
+        "angle  angle of rotation in degrees."},
     {
         "colormod",
         (PyCMethod) Tilemap_set_layer_colormod,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the layer's colormod."},
+        "Set the layer's colormod.\n\n"
+        "colormod(colormod)\n"
+        "colormod  An integer color value created using this module's shift/mask constants."},
     {
         "blendmode",
         (PyCMethod) Tilemap_set_layer_blendmode,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set the layer blendmode."},
+        "Set the layer blendmode.\n\n"
+        "blendmode(blendmode)\n"
+        "blendmode  A blendmode, from this module's blendmode constants."},
     {
         "relative",
         (PyCMethod) Tilemap_set_layer_relative,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set a layer for this layer's position and angle to be relative to."},
+        "Set a layer for this layer's position and angle to be relative to.\n\n"
+        "relative(layer)\n"
+        "layer  The layer this should be positioned relative to."},
     {
         "draw",
         (PyCMethod) Tilemap_draw_layer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Finally, draw a layer to the screen or render target."},
+        "Finally, draw a layer to the screen or render target.\n\n"
+        "draw()"},
     {NULL}
 };
 
