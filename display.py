@@ -104,25 +104,36 @@ def make_color(r, g, b, a):
            (int(a) << cg.TILEMAP_ASHIFT))
 
 def unmake_color(color):
-    return int(color) & cg.TILEMAP_RMASK >> cg.TILEMAP_RSHIFT, \
-           int(color) & cg.TILEMAP_GMASK >> cg.TILEMAP_GSHIFT, \
-           int(color) & cg.TILEMAP_BMASK >> cg.TILEMAP_BSHIFT, \
-           int(color) & cg.TILEMAP_AMASK >> cg.TILEMAP_ASHIFT
+    return (int(color) & cg.TILEMAP_RMASK) >> cg.TILEMAP_RSHIFT, \
+           (int(color) & cg.TILEMAP_GMASK) >> cg.TILEMAP_GSHIFT, \
+           (int(color) & cg.TILEMAP_BMASK) >> cg.TILEMAP_BSHIFT, \
+           (int(color) & cg.TILEMAP_AMASK) >> cg.TILEMAP_ASHIFT
+
+def setdest(ll, dest):
+    if isinstance(dest, cg.Tileset):
+        ll.target_tileset(dest)
+    elif isinstance(dest, POINTER(SDL_Texture)):
+        ll.default_render_target(dest)
+        ll.target_tileset(None)
+    elif dest is SCREEN:
+        ll.default_render_target(None)
+        ll.target_tileset(None)
+    # None should do nothing
 
 def clear(ll, tex, r, g, b, a):
+    if tex == SCREEN:
+        realtex = None
+    else:
+        realtex = tex
     orig = SDL_GetRenderTarget(ll.renderer)
-    if orig == None:
-        orig = SCREEN
-    if tex is not None and tex != orig:
-        if SDL_SetRenderTarget(ll.renderer, tex) < 0:
+    if tex is not None and realtex != orig:
+        if SDL_SetRenderTarget(ll.renderer, realtex) < 0:
             raise Exception("Failed to set render target")
     if SDL_SetRenderDrawColor(ll.renderer, r, g, b, a) < 0:
         raise Exception("Failed to set render draw color.")
     if SDL_RenderClear(ll.renderer) < 0:
         raise Exception("Failed to clear.")
-    if tex is not None and tex != orig:
-        if orig == SCREEN:
-            orig = None
+    if tex is not None and realtex != orig:
         if SDL_SetRenderTarget(ll.renderer, orig) < 0:
             raise Exception("Failed to restore render target")
 
@@ -145,7 +156,8 @@ class DisplayList():
                 raise ValueError("DisplayList is already referenced")
             item._ref = True
         elif item is not None and \
-           not isinstance(item, (cg.Layer, int)):
+           not isinstance(item, (cg.Layer, int)) and\
+           not callable(item):
             raise TypeError("item must be DisplayList or Layer or int or None")
 
     def append(self, item):
@@ -165,26 +177,30 @@ class DisplayList():
         del self._list[num]
 
     def _setdest(self):
-        if isinstance(self._dest, cg.Tileset):
-            self._ll.target_tileset(self._dest)
-        elif isinstance(self._dest, POINTER(SDL_Texture)):
-            self._ll.default_render_target(self._dest)
-            self._ll.target_tileset(None)
-        elif self._dest is SCREEN:
-            self._ll.default_render_target(None)
-            self._ll.target_tileset(None)
-        # None should do nothing
+        setdest(self._ll, self._dest)
 
-    def draw(self):
-        self._setdest()
+    def draw(self, restore, trace=False, depth=0):
+        if restore != None and self._dest != restore:
+            self._setdest()
 
         for item in self._list:
-            if isinstance(item, DisplayList):
-                item.draw()
-                if item._dest != self._dest:
-                    self._setdest()
+            if callable(item):
+                if trace:
+                    print('{:><{}}callable'.format('', depth))
+                item()
+            elif isinstance(item, DisplayList):
+                if trace:
+                    print('{:><{}}DisplayList'.format('', depth))
+                item.draw(self._dest, trace, depth+1)
             elif isinstance(item, cg.Layer):
+                if trace:
+                    print('{:><{}}{}'.format('', depth, item.name()))
                 item.draw()
             elif isinstance(item, int):
                 r, g, b, a = unmake_color(item)
+                if trace:
+                    print('{:><{}}{} -> {} {} {} {}'.format('', depth, hex(item), r, g, b, a))
                 clear(self._ll, None, r, g, b, a)
+
+        if restore != None and self._dest != restore:
+            setdest(self._ll, restore)

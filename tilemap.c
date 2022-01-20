@@ -632,6 +632,15 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index) {
     return(0);
 }
 
+const char *tilemap_tileset_name(LayerList *ll, unsigned int index) {
+    Tileset *ts = get_tileset(ll, index);
+    if(ts == NULL) {
+        return(NULL);
+    }
+
+    return(ts->name);
+}
+
 static int init_tilemap(LayerList *ll, Tilemap *t,
                         unsigned int tileset,
                         unsigned int w, unsigned int h,
@@ -801,6 +810,15 @@ int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
     free(tm->name);
 
     return(0);
+}
+
+const char *tilemap_tilemap_name(LayerList *ll, unsigned int index) {
+    Tilemap *tm = get_tilemap(ll, index);
+    if(tm == NULL) {
+        return(NULL);
+    }
+
+    return(tm->name);
 }
 
 int tilemap_set_tilemap_tileset(LayerList *ll,
@@ -1386,6 +1404,15 @@ int tilemap_free_layer(LayerList *ll, unsigned int index) {
     l->tex = NULL;
 
     return(0);
+}
+
+const char *tilemap_layer_name(LayerList *ll, unsigned int index) {
+    Layer *l = get_layer(ll, index);
+    if(l == NULL) {
+        return(NULL);
+    }
+
+    return(l->name);
 }
 
 int tilemap_set_layer_pos(LayerList *ll, unsigned int index, int x, int y) {

@@ -212,6 +212,14 @@ int tilemap_add_tileset(LayerList *ll,
  * return   0 on success, -1 on failure
  */
 int tilemap_free_tileset(LayerList *ll, unsigned int index);
+/*
+ * Get the tileset's name.
+ *
+ * ll       the LayerList
+ * index    the tileset handle index
+ * return   the name or NULL on failure
+ */
+const char *tilemap_tileset_name(LayerList *ll, unsigned int index);
 
 /*
  * Add a tilemap.
@@ -235,6 +243,14 @@ int tilemap_add_tilemap(LayerList *ll,
  * return   0 on success, -1 on failure
  */
 int tilemap_free_tilemap(LayerList *ll, unsigned int index);
+/*
+ * Get the tilemap's name.
+ *
+ * ll       the LayerList
+ * index    the tilemap handle index
+ * return   the name or NULL on failure
+ */
+const char *tilemap_tilemap_name(LayerList *ll, unsigned int index);
 /*
  * Set a tileset which will be used for rendering out the tilemap.  This needs
  * to be done at least once before the tilemap can be updated.
@@ -364,6 +380,14 @@ int tilemap_add_layer(LayerList *ll,
  */
 int tilemap_free_layer(LayerList *ll,
                        unsigned int index);
+/*
+ * Get the layer's name.
+ *
+ * ll       the LayerList
+ * index    the layer handle index
+ * return   the name or NULL on failure
+ */
+const char *tilemap_layer_name(LayerList *ll, unsigned int index);
 /*
  * Set the on-screen position to draw the layer to.
  *

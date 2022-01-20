@@ -1254,7 +1254,7 @@ class AudioSystem():
 
     def frame(self):
         try:
-            self._s.frame()
+            return(self._s.frame())
         except Exception as e:
             self._s.enabled(False)
             raise e

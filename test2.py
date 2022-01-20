@@ -400,22 +400,27 @@ def do_main(window, renderer, pixfmt):
     osc1l.pos(-20, -20)
     osc1l.scale((320 + (20 * 2)) / 320, (240 + (20 * 2)) / 240)
     osc1l.rotation(5)
+    osc1l.rotation_center(160, 120)
     osc2 = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, 320, 240)
     display.clear(ll, osc2, 0, 0, 0, SDL_ALPHA_OPAQUE)
     osc2l = cg.Layer(ll, osc2, "OSC 2 Layer")
 
     scene = display.DisplayList(ll, display.SCREEN)
-    osc2dl = display.DisplayList(ll, osc2)
-    osc2dl.append(osc1l)
-    osc1dl = display.DisplayList(ll, osc1)
-    osc1dl.append(osc2l)
-    scopelid = osc1dl.append(None)
-    scoperid = osc1dl.append(None)
+    osc1dl = display.DisplayList(ll, osc2)
+    osc1dl.append(osc1l)
+    osc2dl = display.DisplayList(ll, osc1)
+    osc2dl.append(osc2l)
+    scopelid = osc2dl.append(None)
+    scoperid = osc2dl.append(None)
     scene.append(display.make_color(32, 128, 192, SDL_ALPHA_OPAQUE))
-    #scene.append(osc2dl)
-    #scene.append(osc1dl)
+    scene.append(lambda: osc2l.scale(1.0, 1.0))
+    scene.append(osc1dl)
+    scene.append(osc2dl)
+    scene.append(lambda: osc2l.scale(2.0, 2.0))
+    scene.append(osc2l)
 
-    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
+    #aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
+    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=False)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
     aud.enabled(True)
 
@@ -440,8 +445,8 @@ def do_main(window, renderer, pixfmt):
             if seq != None:
                 for s in seq:
                     aud.del_sequence(s)
-                osc1dl.replace(scopelid, None)
-                osc1dl.replace(scoperid, None)
+                osc2dl.replace(scopelid, None)
+                osc2dl.replace(scoperid, None)
                 scopell = None
                 scoperl = None
                 scopel = None
@@ -465,8 +470,8 @@ def do_main(window, renderer, pixfmt):
                     seq.remove(s)
                     print("Sequence ended")
             if len(seq) == 0:
-                osc1dl.replace(scopelid, None)
-                osc1dl.replace(scoperid, None)
+                osc2dl.replace(scopelid, None)
+                osc2dl.replace(scoperid, None)
                 scopell = None
                 scoperl = None
                 scopel = None
@@ -544,18 +549,18 @@ def do_main(window, renderer, pixfmt):
                         scopel = Scope(renderer, seq[0], 0, pixfmt, 320, 120)
                         scopell = cg.Layer(ll, scopel.texture, "Scope L Layer")
                         scopell.pos(0, 30)
-                        osc1dl.replace(scopelid, scopell)
+                        osc2dl.replace(scopelid, scopell)
                         scoper = Scope(renderer, seq[0], 1, pixfmt, 320, 120)
                         scoperl = cg.Layer(ll, scoper.texture, "Scope R Layer")
                         scoperl.pos(0, 90)
-                        osc1dl.replace(scoperid, scoperl)
+                        osc2dl.replace(scoperid, scoperl)
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
-                        osc1dl.replace(scopelid, None)
-                        osc1dl.replace(scoperid, None)
+                        osc2dl.replace(scopelid, None)
+                        osc2dl.replace(scoperid, None)
                         scopell = None
                         scoperl = None
                         scopel = None
@@ -677,15 +682,13 @@ def do_main(window, renderer, pixfmt):
         modr, modg, modb = color_from_rad(colorrad, 0, 255)
         l1.colormod(display.make_color(modr, modg, modb, 255))
 
-        if scopel != None:
+        if scopell != None:
             modr, modg, modb = color_from_rad(colorrad, 0, 250)
-            if SDL_SetTextureColorMod(scopel.texture, int(modr), int(modg), int(modb)) < 0:
-                raise Exception("Couldn't set texture colormod.")
+            scopell.colormod(display.make_color(modr, modg, modb, SDL_ALPHA_OPAQUE))
             modr, modg, modb = color_from_rad(colorrad2, 0, 250)
-            if SDL_SetTextureColorMod(scoper.texture, int(modr), int(modg), int(modb)) < 0:
-                raise Exception("Couldn't set texture colormod.")
+            scoperl.colormod(display.make_color(modr, modg, modb, SDL_ALPHA_OPAQUE))
 
-        scene.draw()
+        scene.draw(display.SCREEN)
 
         l1.pos(int(x2), int(y2))
         l2.pos(int(x), int(y))
@@ -702,8 +705,8 @@ def do_main(window, renderer, pixfmt):
     if seq != None:
         for s in seq:
             aud.del_sequence(s)
-        osc1dl.replace(scopelid, None)
-        osc1dl.replace(scoperid, None)
+        osc2dl.replace(scopelid, None)
+        osc2dl.replace(scoperid, None)
         scopell = None
         scoperl = None
         scopel= None

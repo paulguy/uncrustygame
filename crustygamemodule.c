@@ -683,6 +683,29 @@ static void Tileset_dealloc(TilesetObject *self) {
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
+static PyObject *Tilemap_tileset_name(TilesetObject *self,
+                                      PyTypeObject *defining_class,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs,
+                                      PyObject *kwnames) {
+    const char *name;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    name = tilemap_tileset_name(self->ll->ll, self->tileset);
+    if(name == NULL) {
+        PyErr_SetString(state->CrustyException, "tilemap_tileset_name failed");
+        return(NULL);
+    }
+
+    return(PyUnicode_FromString(name));
+}
+
 static PyObject *LayerList_TS_tilemap(TilesetObject *self,
                                       PyTypeObject *defining_class,
                                       PyObject *const *args,
@@ -717,6 +740,13 @@ static PyObject *LayerList_TS_tilemap(TilesetObject *self,
 }
 
 static PyMethodDef Tileset_methods[] = {
+    {
+        "name",
+        (PyCMethod) Tilemap_tileset_name,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the tileset name.\n\n"
+        "name(...) -> name\n"
+        "name  The tileset's name."},
     {
         "tilemap",
         (PyCMethod) LayerList_TS_tilemap,
@@ -838,6 +868,29 @@ static void Tilemap_dealloc(TilemapObject *self) {
     Py_XDECREF(self->ts);
     Py_XDECREF(self->ll);
     Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Tilemap_tilemap_name(TilemapObject *self,
+                                      PyTypeObject *defining_class,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs,
+                                      PyObject *kwnames) {
+    const char *name;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    name = tilemap_tilemap_name(self->ll->ll, self->tilemap);
+    if(name == NULL) {
+        PyErr_SetString(state->CrustyException, "tilemap_tilemap_name failed");
+        return(NULL);
+    }
+
+    return(PyUnicode_FromString(name));
 }
 
 static PyObject *Tilemap_set_tileset(TilemapObject *self,
@@ -1129,6 +1182,13 @@ static PyObject *LayerList_TM_layer(TilemapObject *self,
 
 static PyMethodDef Tilemap_methods[] = {
     {
+        "name",
+        (PyCMethod) Tilemap_tilemap_name,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the tilemap name.\n\n"
+        "name(...) -> name\n"
+        "name  The tilemap's name."},
+    {
         "tileset",
         (PyCMethod) Tilemap_set_tileset,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
@@ -1307,6 +1367,29 @@ static void Layer_dealloc(LayerObject *self) {
     Py_XDECREF(self->tm);
     Py_XDECREF(self->ll);
     Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *Tilemap_layer_name(LayerObject *self,
+                                    PyTypeObject *defining_class,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwnames) {
+    const char *name;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    name = tilemap_layer_name(self->ll->ll, self->layer);
+    if(name == NULL) {
+        PyErr_SetString(state->CrustyException, "tilemap_layer_name failed");
+        return(NULL);
+    }
+
+    return(PyUnicode_FromString(name));
 }
 
 static PyObject *Tilemap_set_layer_pos(LayerObject *self,
@@ -1633,6 +1716,13 @@ static PyObject *Tilemap_draw_layer(LayerObject *self,
 }
 
 static PyMethodDef Layer_methods[] = {
+    {
+        "name",
+        (PyCMethod) Tilemap_layer_name,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the layer name.\n\n"
+        "name(...) -> name\n"
+        "name  The layer's name."},
     {
         "pos",
         (PyCMethod) Tilemap_set_layer_pos,
