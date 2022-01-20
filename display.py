@@ -156,7 +156,7 @@ class DisplayList():
                 raise ValueError("DisplayList is already referenced")
             item._ref = True
         elif item is not None and \
-           not isinstance(item, (cg.Layer, int)) and\
+           not isinstance(item, (cg.Layer, int)) and \
            not callable(item):
             raise TypeError("item must be DisplayList or Layer or int or None")
 
@@ -180,6 +180,16 @@ class DisplayList():
         setdest(self._ll, self._dest)
 
     def draw(self, restore, trace=False, depth=0):
+        if trace:
+            if self._dest is None:
+                print('{:><{}}Destination: No Change'.format('', depth))
+            elif self._dest is SCREEN:
+                print('{:><{}}Destination: Screen'.format('', depth))
+            elif isinstance(self._dest, POINTER(SDL_Texture)):
+                print('{:><{}}Destination: SDL_Texture'.format('', depth))
+            elif isinstance(self._dest, cg.Tileset):
+                print('{:><{}}Destination: {}'.format('', depth, self._dest.name()))
+
         if restore != None and self._dest != restore:
             self._setdest()
 

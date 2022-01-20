@@ -12,6 +12,9 @@ import numpy
 from scipy import signal
 import display
 
+TRACEVIDEO=True
+TRACEAUDIO=False
+
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"
 
@@ -418,9 +421,13 @@ def do_main(window, renderer, pixfmt):
     scene.append(osc2dl)
     scene.append(lambda: osc2l.scale(2.0, 2.0))
     scene.append(osc2l)
+    l1dl = display.DisplayList(ll, ts2)
+    l1dl.append(l1)
+    l1dl.append(lambda: tm2.update(0, 0, 1, 1))
+    scene.append(l1dl)
+    scene.append(l2)
 
-    #aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=True)
-    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=False)
+    aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=TRACEAUDIO)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
     aud.enabled(True)
 
@@ -503,7 +510,7 @@ def do_main(window, renderer, pixfmt):
                     try:
                         with open(seqname, "r") as seqfile:
                             seq.append(audio.AudioSequencer(seqfile,
-                                       audbuffers, macros, trace=True))
+                                       audbuffers, macros, trace=TRACEAUDIO))
                     except Exception as e:
                         aud.print_full_stats()
                         print_tb(e.__traceback__)
@@ -523,7 +530,7 @@ def do_main(window, renderer, pixfmt):
                                     with open(part, "r") as seqfile:
                                         seq.append(audio.AudioSequencer(seqfile,
                                                    [envslope, benddownslope, bendupslope, noise, filt],
-                                                   macros, trace=True))
+                                                   macros, trace=TRACEAUDIO))
                                 except Exception as e:
                                     aud.print_full_stats()
                                     print_tb(e.__traceback__)
@@ -673,6 +680,9 @@ def do_main(window, renderer, pixfmt):
             x2speed = random.uniform(-64.0, 64.0)
             y2speed = random.uniform(-64.0, 64.0)
 
+        l1.pos(int(x2), int(y2))
+        l2.pos(int(x), int(y))
+
         colorrad = colorrad + (numpy.pi * timetaken)
         if colorrad >= numpy.pi * 2:
             colorrad = colorrad - (numpy.pi * 2)
@@ -688,15 +698,8 @@ def do_main(window, renderer, pixfmt):
             modr, modg, modb = color_from_rad(colorrad2, 0, 250)
             scoperl.colormod(display.make_color(modr, modg, modb, SDL_ALPHA_OPAQUE))
 
-        scene.draw(display.SCREEN)
+        scene.draw(display.SCREEN, trace=TRACEVIDEO)
 
-        l1.pos(int(x2), int(y2))
-        l2.pos(int(x), int(y))
-        ll.target_tileset(ts2)
-        l1.draw()
-        ll.target_tileset(None)
-        tm2.update(0, 0, 1, 1)
-        l2.draw()
         SDL_RenderPresent(renderer)
 
         lastTime = thisTime
