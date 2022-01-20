@@ -315,9 +315,9 @@ def do_main(window, renderer, pixfmt):
         seqname = DEFAULT_SEQ
 
     sdlfmt = SDL_AllocFormat(pixfmt)
-    sdl_red = SDL_MapRGBA(sdlfmt, 255, 0, 0, 255)
-    sdl_green = SDL_MapRGBA(sdlfmt, 0, 255, 0, 255)
-    sdl_blue = SDL_MapRGBA(sdlfmt, 0, 0, 255, 255)
+    sdl_red = SDL_MapRGBA(sdlfmt, 255, 0, 0, SDL_ALPHA_OPAQUE)
+    sdl_green = SDL_MapRGBA(sdlfmt, 0, 255, 0, SDL_ALPHA_OPAQUE)
+    sdl_blue = SDL_MapRGBA(sdlfmt, 0, 0, 255, SDL_ALPHA_OPAQUE)
     red = display.make_color(255, 31, 31, 255)
     green = display.make_color(31, 255, 31, 255)
     blue = display.make_color(127, 127, 255, 255)
@@ -380,6 +380,7 @@ def do_main(window, renderer, pixfmt):
     l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
     ts2 = ll.tileset(64, 64, sdl_blue, 64, 64, "Blue Box")
     tm2 = ts2.tilemap(1, 1, "Blue Box")
+    tm2.update(0, 0, 1, 1)
     l2 = tm2.layer("Blue Box")
     l2.scale(4.0, 4.0)
 
@@ -416,11 +417,13 @@ def do_main(window, renderer, pixfmt):
     scopelid = osc2dl.append(None)
     scoperid = osc2dl.append(None)
     scene.append(display.make_color(32, 128, 192, SDL_ALPHA_OPAQUE))
-    scene.append(lambda: osc2l.scale(1.0, 1.0))
-    scene.append(osc1dl)
-    scene.append(osc2dl)
-    scene.append(lambda: osc2l.scale(2.0, 2.0))
-    scene.append(osc2l)
+    oscdl = display.DisplayList(ll, None)
+    oscdl.append(lambda: osc2l.scale(1.0, 1.0))
+    oscdl.append(osc1dl)
+    oscdl.append(osc2dl)
+    oscdl.append(lambda: osc2l.scale(2.0, 2.0))
+    oscdl.append(osc2l)
+    oscid = scene.append(None)
     l1dl = display.DisplayList(ll, ts2)
     l1dl.append(l1)
     l1dl.append(lambda: tm2.update(0, 0, 1, 1))
@@ -452,6 +455,7 @@ def do_main(window, renderer, pixfmt):
             if seq != None:
                 for s in seq:
                     aud.del_sequence(s)
+                scene.replace(oscid, None)
                 osc2dl.replace(scopelid, None)
                 osc2dl.replace(scoperid, None)
                 scopell = None
@@ -477,6 +481,7 @@ def do_main(window, renderer, pixfmt):
                     seq.remove(s)
                     print("Sequence ended")
             if len(seq) == 0:
+                scene.replace(oscid, None)
                 osc2dl.replace(scopelid, None)
                 osc2dl.replace(scoperid, None)
                 scopell = None
@@ -561,11 +566,13 @@ def do_main(window, renderer, pixfmt):
                         scoperl = cg.Layer(ll, scoper.texture, "Scope R Layer")
                         scoperl.pos(0, 90)
                         osc2dl.replace(scoperid, scoperl)
+                        scene.replace(oscid, oscdl)
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
                         for s in seq:
                             aud.del_sequence(s)
+                        scene.replace(oscid, None)
                         osc2dl.replace(scopelid, None)
                         osc2dl.replace(scoperid, None)
                         scopell = None
@@ -708,6 +715,7 @@ def do_main(window, renderer, pixfmt):
     if seq != None:
         for s in seq:
             aud.del_sequence(s)
+        scene.replace(oscid, None)
         osc2dl.replace(scopelid, None)
         osc2dl.replace(scoperid, None)
         scopell = None

@@ -179,18 +179,21 @@ class DisplayList():
     def _setdest(self):
         setdest(self._ll, self._dest)
 
+    def _print_dest(dest, pfx, depth):
+        if dest is None:
+            print('{:><{}}{}: No Change'.format('', depth, pfx))
+        elif dest is SCREEN:
+            print('{:><{}}{}: Screen'.format('', depth, pfx))
+        elif isinstance(dest, POINTER(SDL_Texture)):
+            print('{:><{}}{}: SDL_Texture'.format('', depth, pfx))
+        elif isinstance(dest, cg.Tileset):
+            print('{:><{}}{}: {}'.format('', depth, pfx, dest.name()))
+
     def draw(self, restore, trace=False, depth=0):
         if trace:
-            if self._dest is None:
-                print('{:><{}}Destination: No Change'.format('', depth))
-            elif self._dest is SCREEN:
-                print('{:><{}}Destination: Screen'.format('', depth))
-            elif isinstance(self._dest, POINTER(SDL_Texture)):
-                print('{:><{}}Destination: SDL_Texture'.format('', depth))
-            elif isinstance(self._dest, cg.Tileset):
-                print('{:><{}}Destination: {}'.format('', depth, self._dest.name()))
+            DisplayList._print_dest(self._dest, 'Destination', depth)
 
-        if restore != None and self._dest != restore:
+        if self._dest != restore:
             self._setdest()
 
         for item in self._list:
@@ -201,7 +204,10 @@ class DisplayList():
             elif isinstance(item, DisplayList):
                 if trace:
                     print('{:><{}}DisplayList'.format('', depth))
-                item.draw(self._dest, trace, depth+1)
+                if self._dest == None:
+                    item.draw(restore, trace, depth+1)
+                else:
+                    item.draw(self._dest, trace, depth+1)
             elif isinstance(item, cg.Layer):
                 if trace:
                     print('{:><{}}{}'.format('', depth, item.name()))
@@ -212,5 +218,6 @@ class DisplayList():
                     print('{:><{}}{} -> {} {} {} {}'.format('', depth, hex(item), r, g, b, a))
                 clear(self._ll, None, r, g, b, a)
 
-        if restore != None and self._dest != restore:
+        if self._dest != restore:
+            DisplayList._print_dest(restore, "Restoring", depth)
             setdest(self._ll, restore)
