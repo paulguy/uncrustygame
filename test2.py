@@ -12,7 +12,13 @@ import numpy
 from scipy import signal
 import display
 
-TRACEVIDEO=True
+# debugging options
+# enable SDL render batching, not very useful to disable but can be useful to
+# see what if any difference it makes
+RENDERBATCHING=True
+# enable tracing of display list processing
+TRACEVIDEO=False
+# enable tracing of audio sequencer processing
 TRACEAUDIO=False
 
 DEFAULT_SEQ = "test3.crustysequence"
@@ -726,7 +732,7 @@ def do_main(window, renderer, pixfmt):
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
-    window, renderer, pixfmt = display.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE)
+    window, renderer, pixfmt = display.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE, batching=RENDERBATCHING)
 
     do_main(window, renderer, pixfmt)
 

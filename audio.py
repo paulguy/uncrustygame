@@ -264,7 +264,7 @@ class AudioSequencer():
                         raise Exception("Invalid channel type: {}".format(channel))
                 elif linetype == 'include':
                     with open(line, 'r') as macrofile:
-                        macrofile = MacroReader(macrofile, trace=True, macros=infile)
+                        macrofile = MacroReader(macrofile, trace=trace, macros=infile)
                         try:
                             macros = read_macros(macrofile)
                         except Exception as e:
@@ -390,7 +390,7 @@ class AudioSequencer():
                     seqDesc.add_column(playerDesc)
                 elif channel == CHANNEL_TYPE_FILTER:
                     seqDesc.add_column(filterDesc)
-            self._seq = seq.Sequencer(seqDesc, infile)
+            self._seq = seq.Sequencer(seqDesc, infile, trace=trace)
         except Exception as e:
             print("Exception on line {} in {}.".format(infile.curline, infile.name))
             raise e
@@ -817,7 +817,8 @@ class AudioSequencer():
                 buffer[2] = buffer[0]
             buffer[1] = buffer[2].rate()
             buffer[3] = buffer[1] / 1000
-        print(self._buffer)
+        if self._trace:
+            print(self._buffer)
         initial = self._seq.advance(0)[1]
         self._localChannels = list()
         for channel in enumerate(self._channel):

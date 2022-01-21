@@ -47,7 +47,8 @@ class SequenceDescription():
 
 
 class Sequencer():
-    def __init__(self, desc, file):
+    def __init__(self, desc, file, trace=False):
+        self._trace = trace
         self._desc = desc
         self._read_file(file)
         self.reset()
@@ -238,9 +239,9 @@ class Sequencer():
                 pattern.append(self._read_line(file))
             self._pattern.append(pattern)
         self._fix_rows()
-        for row in enumerate(self._row):
-            print("{} {}".format(row[0], row[1][:-1]))
-
+        if self._trace:
+            for row in enumerate(self._row):
+                print("{} {}".format(row[0], row[1][:-1]))
         try:
             ordersData = file.readline().split()
         except Exception as e:

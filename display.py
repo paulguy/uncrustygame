@@ -227,5 +227,61 @@ class DisplayList():
                 clear(self._ll, None, r, g, b, a)
 
         if self._dest != restore:
-            DisplayList._print_dest(restore, "Restoring", depth)
+            if trace:
+                DisplayList._print_dest(restore, "Restoring", depth)
             setdest(self._ll, restore)
+
+class ScrollingTilemap():
+    NOSCROLL_X = 1 << 0
+    NOSCROLL_Y = 1 << 1
+
+    def __init__(self, tileset, tilemap, linewidth, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0):
+        if noscroll & (ScrollingTilemap.NOSCROLL_X | \
+                       ScrollingTilemap.NOSCROLL_Y):
+            raise ValueError("Scrolling must be allowed in some direction.")
+        self._tilemap = tilemap
+        self._linewidth = linewidth
+        self._twidth = twidth
+        self._theight = theight
+        self._tmw = int(width / twidth)
+        if width % twidth > 0:
+            self._tmw += 1
+        if not noscroll & ScrollingTilemap.NOSCROLL_X:
+            self._tmw += 1
+        self._tmh = int(height / theight)
+        if height % theight > 0:
+            self._tmh += 1
+        if not noscroll & ScrollingTilemap.NOSCROLL_Y:
+            self._tmh += 1
+        self._tm = tileset.tilemap(tmw, tmh, "Scrolling Tilemap {}".format(tileset.name()))
+        # don't bother sanity checking the buffer, just try to update it which
+        # should do all the sanity checking. :p
+        self.setmap(startx, starty)
+        self._l = self._tm.layer("Scrolling Layer {}".format(tileset.name()))
+        self._l.window(width, height)
+        self._x = startx
+        self._y = starty
+        self._newx = startx
+        self._newy = starty
+
+    @property
+    def layer(self):
+        return self._l
+
+    def setmap(self, x, y):
+        self._tm.map(0, 0, self._linewidth, self._tmw, self._tmh, self._tilemap[y * self._linewidth + x:])
+        self._tm.update(0, 0, 0, 0)
+
+    def scroll(self, x, y):
+        self._newx = x
+        self._newy = y
+
+    def update(self):
+        if int(self._x / self._twidth)  != int(self._newx / self._twidth) or \
+           int(self._y / self._theight) != int(self._newy / self._theight):
+            self.setmap(int(self._newx / self._twidth), \
+                        int(self._newy / self._theight))
+        self._l.scroll(int(self._newx % self._twidth), \
+                       int(self._newy % self._theight))
+        self._x = self._newx
+        self._y = self._newy
