@@ -37,7 +37,8 @@ def _driver_key(info):
 
 def initialize_video(title :str,
                      width :int, height :int,
-                     winflags :int, rendererflags :int) \
+                     winflags :int, rendererflags :int,
+                     batching=True) \
                      -> (SDL_Window, SDL_Renderer, int):
     """
     Initialize video in a way that as far as I can tell is the best, preferred 
@@ -48,6 +49,13 @@ def initialize_video(title :str,
     returns window, renderer and prefered pixel format or raises RuntimeError if
     no window or renderer could be created
     """
+    if batching:
+        # According to documentation, setting the render backend explicitly
+        # will disable batching by default, so reenable it if it's requested
+        # specifically.
+        if SDL_SetHint(SDL_HINT_RENDER_BATCHING, b'1') != SDL_TRUE:
+            print("WARNING: Failed to set SDL_HINT_RENDER_BATCHING.")
+
     driver = list()
     pixfmt = SDL_PIXELFORMAT_UNKNOWN
     drivers = SDL_GetNumRenderDrivers()
