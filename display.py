@@ -253,7 +253,7 @@ class ScrollingTilemap():
             self._tmh += 1
         if not noscroll & ScrollingTilemap.NOSCROLL_Y:
             self._tmh += 1
-        self._tm = tileset.tilemap(tmw, tmh, "Scrolling Tilemap {}".format(tileset.name()))
+        self._tm = tileset.tilemap(self._tmw, self._tmh, "Scrolling Tilemap {}".format(tileset.name()))
         # don't bother sanity checking the buffer, just try to update it which
         # should do all the sanity checking. :p
         self.setmap(startx, starty)
@@ -268,9 +268,9 @@ class ScrollingTilemap():
     def layer(self):
         return self._l
 
-    def setmap(self, x, y):
-        self._tm.map(0, 0, self._linewidth, self._tmw, self._tmh, self._tilemap[y * self._linewidth + x:])
-        self._tm.update(0, 0, 0, 0)
+    def _setmap(self, x, y, tmx=0, tmy=0, w=0, h=0):
+        self._tm.map(tmx, tmy, self._linewidth, w, h, self._tilemap[y * self._linewidth + x:])
+        self._tm.update(tmx, tmy, w, h)
 
     def scroll(self, x, y):
         self._newx = x
@@ -279,9 +279,44 @@ class ScrollingTilemap():
     def update(self):
         if int(self._x / self._twidth)  != int(self._newx / self._twidth) or \
            int(self._y / self._theight) != int(self._newy / self._theight):
-            self.setmap(int(self._newx / self._twidth), \
+            self._setmap(int(self._newx / self._twidth), \
                         int(self._newy / self._theight))
         self._l.scroll(int(self._newx % self._twidth), \
                        int(self._newy % self._theight))
         self._x = self._newx
         self._y = self._newy
+
+    def updateregion(self, x, y, w, h):
+        tmx = x
+        tmy = y
+        if tmx < self._x:
+            if tmx + w > self._x + self._tmw:
+                tmx = 0
+                w = self._tmw
+            elif tmx + w > self._x:
+                tmx = 0
+                w = (tmx + w) - self._x
+            else:
+                return
+        else:
+            if tmx >= self._x + self._tmw:
+                return
+            else:
+                tmx = tmx - self._x
+                w = (self._x + self._tmw) - (tmx + w)
+        if tmy < self._y:
+            if tmy + h > self._y + self._tmh:
+                tmy = 0
+                h = self._tmh
+            elif tmy + h > self._y:
+                tmy = 0
+                h = (tmy + h) - self._y
+            else:
+                return
+        else:
+            if tmy >= self._y + self._tmh:
+                return
+            else:
+                tmy = tmy - self._y
+                h = (self._y + self._tmh) - (tmy + h)
+        self._setmap(x, y, tmx, tmy, w, h)
