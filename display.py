@@ -256,7 +256,7 @@ class ScrollingTilemap():
         self._tm = tileset.tilemap(self._tmw, self._tmh, "Scrolling Tilemap {}".format(tileset.name()))
         # don't bother sanity checking the buffer, just try to update it which
         # should do all the sanity checking. :p
-        self.setmap(startx, starty)
+        self._setmap(startx, starty)
         self._l = self._tm.layer("Scrolling Layer {}".format(tileset.name()))
         self._l.window(width, height)
         self._x = startx
@@ -281,8 +281,8 @@ class ScrollingTilemap():
            int(self._y / self._theight) != int(self._newy / self._theight):
             self._setmap(int(self._newx / self._twidth), \
                         int(self._newy / self._theight))
-        self._l.scroll(int(self._newx % self._twidth), \
-                       int(self._newy % self._theight))
+        self._l.scroll_pos(int(self._newx % self._twidth), \
+                           int(self._newy % self._theight))
         self._x = self._newx
         self._y = self._newy
 

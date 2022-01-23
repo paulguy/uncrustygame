@@ -310,6 +310,68 @@ class Scope():
         if SDL_SetRenderTarget(self._renderer, origtarget) < 0:
             raise Exception("Failed to restore render target")
 
+class BouncingPoint():
+    def __init__(self, minx, miny, maxx, maxy, maxspeed, minspeed=0, x=0, y=0):
+        self._minx = minx
+        self._maxx = maxx
+        self._miny = miny
+        self._maxy = maxy
+        self._minspeed = minspeed
+        self._maxspeed = maxspeed
+        self._x = x
+        self._y = y
+        self._xspeed = random.uniform(0.0, maxspeed)
+        self._yspeed = random.uniform(0.0, maxspeed)
+
+    @property
+    def point(self):
+        return self._x, self._y
+
+    def update(self, timetaken):
+        bounced = False
+
+        self._x = self._x + (self._xspeed * timetaken)
+        if self._x > self._maxx:
+            self._xspeed = random.uniform(-self._maxspeed, -self._minspeed)
+            if self._yspeed > 0.0:
+                self._yspeed = random.uniform(self._minspeed, self._maxspeed)
+            else:
+                self._yspeed = random.uniform(-self._maxspeed, self._minspeed)
+            self._x = self._maxx
+            bounced = True
+        elif self._x < self._minx:
+            self._xspeed = random.uniform(self._minspeed, self._maxspeed)
+            if self._yspeed > 0.0:
+                self._yspeed = random.uniform(self._minspeed, self._maxspeed)
+            else:
+                self._yspeed = random.uniform(-self._maxspeed, -self._minspeed)
+            self._x = self._minx
+            bounced = True
+
+        self._y = self._y + (self._yspeed * timetaken)
+        if self._y > self._maxy:
+            self._yspeed = random.uniform(-self._maxspeed, -self._minspeed)
+            if self._xspeed > 0.0:
+                self._xspeed = random.uniform(self._minspeed, self._maxspeed)
+            else:
+                self._xspeed = random.uniform(-self._maxspeed, -self._minspeed)
+            self._y = self._maxy
+            bounced = True
+        elif self._y < self._miny:
+            self._yspeed = random.uniform(self._minspeed, self._maxspeed)
+            if self._xspeed > 0.0:
+                self._xspeed = random.uniform(self._minspeed, self._maxspeed)
+            else:
+                self._xspeed = random.uniform(-self._maxspeed, -self._minspeed)
+            self._y = self._miny
+            bounced = True
+
+        while self._xspeed == 0.0 and self._yspeed == 0.0:
+            self._xspeed = random.uniform(-self._maxspeed, self._maxspeed)
+            self._yspeed = random.uniform(-self._maxspeed, self._maxspeed)
+
+        return bounced
+
 
 def log_cb_return(priv, string):
     print(string, end='')
@@ -371,8 +433,16 @@ def do_main(window, renderer, pixfmt):
     del ts2
     del ts1
 
-    ts1 = ll.tileset("cdemo/font.bmp", 8, 8, None)
-    tm1 = ll.tilemap(ts1, 8, 8, "DVD Video")
+    random.seed(None)
+
+    pt1 = BouncingPoint(0.0, 0.0, 640 - (64 * 4), 480 - (64 * 4), 480.0)
+    pt2 = BouncingPoint(-20.0, -8.0, 64 - 20, 64 - 8, 64.0, x = -20.0, y = -8.0)
+    blendmode = cg.TILEMAP_BLENDMODE_ADD
+    colorrad = 0.0
+    colorrad2 = 0.25
+
+    text = ll.tileset("cdemo/font.bmp", 8, 8, None)
+    tm1 = ll.tilemap(text, 8, 8, "DVD Video")
     tm1.map(2, 2, 5, 5, 2, array.array('u', "oediV DVD "))
     tm1.attr_flags(2, 2, 0, 5, 2, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))
     tm1.attr_colormod(2, 2, 4, 5, 2, array.array('I', (red, green, blue, red, green, blue, red, green, blue, red)))
@@ -383,26 +453,12 @@ def do_main(window, renderer, pixfmt):
     l1.rotation_center(20, 8)
     l1.rotation(180)
     l1.colormod(transparent_rg)
-    l1.blendmode(cg.TILEMAP_BLENDMODE_ADD)
+    l1.blendmode(blendmode)
     ts2 = ll.tileset(64, 64, sdl_blue, 64, 64, "Blue Box")
     tm2 = ts2.tilemap(1, 1, "Blue Box")
     tm2.update(0, 0, 1, 1)
     l2 = tm2.layer("Blue Box")
     l2.scale(4.0, 4.0)
-
-    random.seed(None)
-
-    x = 0.0
-    y = 0.0
-    x2 = -20.0
-    y2 = -8.0
-    xspeed = random.uniform(0.0, 480.0)
-    yspeed = random.uniform(0.0, 480.0)
-    x2speed = random.uniform(0.0, 64.0)
-    y2speed = random.uniform(0.0, 64.0)
-    blendmode = cg.TILEMAP_BLENDMODE_ADD
-    colorrad = 0.0
-    colorrad2 = 0.25
 
     osc1 = SDL_CreateTexture(renderer, pixfmt, SDL_TEXTUREACCESS_STATIC | SDL_TEXTUREACCESS_TARGET, 320, 240)
     display.clear(ll, osc1, 0, 0, 0, SDL_ALPHA_OPAQUE)
@@ -415,6 +471,14 @@ def do_main(window, renderer, pixfmt):
     display.clear(ll, osc2, 0, 0, 0, SDL_ALPHA_OPAQUE)
     osc2l = cg.Layer(ll, osc2, "OSC 2 Layer")
 
+    bigtm = numpy.zeros(256 * 255, numpy.int32)
+    bigtm[0:128] = numpy.arange(0, 128)
+    for num in range(128, 128 * 255, 128):
+        bigtm[num:num+128] = bigtm[0:128]
+    stm = display.ScrollingTilemap(text, bigtm, 127, 320, 240, 8, 8)
+    stm.layer.scale(2.0, 2.0)
+    pt3 = BouncingPoint(0, 0, (128 * 8) - 320, (255 * 8) - 240, 100, minspeed=20)
+
     scene = display.DisplayList(ll, display.SCREEN)
     osc1dl = display.DisplayList(ll, osc2)
     osc1dl.append(osc1l)
@@ -423,6 +487,7 @@ def do_main(window, renderer, pixfmt):
     scopelid = osc2dl.append(None)
     scoperid = osc2dl.append(None)
     scene.append(display.make_color(32, 128, 192, SDL_ALPHA_OPAQUE))
+    scene.append(stm.layer)
     oscdl = display.DisplayList(ll, None)
     oscdl.append(lambda: osc2l.scale(1.0, 1.0))
     oscdl.append(osc1dl)
@@ -600,101 +665,22 @@ def do_main(window, renderer, pixfmt):
                         aud.open_wav("output.wav")
                         wavout = True
 
-        x = x + (xspeed * timetaken)
-        if x > (640 - (64 * 4.0)):
-            xspeed = random.uniform(-480.0, 0.0)
-            if yspeed > 0.0:
-                yspeed = random.uniform(0.0, 480.0)
-            else:
-                yspeed = random.uniform(-480.0, 0.0)
-            x = 640 - (64 * 4.0)
-        elif x < 0:
-            xspeed = random.uniform(0.0, 480.0)
-            if yspeed > 0.0:
-                yspeed = random.uniform(0.0, 480.0)
-            else:
-                yspeed = random.uniform(-480.0, 0.0)
-            x = 0
-
-        y = y + (yspeed * timetaken)
-        if y > (480 - (64 * 4.0)):
-            y = 480 - (64 * 4.0)
-            yspeed = random.uniform(-480.0, 0.0)
-            if xspeed > 0.0:
-                xspeed = random.uniform(0.0, 480.0)
-            else:
-                xspeed = random.uniform(-480.0, 0.0)
-            y = 480 - (64 * 4.0)
-        elif y < 0:
-            yspeed = random.uniform(0.0, 480.0)
-            if xspeed > 0.0:
-                xspeed = random.uniform(0.0, 480.0)
-            else:
-                xspeed = random.uniform(-480.0, 0.0)
-            y = 0
-
-        x2 = x2 + (x2speed * timetaken)
-        if x2 > 64 - 20:
-            x2speed = random.uniform(-64.0, 0.0)
-            if y2speed > 0.0:
-                y2speed = random.uniform(0.0, 64.0)
-            else:
-                y2speed = random.uniform(-64.0, 0.0)
-            x2 = 64 - 20
+        pt1.update(timetaken)
+        if pt2.update(timetaken):
             if blendmode == cg.TILEMAP_BLENDMODE_ADD:
                 blendmode = cg.TILEMAP_BLENDMODE_SUB
             else:
                 blendmode = cg.TILEMAP_BLENDMODE_ADD
             l1.blendmode(blendmode)
-        elif x2 < -20:
-            x2speed = random.uniform(0.0, 64.0)
-            if y2speed > 0.0:
-                y2speed = random.uniform(0.0, 64.0)
-            else:
-                y2speed = random.uniform(-64.0, 0.0)
-            x2 = -20
-            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
-                blendmode = cg.TILEMAP_BLENDMODE_SUB
-            else:
-                blendmode = cg.TILEMAP_BLENDMODE_ADD
-            l1.blendmode(blendmode)
+        pt3.update(timetaken)
 
-        y2 = y2 + (y2speed * timetaken)
-        if y2 > 64 - 8:
-            y2speed = random.uniform(-64.0, 0.0)
-            if x2speed > 0.0:
-                x2speed = random.uniform(0.0, 64.0)
-            else:
-                x2speed = random.uniform(-64.0, 0.0)
-            y2 = 64 - 8
-            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
-                blendmode = cg.TILEMAP_BLENDMODE_SUB
-            else:
-                blendmode = cg.TILEMAP_BLENDMODE_ADD
-            l1.blendmode(blendmode)
-        elif y2 < -8:
-            y2speed = random.uniform(0.0, 64.0)
-            if x2speed > 0.0:
-                x2speed = random.uniform(0.0, 64.0)
-            else:
-                x2speed = random.uniform(-64.0, 0.0)
-            y2 = -8
-            if blendmode == cg.TILEMAP_BLENDMODE_ADD:
-                blendmode = cg.TILEMAP_BLENDMODE_SUB
-            else:
-                blendmode = cg.TILEMAP_BLENDMODE_ADD
-            l1.blendmode(blendmode)
-
-        if xspeed == 0.0 and yspeed == 0.0:
-            xspeed = random.uniform(-480.0, 480.0)
-            yspeed = random.uniform(-480.0, 480.0)
-
-        if x2speed == 0.0 and y2speed == 0.0:
-            x2speed = random.uniform(-64.0, 64.0)
-            y2speed = random.uniform(-64.0, 64.0)
-
-        l1.pos(int(x2), int(y2))
+        x, y = pt1.point
         l2.pos(int(x), int(y))
+        x, y = pt2.point
+        l1.pos(int(x), int(y))
+        x, y = pt3.point
+        stm.scroll(x, y)
+        stm.update()
 
         colorrad = colorrad + (numpy.pi * timetaken)
         if colorrad >= numpy.pi * 2:
