@@ -888,8 +888,8 @@ int tilemap_set_tilemap_map(LayerList *ll,
     if(x > tm->w || y > tm->h ||
        x + w > tm->w || y + h > tm->h) {
         LOG_PRINTF(ll, "%s: Position/size would expand outside of "
-                       "tilemap. x:%d->%d, y:%d->%d\n",
-                       tm->name, x, w, y, h);
+                       "tilemap. x:%d+%d>%d, y:%d+%d>%d\n",
+                       tm->name, x, w, tm->w, y, h, tm->h);
         return(-1);
     }
 
@@ -1021,6 +1021,78 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
         memcpy(&(tm->attr_colormod[tm->w * (y + i) + x]),
                &(value[(pitch * i)]),
                sizeof(unsigned int) * w); 
+    }
+
+    return(0);
+}
+
+int tilemap_copy_block(LayerList *ll,
+                       unsigned int index,
+                       unsigned int x,
+                       unsigned int y,
+                       unsigned int w,
+                       unsigned int h,
+                       unsigned int dx,
+                       unsigned int dy) {
+    unsigned int i;
+    SDL_Texture *targetTexture;
+    SDL_Rect srcrect, dstrect;
+    Tilemap *tm = get_tilemap(ll, index);
+    if(tm == NULL) {
+        return(-1);
+    }
+    Tileset *ts = get_tileset(ll, tm->tileset);
+    if(ts == NULL) {
+        return(-1);
+    }
+
+    if(x + w > tm->w || y + h > tm->h) {
+        LOG_PRINTF(ll, "Source position/size beyond tilemap size.");
+        return(-1);
+    }
+
+    if(dx + w > tm->w || dy + h > tm->h) {
+        LOG_PRINTF(ll, "Destination position/size beyond tilemap size.");
+        return(-1);
+    }
+
+    for(i = 0; i < (unsigned int)h; i++) {
+        memmove(&(tm->map[tm->w * (dy + i) + dx]),
+                &(tm->map[tm->w * ( y + i) +  x]),
+                sizeof(unsigned int) * w); 
+    }
+
+    if(tm->tex != NULL) {
+        x *= ts->tw; dx *= ts->tw; w *= ts->tw;
+        y *= ts->th; dy *= ts->th; h *= ts->th;
+
+        if(SDL_SetTextureBlendMode(tm->tex, SDL_BLENDMODE_NONE) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to set blendmode.\n", tm->name);
+            return(-1);
+        }
+
+        targetTexture = SDL_GetRenderTarget(ll->renderer);
+        if(SDL_SetRenderTarget(ll->renderer, tm->tex) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
+                           tm->name, SDL_GetError());
+            return(-1);
+        }
+
+        srcrect.x =  x; srcrect.y =  y; srcrect.w = w; srcrect.h = h;
+        dstrect.x = dx, dstrect.y = dy; dstrect.w = w; dstrect.h = h;
+        if(SDL_RenderCopy(ll->renderer,
+                          tm->tex,
+                          &srcrect,
+                          &dstrect) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to render tile.\n", tm->name);
+            return(-1);
+        }
+
+        if(SDL_SetRenderTarget(ll->renderer, targetTexture) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to restore render target: %s.\n",
+                           tm->name, SDL_GetError());
+            return(-1);
+        }
     }
 
     return(0);

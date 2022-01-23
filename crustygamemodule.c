@@ -235,6 +235,9 @@ static int LayerList_init(LayerListObject *self, PyObject *args, PyObject *kwds)
                          &format,
                          &(self->log.cb),
                          &(self->log.priv))) {
+        self->py_renderer = NULL;
+        self->log.cb = NULL;
+        self->log.priv = NULL;
         return(-1);
     }
     Py_XINCREF(self->py_renderer);
@@ -547,6 +550,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
      * arguments was provided */
     if(!PyArg_ParseTuple(args, "OIIIIIO",
                          &(self->ll), &w, &h, &color, &tw, &th, &name)) {
+        self->ll = NULL;
         PyErr_Fetch(&etype, &evalue, &etraceback);
         /* don't care too much to inspect what went wrong, just try something
          * else anyway */
@@ -583,6 +587,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
     /* now check if a string is provided, and if so use it as a filename */
     if(!PyArg_ParseTuple(args, "OsIIO",
                          &(self->ll), &filename, &tw, &th, &name)) {
+        self->ll = NULL;
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
@@ -623,6 +628,7 @@ static int Tileset_init(TilesetObject *self, PyObject *args, PyObject *kwds) {
      * then fail anyway */
     if(!PyArg_ParseTuple(args, "OOIIO",
                          &(self->ll), &py_surface, &tw, &th, &name)) {
+        self->ll = NULL;
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
@@ -822,6 +828,8 @@ static int Tilemap_init(TilemapObject *self, PyObject *args, PyObject *kwds) {
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
     if(!PyArg_ParseTuple(args, "OOIIO", &(self->ll), &(self->ts), &w, &h, &name)) {
+        self->ll = NULL;
+        self->ts = NULL;
         return(-1);
     }
     Py_XINCREF(self->ll);
@@ -1147,6 +1155,57 @@ static PyObject *Tilemap_update(TilemapObject *self,
     Py_RETURN_NONE;
 }
 
+static PyObject *Tilemap_copy(TilemapObject *self,
+                              PyTypeObject *defining_class,
+                              PyObject *const *args,
+                              Py_ssize_t nargs,
+                              PyObject *kwnames) {
+    unsigned long x, y, w, h, dx, dy;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    if(nargs < 6) {
+        PyErr_SetString(PyExc_TypeError, "function needs at least 4 argument");
+        return(NULL);
+    }
+    x = PyLong_AsUnsignedLong(args[0]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    y = PyLong_AsUnsignedLong(args[1]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    w = PyLong_AsUnsignedLong(args[2]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    h = PyLong_AsUnsignedLong(args[3]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    dx = PyLong_AsUnsignedLong(args[4]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+    dy = PyLong_AsUnsignedLong(args[5]);
+    if(PyErr_Occurred() != NULL) {
+        return(NULL);
+    }
+
+    if(tilemap_copy_block(self->ll->ll, self->tilemap, x, y, w, h, dx, dy) < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_copy_block failed");
+        return(NULL);
+    }
+
+    Py_RETURN_NONE;
+}
+
 static PyObject *LayerList_TM_layer(TilemapObject *self,
                                     PyTypeObject *defining_class,
                                     PyObject *const *args,
@@ -1242,6 +1301,18 @@ static PyMethodDef Tilemap_methods[] = {
         "width   How wide of a rectangle to update.\n"
         "height  How tall of a rectangle to update."},
     {
+        "copy",
+        (PyCMethod) Tilemap_copy,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Copy a block of a tilemap.\n\n"
+        "copy(x, y, width, height, dx, dy)\n"
+        "x       Where to start copying from from the left.\n"
+        "y       Where to start copying from from the top.\n"
+        "width   How wide of a rectangle to copy.\n"
+        "height  How tall of a rectangle to copy.\n"
+        "dx      Where to start copying to from the left.\n"
+        "dy      Where to start copying to from the top."},
+    {
         "layer",
         (PyCMethod) LayerList_TM_layer,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
@@ -1305,6 +1376,7 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
     if(!PyArg_ParseTuple(args, "OOO", &(self->ll), &tmtex, &name)) {
+        self->ll = NULL;
         return(-1);
     }
     Py_XINCREF(self->ll);
@@ -1874,6 +1946,10 @@ static int Synth_init(SynthObject *self, PyObject *args, PyObject *kwds) {
                          &(self->log.cb),
                          &(self->log.priv),
                          &rate, &channels, &fragsize, &format)) {
+        self->synth_frame.cb = NULL;
+        self->synth_frame.priv = NULL;
+        self->log.cb = NULL;
+        self->log.priv = NULL;
         return(-1);
     }
     Py_XINCREF(fn);
@@ -2482,6 +2558,7 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
                          &data,
                          &size,
                          &name)) {
+        self->s = NULL;
         PyErr_Fetch(&etype, &evalue, &etraceback);
         Py_XDECREF(etype);
         Py_XDECREF(evalue);
@@ -2491,7 +2568,8 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kwds) {
                             &(self->s),
                             &filename,
                             &name)) {
-            goto error;
+            self->s = NULL;
+            return(-1);
         } else {
             Py_XINCREF(name);
             Py_XINCREF(self->s);
@@ -2928,6 +3006,8 @@ static int InternalBuffer_init(InternalBufferObject *self, PyObject *args, PyObj
     crustygame_state *state = PyType_GetModuleState(Py_TYPE(self));
 
     if(!PyArg_ParseTuple(args, "OO", &(self->s), &(self->b))) {
+        self->s = NULL;
+        self->b = NULL;
         return(-1);
     }
     Py_XINCREF(self->s);
@@ -3080,6 +3160,7 @@ static int Player_init(PlayerObject *self, PyObject *args, PyObject *kwds) {
                          &(self->s),
                          &buffer,
                          &name)) {
+        self->s = NULL;
         return(-1);
     }
     Py_XINCREF(name);
@@ -3873,7 +3954,8 @@ static int Filter_init(FilterObject *self, PyObject *args, PyObject *kwds) {
                          &buffer,
                          &size,
                          &name)) {
-        goto error;
+        self->s = NULL;
+        return(-1);
     }
     Py_XINCREF(name);
     Py_XINCREF(self->s);

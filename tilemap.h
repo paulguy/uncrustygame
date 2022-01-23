@@ -284,6 +284,27 @@ int tilemap_set_tilemap_map(LayerList *ll,
                             const unsigned int *value,
                             unsigned int size);
 /*
+ * Copy a block of a tilemap.
+ *
+ * ll       the LayerList
+ * index    the tilemap to copy a block in
+ * x        X position to copy from
+ * y        Y position to copy from
+ * w        width to copy
+ * h        height to copy
+ * dx       X position to copy to
+ * dy       Y position to copy to
+ * return   0 on success, -1 on failure
+ */
+int tilemap_copy_block(LayerList *ll,
+                       unsigned int index,
+                       unsigned int x,
+                       unsigned int y,
+                       unsigned int w,
+                       unsigned int h,
+                       unsigned int dx,
+                       unsigned int dy);
+/*
  * Add/update attribute flags to a tilemap.  Non-squared tiles can only be
  * rotated 180 degrees.
  * See: TILEMAP_.FLIP_MASK, TILEMAP_ROTATE_.*
