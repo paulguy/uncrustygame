@@ -471,11 +471,15 @@ def do_main(window, renderer, pixfmt):
     display.clear(ll, osc2, 0, 0, 0, SDL_ALPHA_OPAQUE)
     osc2l = cg.Layer(ll, osc2, "OSC 2 Layer")
 
-    bigtm = numpy.zeros(256 * 255, numpy.int32)
-    bigtm[0:128] = numpy.arange(0, 128)
-    for num in range(128, 128 * 255, 128):
-        bigtm[num:num+128] = bigtm[0:128]
-    stm = display.ScrollingTilemap(text, bigtm, 127, 320, 240, 8, 8)
+    bigtm = numpy.zeros(127 * 259, numpy.uint32)
+    bigtm[0:127] = numpy.arange(1, 128)
+    for num in range(127, 128 * 255, 127):
+        bigtm[num:num+127] = bigtm[0:127]
+    bigcm = numpy.zeros(128 * 256, numpy.uint32)
+    for num in range(0, 255):
+        r, g, b = color_from_rad(numpy.pi * (num / 255) * 2.0, 0, 255)
+        bigcm[num*128:num*128+128].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
+    stm = display.ScrollingTilemap(text, bigtm, 128, 320, 240, 8, 8, colormod=bigcm)
     stm.layer.scale(2.0, 2.0)
     pt3 = BouncingPoint(0, 0, (128 * 8) - 320, (255 * 8) - 240, 100, minspeed=20)
 
@@ -486,7 +490,7 @@ def do_main(window, renderer, pixfmt):
     osc2dl.append(osc2l)
     scopelid = osc2dl.append(None)
     scoperid = osc2dl.append(None)
-    scene.append(display.make_color(32, 128, 192, SDL_ALPHA_OPAQUE))
+    scene.append(display.make_color(32, 16, 48, SDL_ALPHA_OPAQUE))
     scene.append(stm.layer)
     oscdl = display.DisplayList(ll, None)
     oscdl.append(lambda: osc2l.scale(1.0, 1.0))

@@ -235,11 +235,13 @@ class ScrollingTilemap():
     NOSCROLL_X = 1 << 0
     NOSCROLL_Y = 1 << 1
 
-    def __init__(self, tileset, tilemap, linewidth, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0):
+    def __init__(self, tileset, tilemap, linewidth, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0, flags=None, colormod=None):
         if noscroll & (ScrollingTilemap.NOSCROLL_X | \
                        ScrollingTilemap.NOSCROLL_Y):
             raise ValueError("Scrolling must be allowed in some direction.")
         self._tilemap = tilemap
+        self._flags = flags
+        self._colormod = colormod
         self._linewidth = linewidth
         self._twidth = twidth
         self._theight = theight
@@ -270,6 +272,10 @@ class ScrollingTilemap():
 
     def _setmap(self, x, y, tmx=0, tmy=0, w=0, h=0):
         self._tm.map(tmx, tmy, self._linewidth, w, h, self._tilemap[y * self._linewidth + x:])
+        if self._flags is not None:
+            self._tm.attr_flags(tmx, tmy, self._linewidth, w, h, self._flags[y * self._linewidth + x:])
+        if self._colormod is not None:
+            self._tm.attr_colormod(tmx, tmy, self._linewidth, w, h, self._colormod[y * self._linewidth + x:])
         self._tm.update(tmx, tmy, w, h)
 
     def scroll(self, x, y):
