@@ -476,12 +476,13 @@ def do_main(window, renderer, pixfmt):
     for num in range(127, 128 * 255, 127):
         bigtm[num:num+127] = bigtm[0:127]
     bigcm = numpy.zeros(128 * 256, numpy.uint32)
-    for num in range(0, 256):
+    bigcm.fill(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE))
+    for num in range(1, 255):
         r, g, b = color_from_rad(numpy.pi * (num / 255) * 2.0, 0, 255)
-        bigcm[num*128:num*128+128].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
-    stm = display.ScrollingTilemap(text, bigtm, 128, 320, 240, 8, 8, colormod=bigcm)
+        bigcm[num*128+1:num*128+126].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
+    stm = display.ScrollingTilemap(text, bigtm, 128, 256, 320 / 8, 240 / 8, 8, 8, colormod=bigcm)
     stm.layer.scale(2.0, 2.0)
-    pt3 = BouncingPoint(0, 0, (127 * 8) - 320, (255 * 8) - 240, 200, minspeed=60)
+    pt3 = BouncingPoint(0, 0, (128 * 8) - 320, (256 * 8) - 240, 200, minspeed=60)
 
     scene = display.DisplayList(ll, display.SCREEN)
     osc1dl = display.DisplayList(ll, osc2)

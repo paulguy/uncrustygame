@@ -235,67 +235,77 @@ class ScrollingTilemap():
     NOSCROLL_X = 1 << 0
     NOSCROLL_Y = 1 << 1
 
-    def __init__(self, tileset, tilemap, linewidth, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0, flags=None, colormod=None):
+    def __init__(self, tileset, tilemap, tmwidth, tmheight, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0, flags=None, colormod=None):
         if noscroll & (ScrollingTilemap.NOSCROLL_X | \
                        ScrollingTilemap.NOSCROLL_Y):
             raise ValueError("Scrolling must be allowed in some direction.")
         self._tilemap = tilemap
         self._flags = flags
         self._colormod = colormod
-        self._linewidth = int(linewidth)
+        self._tmwidth = int(tmwidth)
+        self._tmheight = int(tmheight)
         self._twidth = int(twidth)
         self._theight = int(theight)
-        self._tmw = int(width / self._twidth)
-        if int(width) % self._twidth > 0:
-            self._tmw += 1
+        self._width = int(width)
+        self._height = int(height)
+        self._tmw = self._width
+        self._tmh = self._height
         if not noscroll & ScrollingTilemap.NOSCROLL_X:
             self._tmw += 1
-        self._tmh = int(height / self._theight)
-        self._extrah = 0
-        if int(height) % self._theight > 0:
-            self._tmh += 1
         if not noscroll & ScrollingTilemap.NOSCROLL_Y:
             self._tmh += 1
         self._tm = tileset.tilemap(self._tmw, self._tmh, "Scrolling Tilemap {}".format(tileset.name()))
-        # don't bother sanity checking the buffer, just try to update it which
-        # should do all the sanity checking. :p
         startx = int(startx)
         starty = int(starty)
-        self._setmap(startx, starty)
+        self.scroll(startx, starty)
+        # set to some values that could never intersect to force update
+        self._x = -self._tmw * self._twidth
+        self._y = -self._tmh * self._theight
         self._l = self._tm.layer("Scrolling Layer {}".format(tileset.name()))
-        self._l.window(width, height)
-        self._x = startx
-        self._y = starty
-        self._newx = startx
-        self._newy = starty
-        self._tmx = startx * self._twidth
-        self._tmy = starty * self._theight
+        # don't bother sanity checking the buffer, just try to update it which
+        # should do all the sanity checking. :p
+        self.update()
+        self._l.window(self._width * self._twidth, \
+                       self._height * self._theight)
 
     @property
     def layer(self):
         return self._l
 
     def _setmap(self, x, y, tmx=0, tmy=0, w=0, h=0):
-        self._tm.map(tmx, tmy, self._linewidth, w, h, self._tilemap[y * self._linewidth + x:])
+        self._tm.map(tmx, tmy, self._tmwidth, w, h, self._tilemap[y * self._tmwidth + x:])
         if self._flags is not None:
-            self._tm.attr_flags(tmx, tmy, self._linewidth, w, h, self._flags[y * self._linewidth + x:])
+            self._tm.attr_flags(tmx, tmy, self._tmwidth, w, h, self._flags[y * self._tmwidth + x:])
         if self._colormod is not None:
-            self._tm.attr_colormod(tmx, tmy, self._linewidth, w, h, self._colormod[y * self._linewidth + x:])
+            self._tm.attr_colormod(tmx, tmy, self._tmwidth, w, h, self._colormod[y * self._tmwidth + x:])
         self._tm.update(tmx, tmy, w, h)
 
     def scroll(self, x, y):
-        self._newx = int(x)
-        self._newy = int(y)
+        x = int(x)
+        y = int(y)
+        if  x < 0 or \
+           (x // self._twidth) + self._width > self._tmwidth or \
+            y < 0 or \
+           (y // self._theight) + self._height > self._tmheight:
+            raise ValueError("position ({}+{}={}, {}+{}={}) would go beyond tilemap bounds (0, 0)-({}, {})".format(x // self._twidth, self._width, (x // self._twidth) + self._width, y // self._theight, self._height, (y // self._theight) + self._height, self._tmwidth, self._tmheight))
+        self._newx = x
+        self._newy = y
 
     def update(self):
-        ox = int(self._x / self._twidth)
-        oy = int(self._y / self._theight)
-        nx = int(self._newx / self._twidth)
-        ny = int(self._newy / self._theight)
+        ox = self._x // self._twidth
+        oy = self._y // self._theight
+        nx = self._newx // self._twidth
+        ny = self._newy // self._theight
+        if nx + self._tmw > self._tmwidth:
+            nx = self._tmwidth - self._tmw
+        if ny + self._tmh > self._tmheight:
+            ny = self._tmheight - self._tmh
         if (nx + self._tmw < ox or nx >= ox + self._tmw) or \
            (ny + self._tmh < oy or ny >= oy + self._tmw):
             # no overlap, redraw the whole thing
             self._setmap(nx, ny)
+            self._tmx = nx
+            self._tmy = ny
         else:
             if nx < self._tmx:
                 rw = ox - nx
@@ -363,8 +373,8 @@ class ScrollingTilemap():
                 else:
                     # nothing to do
                     pass 
-        self._l.scroll_pos(self._newx - (self._tmx * self._twidth), \
-                           self._newy - (self._tmy * self._theight))
+        self._l.scroll_pos(self._newx - (nx * self._twidth), \
+                           self._newy - (ny * self._theight))
         self._x = self._newx
         self._y = self._newy
 
