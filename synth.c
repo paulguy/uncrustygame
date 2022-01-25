@@ -64,7 +64,7 @@ typedef struct {
 
     SynthPlayerMode mode;
     unsigned int loopStart;
-    unsigned int loopEnd;
+    unsigned int loopLength;
     unsigned int phaseBuffer;
     unsigned int phasePos;
 
@@ -292,7 +292,7 @@ int synth_buffer_from_wav(Synth *s,
             LOG_PRINTF(s, "Invalid\n"); \
     } \
     LOG_PRINTF(s, " Loop Start: %u\n", (PLR).loopStart); \
-    LOG_PRINTF(s, " Loop End: %u\n", (PLR).loopEnd); \
+    LOG_PRINTF(s, " Loop Length: %u\n", (PLR).loopLength); \
     LOG_PRINTF(s, " Phase Source Buffer: %u\n", (PLR).phaseBuffer); \
     LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR).phasePos); \
     LOG_PRINTF(s, " Speed Mode: "); \
@@ -1554,7 +1554,7 @@ static int init_player(Synth *s,
     p->volPos = 0;
     p->mode = SYNTH_MODE_ONCE;
     p->loopStart = 0;
-    p->loopEnd = get_buffer_size(s, inBuffer) - 1;
+    p->loopLength = get_buffer_size(s, inBuffer);
     p->phaseBuffer = inBuffer; /* this would have some weird effect, but
                                   at least it won't fail? */
     add_buffer_ref(s, inBuffer);
@@ -1679,7 +1679,7 @@ int synth_set_player_input_buffer(Synth *s,
     }
     p->inPos = 0.0;
     p->loopStart = 0;
-    p->loopEnd = get_buffer_size(s, inBuffer) - 1;
+    p->loopLength = get_buffer_size(s, inBuffer);
 
     return(0);
 }
@@ -1856,12 +1856,8 @@ int synth_set_player_loop_start(Synth *s,
         loopStart = get_buffer_size(s, p->inBuffer) + loopStart;
     }
     if(loopStart < 0 ||
-       loopStart >= (int)get_buffer_size(s, p->inBuffer)) {
+       loopStart + p->loopLength > get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "%s: Player loop start out of buffer range.\n", p->name);
-        return(-1);
-    }
-    if((unsigned int)loopStart > p->loopEnd) {
-        LOG_PRINTF(s, "%s: Loop start must be before loop end.\n", p->name);
         return(-1);
     }
     p->loopStart = loopStart;
@@ -1869,26 +1865,21 @@ int synth_set_player_loop_start(Synth *s,
     return(0);
 }
 
-int synth_set_player_loop_end(Synth *s,
-                              unsigned int index,
-                              int loopEnd) {
+int synth_set_player_loop_length(Synth *s,
+                                 unsigned int index,
+                                 unsigned int loopLength) {
     SynthPlayer *p = get_player(s, index);
     if(p == NULL) {
         return(-1);
     }
-    if(loopEnd < 0) {
-        loopEnd = get_buffer_size(s, p->inBuffer) + loopEnd;
+    if(loopLength < 1) {
+        loopLength = get_buffer_size(s, p->inBuffer) - p->loopStart;
     }
-    if(loopEnd < 0 ||
-       loopEnd >= (int)get_buffer_size(s, p->inBuffer)) {
-        LOG_PRINTF(s, "%s: Player loop end out of buffer range.\n", p->name);
+    if(p->loopStart + loopLength > get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "%s: Player loop length out of buffer range.\n", p->name);
         return(-1);
     }
-    if((unsigned int)loopEnd < p->loopStart) {
-        LOG_PRINTF(s, "%s: Loop end must be after loop start.\n", p->name);
-        return(-1);
-    }
-    p->loopEnd = loopEnd;
+    p->loopLength = loopLength;
 
     return(0);
 }
@@ -2010,7 +2001,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
         float speed = pl->speed;
-        float loopLen = pl->loopEnd - pl->loopStart + 1;
+        float loopLen = pl->loopLength;
         for(samples = 0; samples < todo; samples++) {
             if(inPos > loopLen) {
                 inPos = fmodf(inPos, loopLen);
@@ -2029,7 +2020,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
-        float loopLen = pl->loopEnd - pl->loopStart + 1;
+        float loopLen = pl->loopLength;
         for(samples = 0; samples < todo; samples++) {
             if(inPos > loopLen) {
                 inPos = fmodf(inPos, loopLen);
@@ -2045,7 +2036,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
     } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
         float *p = get_buffer_data(syn, pl->phaseBuffer);
         int phasePos = pl->phasePos;
-        float loopLen = pl->loopEnd - pl->loopStart + 1;
+        float loopLen = pl->loopLength;
         int max = get_buffer_size(syn, pl->inBuffer) - pl->loopStart;
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
         for(samples = 0; samples < todo; samples++) {

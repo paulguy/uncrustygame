@@ -320,9 +320,9 @@ class AudioSequencer():
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
             # 11  phase source                      0x000400
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 12  loop start                        0x000200
+            # 12  loop length                       0x000200
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 13  loop end                          0x000100
+            # 13  loop start                        0x000100
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
             # 14  player mode                       0x000080
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
@@ -616,12 +616,12 @@ class AudioSequencer():
                 raise IndexError("Invalid buffer number {}.".format(buf))
             p.phase_source(b[2])
         if status[12] != None:
-            # loop pointers should be relative to the sample to be most useful
             pos = status[12]
-            p.loop_start(pos)
+            p.loop_length(pos)
         if status[13] != None:
+            # loop pointers should be relative to the sample to be most useful
             pos = status[13]
-            p.loop_end(pos)
+            p.loop_start(pos)
         if status[14] != None:
             p.mode(status[14])
         if status[15] != None:

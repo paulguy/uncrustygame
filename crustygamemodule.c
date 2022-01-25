@@ -3552,12 +3552,12 @@ static PyObject *Synth_set_player_loop_start(PlayerObject *self,
     Py_RETURN_NONE;
 }
 
-static PyObject *Synth_set_player_loop_end(PlayerObject *self,
-                                           PyTypeObject *defining_class,
-                                           PyObject *const *args,
-                                           Py_ssize_t nargs,
-                                           PyObject *kwnames) {
-    int pos;
+static PyObject *Synth_set_player_loop_length(PlayerObject *self,
+                                              PyTypeObject *defining_class,
+                                              PyObject *const *args,
+                                              Py_ssize_t nargs,
+                                              PyObject *kwnames) {
+    unsigned int length;
 
     if(self->s == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Synth is not initialized");
@@ -3570,13 +3570,13 @@ static PyObject *Synth_set_player_loop_end(PlayerObject *self,
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
-    pos = PyLong_AsLong(args[0]);
+    length = PyLong_AsUnsignedLong(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
     }
 
-    if(synth_set_player_loop_end(self->s->s, self->player, pos) < 0) {
-        PyErr_SetString(state->CrustyException, "synth_set_player_loop_end failed");
+    if(synth_set_player_loop_length(self->s->s, self->player, length) < 0) {
+        PyErr_SetString(state->CrustyException, "synth_set_player_loop_length failed");
         return(NULL);
     }
 
@@ -3842,12 +3842,12 @@ static PyMethodDef Player_methods[] = {
         "loop_start(pos)\n"
         "pos  The loop start position."},
     {
-        "loop_end",
-        (PyCMethod) Synth_set_player_loop_end,
+        "loop_length",
+        (PyCMethod) Synth_set_player_loop_length,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
-        "Set loop end or phase source end position.\n\n"
-        "loop_end(pos)\n"
-        "pos  The loop end position."},
+        "Set loop length or phase source 1.0 position.\n\n"
+        "loop_length(pos)\n"
+        "pos  The loop length."},
     {
         "phase_source",
         (PyCMethod) Synth_set_player_phase_source,
