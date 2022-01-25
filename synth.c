@@ -2046,10 +2046,11 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float *p = get_buffer_data(syn, pl->phaseBuffer);
         int phasePos = pl->phasePos;
         float loopLen = pl->loopEnd - pl->loopStart + 1;
+        int max = get_buffer_size(syn, pl->inBuffer) - pl->loopStart;
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
         for(samples = 0; samples < todo; samples++) {
             idx[samples] =
-                i[(int)fmodf(fabsf(p[phasePos] * loopLen), loopLen)
+                i[((int)fabsf(p[phasePos] * loopLen) % max)
                   + pl->loopStart];
             phasePos++;
         }
