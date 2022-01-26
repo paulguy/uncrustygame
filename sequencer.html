@@ -352,112 +352,169 @@ original      │ replacement
                 <tr>
                     <td>0</td>
                     <td></td>
-                    <td>200000</td>
+                    <td>80000000</td>
                     <td>Input Buffer</td>
                     <td>The buffer which shall be used as the primary source of input for this channel.</td>
                 </tr>
                 <tr>
                     <td>1</td>
                     <td></td>
-                    <td>100000</td>
+                    <td>40000000</td>
                     <td>Input Buffer Position</td>
                     <td>The position to start reading the input buffer from.  This is a value in float because the buffer can be played at any arbitrary rate and the position is kept track of in float.</td>
                 </tr>
                 <tr>
                     <td>2</td>
                     <td></td>
-                    <td>080000</td>
+                    <td>20000000</td>
                     <td>Output Buffer</td>
                     <td>The buffer which will receive the output from this player.</td>
                 </tr>
                 <tr>
                     <td>3</td>
                     <td></td>
-                    <td>040000</td>
+                    <td>10000000</td>
                     <td>Output Buffer Position</td>
                     <td>The position to start writing to the output buffer.</td>
                 </tr>
                 <tr>
                     <td>4</td>
                     <td></td>
-                    <td>020000</td>
+                    <td>08000000</td>
                     <td>Output Mode</td>
                     <td><a href="#output-modes">Either SYNTH_OUTPUT_REPLACE or SYNTH_OUTPUT_ADD.</a></td>
                 </tr>
                 <tr>
                     <td>5</td>
                     <td></td>
-                    <td>010000</td>
+                    <td>04000000</td>
                     <td>Volume</td>
                     <td>The base volume level for this player.  1.0 is no change in volume from the input buffer, lesser values will attenuate, greater values will amplify.</td>
                 </tr>
                 <tr>
                     <td>6</td>
                     <td></td>
-                    <td>008000</td>
+                    <td>02000000</td>
                     <td>Volume Source</td>
                     <td>A buffer to read volume values from if the volume mode is SYNTH_AUTO_SOURCE.  The base volume level is also applied.</td>
                 </tr>
                 <tr>
                     <td>7</td>
                     <td></td>
-                    <td>004000</td>
+                    <td>01000000</td>
                     <td>Volume Mode</td>
                     <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
                 </tr>
                 <tr>
                     <td>8</td>
                     <td></td>
-                    <td>002000</td>
+                    <td>00800000</td>
                     <td>Speed</td>
                     <td>This affects the interval at which values are fetched from the input buffer.  This is a complex value which can take many format.  It can be most simply a float value, where 1.0 will play the input buffer with no change in rate, lower values will play slower (by mutiplying up input samples, without interpolation) or faster (also, no antialiasing, so skipped samples are totally not represented).  This value may also be negative, for reverse playback.  This value may also be a note, C-G,A,B.  Followed optionally by a b or a # to flatten or sharpen it a semitone, then followed optionally by a number denoting the octave.  The default octave is 4, and A4 is 1.0 rate.  Additionally to the note, a detune value may be provided directly after '*' character as a float value.  This will detune the note by some number of semitones, or anywhere in between.  This is in addition to any other provided global detuning.</td>
                 </tr>
                 <tr>
                     <td>9</td>
                     <td></td>
-                    <td>001000</td>
+                    <td>00400000</td>
                     <td>Speed Source</td>
                     <td>A buffer to read rate values from to change the speed over time.  This is applied along with the base speed value.</td>
                 </tr>
                 <tr>
                     <td>10</td>
                     <td></td>
-                    <td>000800</td>
+                    <td>00200000</td>
                     <td>Speed Mode</td>
                     <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
                 </tr>
                 <tr>
                     <td>11</td>
                     <td></td>
-                    <td>000400</td>
+                    <td>00100000</td>
                     <td>Phase Source</td>
                     <td>The buffer to read phase values from in the case that the Player Mode is SYNTH_MODE_PHASE_SOURCE.</td>
                 </tr>
                 <tr>
                     <td>12</td>
                     <td></td>
-                    <td>000200</td>
+                    <td>00080000</td>
                     <td>Loop Length</td>
                     <td>The length of a loop.  Also the 1.0 position of the phase in the case a buffer is used as the phase source.  0 to set to the end of the buffer.</td>
                 </tr>
                 <tr>
                     <td>13</td>
                     <td></td>
-                    <td>000100</td>
+                    <td>00040000</td>
                     <td>Loop Start</td>
                     <td>The start position of a loop.  Also the 0.0 position of the phase in the case a buffer is used as the phase source.  Negative values start at the end.</td>
                 </tr>
                 <tr>
                     <td>14</td>
                     <td></td>
-                    <td>000080</td>
+                    <td>00020000</td>
                     <td>Player Mode</td>
                     <td><a href="#player-modes">Either SYNTH_MODE_ONCE, SYNTH_MODE_LOOP or SYNTH_MODE_PHASE_SOURCE.</a></td>
                 </tr>
+
                 <tr>
                     <td>15</td>
                     <td></td>
-                    <td>000040</td>
+                    <td>00010000</td>
+                    <td>Start Source</td>
+                    <td>Source buffer for start position automation.</td>
+                </tr>
+                <tr>
+                    <td>16</td>
+                    <td></td>
+                    <td>00008000</td>
+                    <td>Start Source</td>
+                    <td>Number of start positions.</td>
+                </tr>
+                <tr>
+                    <td>17</td>
+                    <td></td>
+                    <td>00004000</td>
+                    <td>Start Granularity</td>
+                    <td>Distance between start positions.</td>
+                </tr>
+                <tr>
+                    <td>18</td>
+                    <td></td>
+                    <td>00002000</td>
+                    <td>Start Mode</td>
+                    <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>19</td>
+                    <td></td>
+                    <td>00001000</td>
+                    <td>Length Source</td>
+                    <td>Source buffer for length automation.</td>
+                </tr>
+                <tr>
+                    <td>20</td>
+                    <td></td>
+                    <td>00000800</td>
+                    <td>Length Source</td>
+                    <td>Number of length values.</td>
+                </tr>
+                <tr>
+                    <td>21</td>
+                    <td></td>
+                    <td>00000400</td>
+                    <td>Length Granularity</td>
+                    <td>Distance between length values.</td>
+                </tr>
+                <tr>
+                    <td>22</td>
+                    <td></td>
+                    <td>00000200</td>
+                    <td>Length Mode</td>
+                    <td><a href="#automation-modes">Either SYNTH_AUTO_CONSTANT or SYNTH_AUTO_SOURCE.</a></td>
+                </tr>
+                <tr>
+                    <td>23</td>
+                    <td></td>
+                    <td>00000100</td>
                     <td>Run Length</td>
                     <td>The amount of output time the player should generate in to an output buffer.</td>
                 </tr>
@@ -477,46 +534,60 @@ original      │ replacement
             </thead>
             <tbody>
                 <tr>
-                    <td>16</td>
+                    <td>24</td>
                     <td>0</td>
-                    <td>000020</td>
+                    <td>00000080</td>
                     <td>Requested Time Met</td>
                     <td>A parameter list applied when the amount of output time requested by Run Length has been completed.</td>
                 </tr>
                 <tr>
-                    <td>17</td>
+                    <td>25</td>
                     <td>01</td>
-                    <td>000010</td>
+                    <td>00000040</td>
                     <td>Output Buffer Filled</td>
                     <td>Applied when the output buffer has reached its and and has been filled.</td>
                 </tr>
                 <tr>
-                    <td>18</td>
+                    <td>26</td>
                     <td>02</td>
-                    <td>000008</td>
+                    <td>00000020</td>
                     <td>Input Buffer Exhausted</td>
                     <td>Applied when the input buffer has reached an end.</td>
                 </tr>
                 <tr>
-                    <td>19</td>
+                    <td>27</td>
                     <td>04</td>
-                    <td>000004</td>
+                    <td>00000010</td>
                     <td>Volume Buffer Exhausted</td>
                     <td>Applied When the volume source buffer has ended.</td>
                 </tr>
                 <tr>
-                    <td>20</td>
+                    <td>28</td>
                     <td>08</td>
-                    <td>000002</td>
+                    <td>00000008</td>
                     <td>Speed Buffer Exhausted</td>
                     <td>Applied when the speed source buffer has ended.</td>
                 </tr>
                 <tr>
-                    <td>21</td>
+                    <td>29</td>
                     <td>10</td>
-                    <td>000001</td>
+                    <td>00000004</td>
                     <td>Phase Buffer Exhausted</td>
                     <td>Applied when the phase source buffer has ended.</td>
+                </tr>
+                <tr>
+                    <td>30</td>
+                    <td>10</td>
+                    <td>00000002</td>
+                    <td>Start Buffer Exhausted</td>
+                    <td>Applied when the phase start buffer has ended.</td>
+                </tr>
+                <tr>
+                    <td>31</td>
+                    <td>10</td>
+                    <td>00000001</td>
+                    <td>Length Buffer Exhausted</td>
+                    <td>Applied when the phase length buffer has ended.</td>
                 </tr>
             </tbody>
         </table>

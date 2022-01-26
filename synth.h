@@ -77,12 +77,14 @@ typedef enum {
     SYNTH_MODE_PHASE_SOURCE = 2
 } SynthPlayerMode;
 
-#define SYNTH_STOPPED_OUTBUFFER   (0x01)
-#define SYNTH_STOPPED_INBUFFER    (0x02)
-#define SYNTH_STOPPED_VOLBUFFER   (0x04)
-#define SYNTH_STOPPED_SPEEDBUFFER (0x08)
-#define SYNTH_STOPPED_PHASEBUFFER (0x10)
-#define SYNTH_STOPPED_SLICEBUFFER (0x20)
+#define SYNTH_STOPPED_OUTBUFFER    (0x01)
+#define SYNTH_STOPPED_INBUFFER     (0x02)
+#define SYNTH_STOPPED_VOLBUFFER    (0x04)
+#define SYNTH_STOPPED_SPEEDBUFFER  (0x08)
+#define SYNTH_STOPPED_PHASEBUFFER  (0x10)
+#define SYNTH_STOPPED_SLICEBUFFER  (0x20)
+#define SYNTH_STOPPED_STARTBUFFER  (0x40)
+#define SYNTH_STOPPED_LENGTHBUFFER (0x80)
 
 typedef struct Synth_s Synth;
 
@@ -596,6 +598,104 @@ int synth_set_player_loop_length(Synth *s,
                                  unsigned int index,
                                  unsigned int loopLength);
 /*
+ * Set the source buffer for start position automation.
+ * See: synth_set_player_volume_source
+ *
+ * s            the Synth structure
+ * index        the player index to update
+ * startBuffer  the source buffer
+ * return       0 on success, -1 on failure
+ */
+int synth_set_player_start_source(Synth *s,
+                                  unsigned int index,
+                                  unsigned int startBuffer);
+/*
+ * Set the number of discrete values to fall on.
+ * See: synth_set_player_start_granularity
+ *
+ * s            the Synth structure
+ * index        the player index to update
+ * startValues  the number of values
+ * return       0 on success, -1 on failure
+ */
+int synth_set_player_start_values(Synth *s,
+                                  unsigned int index,
+                                  unsigned int startValues);
+/*
+ * Set the positional granularity or distance between values.
+ * See: synth_set_player_start_granularity
+ *
+ * s                    the Synth structure
+ * index                the player index to update
+ * startGranularity     the distance between values
+ * return               0 on success, -1 on failure
+ */
+int synth_set_player_start_granularity(Synth *s,
+                                       unsigned int index,
+                                       unsigned int startGranularity);
+/*
+ * Mode for loop start position automation.
+ * See: synth_set_player_mode
+ *      synth_set_player_length_mode
+ *
+ * s            the Synth structure
+ * index        the player index to update
+ * startMode    the loop start mode
+ * return       0 on success, -1 on failure
+ */
+int synth_set_player_start_mode(Synth *s,
+                                unsigned int index,
+                                SynthAutoMode startMode);
+/*
+ * Set the source buffer for length automation.
+ * See: synth_set_player_volume_source
+ *
+ * s            the Synth structure
+ * index        the player index to update
+ * startBuffer  the source buffer
+ * return       0 on success, -1 on failure
+ */
+int synth_set_player_length_source(Synth *s,
+                                   unsigned int index,
+                                   unsigned int lengthBuffer);
+/*
+ * Set the number of discrete values to fall on.
+ * See: synth_set_player_length_granularity
+ *
+ * s                the Synth structure
+ * index            the player index to update
+ * lengthValues     the number of values
+ * return           0 on success, -1 on failure
+ */
+int synth_set_player_length_values(Synth *s,
+                                   unsigned int index,
+                                   unsigned int lengthValues);
+/*
+ * Set the positional granularity or distance between values.
+ * See: synth_set_player_length_granularity
+ *
+ * s                    the Synth structure
+ * index                the player index to update
+ * lengthGranularity    the distance between values
+ * return               0 on success, -1 on failure
+ */
+int synth_set_player_length_granularity(Synth *s,
+                                        unsigned int index,
+                                        unsigned int lengthGranularity);
+/*
+ * Mode for loop length automation.
+ * See: synth_set_player_mode
+ *      synth_set_player_start_mode
+ *
+ * s            the Synth structure
+ * index        the player index to update
+ * startMode    the loop start mode
+ * return       0 on success, -1 on failure
+ */
+int synth_set_player_length_mode(Synth *s,
+                                 unsigned int index,
+                                 SynthAutoMode lengthMode);
+/*
  * Set the buffer to read phase source samples from, similar rules as volume
  * source, except instead of multiplying the output by each sample, input buffer
  * samples will be referenced based on the loop start and end range given source
@@ -612,8 +712,7 @@ int synth_set_player_phase_source(Synth *s,
 /*
  * Set the player's speed mode.  Same rules as volume mode, just affects the
  * rate at which input buffer samples are advanced.
- * See: synth_set_player_speed_mode
- *      synth_set_player_speed
+ * See: synth_set_player_speed
  *      synth_set_player_volume_mode
  *
  * s            the Synth structure

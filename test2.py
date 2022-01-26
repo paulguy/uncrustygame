@@ -19,7 +19,7 @@ RENDERBATCHING=True
 # enable tracing of display list processing
 TRACEVIDEO=False
 # enable tracing of audio sequencer processing
-TRACEAUDIO=False
+TRACEAUDIO=True
 
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"

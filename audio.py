@@ -296,49 +296,69 @@ class AudioSequencer():
             # 4  stopped outbuffer 0x01
             seqDesc.add_field(silenceDesc, seq.FIELD_TYPE_ROW, rowDesc=silenceDesc)
             playerDesc = seqDesc.add_row_description()
-            # 0   input buffer                      0x200000
+            # 0   input buffer                     0x80000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 1   input buffer pos                  0x100000
+            # 1   input buffer pos                 0x40000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-            # 2   output buffer                     0x080000
+            # 2   output buffer                    0x20000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 3   output buffer pos                 0x040000
+            # 3   output buffer pos                0x10000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-            # 4   output mode                       0x020000
+            # 4   output mode                      0x08000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 5   volume                            0x010000
+            # 5   volume                           0x04000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-            # 6   volume source                     0x008000
+            # 6   volume source                    0x02000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 7   volume mode                       0x004000
+            # 7   volume mode                      0x01000000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 8   speed (frequency, /speed, note)   0x002000
+            # 8   speed (frequency, /speed, note)  0x00800000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_STR)
-            # 9   speed source                      0x001000
+            # 9   speed source                     0x00400000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 10  speed mode                        0x000800
+            # 10  speed mode                       0x00200000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 11  phase source                      0x000400
+            # 11  phase source                     0x00100000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 12  loop length                       0x000200
+            # 12  loop length                      0x00080000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 13  loop start                        0x000100
+            # 13  loop start                       0x00040000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 14  player mode                       0x000080
+            # 14  player mode                      0x00020000
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
-            # 15  run length                        0x000040
+            # 15  start source                     0x00010000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 16  start values                     0x00008000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 17  start granularity                0x00004000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 18  start mode                       0x00002000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 19  length source                    0x00001000
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 20  length values                    0x00000800
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 21  length granularity               0x00000400
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 22  length mode                      0x00000200
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_INT)
+            # 23  run length                       0x00000100
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_FLOAT)
-            # 16  stopped requested                 0x000020 (reason 0)
+            # 24  stopped requested                0x00000080 (reason 0)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # 17  stopped outbuffer                 0x000010 (reason 01)
+            # 25  stopped outbuffer                0x00000040 (reason 01)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # 18  stopped inbuffer                  0x000008 (reason 02)
+            # 26  stopped inbuffer                 0x00000020 (reason 02)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # 19  stopped volbuffer                 0x000004 (reason 04)
+            # 27  stopped volbuffer                0x00000010 (reason 04)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # 20  stopped speedbuffer               0x000002 (reason 08)
+            # 28  stopped speedbuffer              0x00000008 (reason 08)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
-            # 21  stopped phasebuffer               0x000001 (reason 10)
+            # 29  stopped phasebuffer              0x00000004 (reason 10)
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # 30  stopped startbuffer              0x00000002 (reason 40)
+            seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
+            # 31  stopped lengthbuffer             0x00000001 (reason 80)
             seqDesc.add_field(playerDesc, seq.FIELD_TYPE_ROW, rowDesc=playerDesc)
             filterDesc = seqDesc.add_row_description()
             # 0   input buffer         0x100000
@@ -546,16 +566,16 @@ class AudioSequencer():
                 b = self._buffer[buf]
             except IndexError:
                 raise IndexError("Invalid buffer number {}.".format(buf))
-            player[8] = b
+            player[10] = b
             p.input(b[2])
         if status[1] != None:
             pos = status[1]
             # make -1.0 be the real last sample
             # input buffer position is natively float, so don't convert to int
             if pos < 0.0:
-                pos = (pos * player[8][3]) + (player[8][3] - 1.0)
+                pos = (pos * player[10][3]) + (player[10][3] - 1.0)
             else:
-                pos = pos * player[8][3]
+                pos = pos * player[10][3]
             p.input_pos(pos)
         if status[2] != None:
             buf = status[2]
@@ -566,14 +586,14 @@ class AudioSequencer():
                 b = self._buffer[buf]
             except IndexError:
                 raise IndexError("Invalid buffer number {}.".format(buf))
-            player[9] = b
+            player[11] = b
             p.output(b[2])
         if status[3] != None:
             pos = status[3]
             if pos < 0:
-                pos = int((pos * player[9][3]) + (player[9][3] - 1))
+                pos = int((pos * player[11][3]) + (player[11][3] - 1))
             else:
-                pos = int(pos * player[9][3])
+                pos = int(pos * player[11][3])
             p.output_pos(pos)
         if status[4] != None:
             p.output_mode(status[4])
@@ -592,7 +612,7 @@ class AudioSequencer():
         if status[7] != None:
             p.volume_mode(status[7])
         if status[8] != None:
-            p.speed(self._get_speed(status[8], player[8][1], player[9][1]))
+            p.speed(self._get_speed(status[8], player[10][1], player[11][1]))
         if status[9] != None:
             buf = status[9]
             if buf >= self._seqChannels:
@@ -616,46 +636,86 @@ class AudioSequencer():
                 raise IndexError("Invalid buffer number {}.".format(buf))
             p.phase_source(b[2])
         if status[12] != None:
-            pos = status[12]
-            p.loop_length(pos)
-        if status[13] != None:
             # loop pointers should be relative to the sample to be most useful
-            pos = status[13]
-            p.loop_start(pos)
+            p.loop_length(status[12])
+        if status[13] != None:
+            p.loop_start(status[13])
         if status[14] != None:
             p.mode(status[14])
         if status[15] != None:
-            player[1] = int(status[15] * player[9][3])
+            buf = status[15]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
+            p.start_source(b[2])
         if status[16] != None:
-            if status[16] < 0:
+            p.start_values(status[16])
+        if status[17] != None:
+            p.start_granularity(status[17])
+        if status[18] != None:
+            p.start_mode(status[18])
+        if status[19] != None:
+            buf = status[19]
+            if buf >= self._seqChannels:
+                buf -= self._seqChannels
+                buf += self._channels
+            try:
+                b = self._buffer[buf]
+            except IndexError:
+                raise IndexError("Invalid buffer number {}.".format(buf))
+            p.length_source(b[2])
+        if status[20] != None:
+            p.length_values(status[20])
+        if status[21] != None:
+            p.length_granularity(status[21])
+        if status[22] != None:
+            p.length_mode(status[22])
+        if status[23] != None:
+            player[1] = int(status[23] * player[11][3])
+        if status[24] != None:
+            if status[24] < 0:
                 player[2] = None
             else:
-                player[2] = self._seq.get_row(status[16])
-        if status[17] != None:
-            if status[17] < 0:
+                player[2] = self._seq.get_row(status[24])
+        if status[25] != None:
+            if status[25] < 0:
                 player[3] = None
             else:
-                player[3] = self._seq.get_row(status[17])
-        if status[18] != None:
-            if status[18] < 0:
+                player[3] = self._seq.get_row(status[25])
+        if status[26] != None:
+            if status[26] < 0:
                 player[4] = None
             else:
-                player[4] = self._seq.get_row(status[18])
-        if status[19] != None:
-            if status[19] < 0:
+                player[4] = self._seq.get_row(status[26])
+        if status[27] != None:
+            if status[27] < 0:
                 player[5] = None
             else:
-                player[5] = self._seq.get_row(status[19])
-        if status[20] != None:
-            if status[20] < 0:
+                player[5] = self._seq.get_row(status[27])
+        if status[28] != None:
+            if status[28] < 0:
                 player[6] = None
             else:
-                player[6] = self._seq.get_row(status[20])
-        if status[21] != None:
-            if status[21] < 0:
+                player[6] = self._seq.get_row(status[28])
+        if status[29] != None:
+            if status[29] < 0:
                 player[7] = None
             else:
-                player[7] = self._seq.get_row(status[21])
+                player[7] = self._seq.get_row(status[29])
+        if status[30] != None:
+            if status[30] < 0:
+                player[8] = None
+            else:
+                player[8] = self._seq.get_row(status[30])
+        if status[31] != None:
+            if status[31] < 0:
+                player[9] = None
+            else:
+                player[9] = self._seq.get_row(status[31])
 
     def _update_filter(self, flt, status):
         # 0  the underlying Filter object
@@ -840,7 +900,7 @@ class AudioSequencer():
                     inbuf -= self._seqChannels
                     inbuf += self._channels
                     b = self._buffer[inbuf][2]
-                    player = [b.player("Player {}".format(channel[0])), 0, None, None, None, None, None, None, None, None, 0]
+                    player = [b.player("Player {}".format(channel[0])), 0, None, None, None, None, None, None, None, None, None, None, 0]
                     self._update_player(player, initial[channel[0]])
                     player[1] = 0
                     self._localChannels.append(player)
@@ -898,7 +958,7 @@ class AudioSequencer():
         self._ended = False
 
     def _advance_player_pos(self, player, time, needed):
-        if player[9][0] == None and self._outpos < needed:
+        if player[11][0] == None and self._outpos < needed:
             player[0].output_pos(self._outpos)
 
     def _advance_filter_pos(self, filt, time, needed):
@@ -983,6 +1043,20 @@ class AudioSequencer():
                         if reason & cg.SYNTH_STOPPED_PHASEBUFFER:
                             if channel[7] != None:
                                 upd = channel[7]
+                                if self._trace:
+                                    print(upd)
+                                self._update_player(channel, upd)
+                                changed = True
+                        if reason & cg.SYNTH_STOPPED_STARTBUFFER:
+                            if channel[8] != None:
+                                upd = channel[8]
+                                if self._trace:
+                                    print(upd)
+                                self._update_player(channel, upd)
+                                changed = True
+                        if reason & cg.SYNTH_STOPPED_LENGTHBUFFER:
+                            if channel[9] != None:
+                                upd = channel[9]
                                 if self._trace:
                                     print(upd)
                                 self._update_player(channel, upd)
@@ -1139,7 +1213,7 @@ class AudioSequencer():
         # reset output channel positions to 0
         for channel in self._localChannels:
             if isinstance(channel[0], cg.Player):
-                if channel[9][0] == None:
+                if channel[11][0] == None:
                     channel[0].output_pos(0)
             elif isinstance(channel[0], cg.Filter):
                 if channel[7][0] == None:

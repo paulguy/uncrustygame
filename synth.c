@@ -65,6 +65,16 @@ typedef struct {
     SynthPlayerMode mode;
     unsigned int loopStart;
     unsigned int loopLength;
+    SynthAutoMode startMode;
+    unsigned int startBuffer;
+    unsigned int startPos;
+    unsigned int startValues;
+    unsigned int startGranularity;
+    SynthAutoMode lengthMode;
+    unsigned int lengthBuffer;
+    unsigned int lengthPos;
+    unsigned int lengthValues;
+    unsigned int lengthGranularity;
     unsigned int phaseBuffer;
     unsigned int phasePos;
 
@@ -293,6 +303,16 @@ int synth_buffer_from_wav(Synth *s,
     } \
     LOG_PRINTF(s, " Loop Start: %u\n", (PLR).loopStart); \
     LOG_PRINTF(s, " Loop Length: %u\n", (PLR).loopLength); \
+    LOG_PRINTF(s, " Loop Start Mode: "); \
+    PRINT_AUTO_MODE((PLR).startMode) \
+    LOG_PRINTF(s, " Loop Start Buffer: %u\n", (PLR).startBuffer); \
+    LOG_PRINTF(s, " Loop Start Values: %u\n", (PLR).startValues); \
+    LOG_PRINTF(s, " Loop Start Granularity: %u\n", (PLR).startGranularity); \
+    LOG_PRINTF(s, " Loop Length Mode: "); \
+    PRINT_AUTO_MODE((PLR).lengthMode) \
+    LOG_PRINTF(s, " Loop Length Buffer: %u\n", (PLR).lengthBuffer); \
+    LOG_PRINTF(s, " Loop Length Values: %u\n", (PLR).lengthValues); \
+    LOG_PRINTF(s, " Loop Length Granularity: %u\n", (PLR).lengthGranularity); \
     LOG_PRINTF(s, " Phase Source Buffer: %u\n", (PLR).phaseBuffer); \
     LOG_PRINTF(s, " Phase Source Buffer Pos: %u\n", (PLR).phasePos); \
     LOG_PRINTF(s, " Speed Mode: "); \
@@ -1555,6 +1575,18 @@ static int init_player(Synth *s,
     p->mode = SYNTH_MODE_ONCE;
     p->loopStart = 0;
     p->loopLength = get_buffer_size(s, inBuffer);
+    p->startMode = SYNTH_AUTO_CONSTANT;
+    add_buffer_ref(s, inBuffer);
+    p->startBuffer = inBuffer;
+    p->startPos = 0;
+    p->startValues = 1;
+    p->startGranularity = 0;
+    p->lengthMode = SYNTH_AUTO_CONSTANT;
+    add_buffer_ref(s, inBuffer);
+    p->lengthBuffer = inBuffer;
+    p->lengthPos = 0;
+    p->lengthValues = 1;
+    p->lengthGranularity = 0;
     p->phaseBuffer = inBuffer; /* this would have some weird effect, but
                                   at least it won't fail? */
     add_buffer_ref(s, inBuffer);
@@ -1655,6 +1687,8 @@ int synth_free_player(Synth *s, unsigned int index) {
     free_buffer_ref(s, p->inBuffer);
     free_buffer_ref(s, p->volBuffer);
     free_buffer_ref(s, p->phaseBuffer);
+    free_buffer_ref(s, p->startBuffer);
+    free_buffer_ref(s, p->lengthBuffer);
     free_buffer_ref(s, p->speedBuffer);
     free(p->name);
     p->inUse = 0;
@@ -1680,6 +1714,10 @@ int synth_set_player_input_buffer(Synth *s,
     p->inPos = 0.0;
     p->loopStart = 0;
     p->loopLength = get_buffer_size(s, inBuffer);
+    p->startValues = 1;
+    p->startGranularity = 0;
+    p->lengthValues = 1;
+    p->lengthGranularity = 0;
 
     return(0);
 }
@@ -1853,10 +1891,12 @@ int synth_set_player_loop_start(Synth *s,
         return(-1);
     }
     if(loopStart < 0) {
-        loopStart = get_buffer_size(s, p->inBuffer) + loopStart;
+        loopStart = get_buffer_size(s, p->inBuffer) - loopStart;
     }
     if(loopStart < 0 ||
-       loopStart + p->loopLength > get_buffer_size(s, p->inBuffer)) {
+       loopStart + (p->startValues * p->startGranularity) +
+       p->loopLength + (p->lengthValues * p->lengthGranularity) >
+       get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "%s: Player loop start out of buffer range.\n", p->name);
         return(-1);
     }
@@ -1872,14 +1912,170 @@ int synth_set_player_loop_length(Synth *s,
     if(p == NULL) {
         return(-1);
     }
-    if(loopLength < 1) {
+    if(loopLength == 0) {
         loopLength = get_buffer_size(s, p->inBuffer) - p->loopStart;
     }
-    if(p->loopStart + loopLength > get_buffer_size(s, p->inBuffer)) {
+    if(p->loopStart + (p->startValues * p->startGranularity) +
+       loopLength + (p->lengthValues * p->lengthGranularity) >
+       get_buffer_size(s, p->inBuffer)) {
         LOG_PRINTF(s, "%s: Player loop length out of buffer range.\n", p->name);
         return(-1);
     }
     p->loopLength = loopLength;
+
+    return(0);
+}
+
+int synth_set_player_start_source(Synth *s,
+                                  unsigned int index,
+                                  unsigned int startBuffer) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+    if(p->startBuffer != startBuffer) {
+        if(!is_valid_buffer(s, startBuffer, BUFFER_INPUT_ONLY)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->startBuffer);
+        p->startBuffer = startBuffer;
+        add_buffer_ref(s, startBuffer);
+    }
+    p->startPos = 0;
+
+    return(0);
+}
+
+int synth_set_player_start_values(Synth *s,
+                                  unsigned int index,
+                                  unsigned int startValues) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+    if(p->loopStart + (startValues * p->startGranularity) +
+       p->loopLength + (p->lengthValues * p->lengthGranularity) >
+       get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "%s: Player start values out of buffer range.\n", p->name);
+        return(-1);
+    }
+    p->startValues = startValues;
+
+    return(0);
+}
+
+int synth_set_player_start_granularity(Synth *s,
+                                       unsigned int index,
+                                       unsigned int startGranularity) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+    if(p->loopStart + (p->startValues * startGranularity) +
+       p->loopLength + (p->lengthValues * p->lengthGranularity) >
+       get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "%s: Player start granularity out of buffer range.\n", p->name);
+        return(-1);
+    }
+    p->startGranularity = startGranularity;
+
+    return(0);
+}
+
+int synth_set_player_start_mode(Synth *s,
+                                unsigned int index,
+                                SynthAutoMode startMode) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+
+    switch(startMode) {
+        case SYNTH_AUTO_CONSTANT:
+        case SYNTH_AUTO_SOURCE:
+            break;
+        default:
+            LOG_PRINTF(s, "%s: Invalid player start mode.\n", p->name);
+            return(-1);
+    }
+    p->startMode = startMode;
+
+    return(0);
+}
+
+int synth_set_player_length_source(Synth *s,
+                                   unsigned int index,
+                                   unsigned int lengthBuffer) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+    if(p->lengthBuffer != lengthBuffer) {
+        if(!is_valid_buffer(s, lengthBuffer, BUFFER_INPUT_ONLY)) {
+            return(-1);
+        }
+        free_buffer_ref(s, p->lengthBuffer);
+        p->lengthBuffer = lengthBuffer;
+        add_buffer_ref(s, lengthBuffer);
+    }
+    p->lengthPos = 0;
+
+    return(0);
+}
+
+int synth_set_player_length_values(Synth *s,
+                                   unsigned int index,
+                                   unsigned int lengthValues) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+    if(p->loopStart + (p->startValues * p->startGranularity) +
+       p->loopLength + (lengthValues * p->lengthGranularity) >
+       get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "%s: Player length values out of buffer range.\n", p->name);
+        return(-1);
+    }
+    p->lengthValues = lengthValues;
+
+    return(0);
+}
+
+int synth_set_player_length_granularity(Synth *s,
+                                        unsigned int index,
+                                        unsigned int lengthGranularity) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+    if(p->loopStart + (p->startValues * p->startGranularity) +
+       p->loopLength + (p->lengthValues * lengthGranularity) >
+       get_buffer_size(s, p->inBuffer)) {
+        LOG_PRINTF(s, "%s: Player length granularity out of buffer range.\n", p->name);
+        return(-1);
+    }
+    p->lengthGranularity = lengthGranularity;
+
+    return(0);
+}
+
+int synth_set_player_length_mode(Synth *s,
+                                 unsigned int index,
+                                 SynthAutoMode lengthMode) {
+    SynthPlayer *p = get_player(s, index);
+    if(p == NULL) {
+        return(-1);
+    }
+
+    switch(lengthMode) {
+        case SYNTH_AUTO_CONSTANT:
+        case SYNTH_AUTO_SOURCE:
+            break;
+        default:
+            LOG_PRINTF(s, "%s: Invalid player length mode.\n", p->name);
+            return(-1);
+    }
+    p->lengthMode = lengthMode;
 
     return(0);
 }
@@ -2001,15 +2197,75 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
         float speed = pl->speed;
-        float loopLen = pl->loopLength;
-        for(samples = 0; samples < todo; samples++) {
-            if(inPos > loopLen) {
-                inPos = fmodf(inPos, loopLen);
-            } else if(inPos < 0) {
-                inPos = fmodf(inPos, loopLen) + loopLen;
+        if(pl->startMode == SYNTH_AUTO_CONSTANT) {
+            if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+                float loopLen = pl->loopLength;
+                for(samples = 0; samples < todo; samples++) {
+                    if(inPos > loopLen) {
+                        inPos = fmodf(inPos, loopLen);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, loopLen) + loopLen;
+                    }
+                    idx[samples] = i[(int)inPos];
+                    inPos += speed;
+                }
+            } else {
+                float *ll = get_buffer_data(syn, pl->lengthBuffer);
+                int lengthPos = pl->lengthPos;
+                todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
+                float len;
+                for(samples = 0; samples < todo; samples++) {
+                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    if(inPos > len) {
+                        inPos = fmodf(inPos, len);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, len) + len;
+                    }
+                    idx[samples] = i[(int)inPos];
+                    inPos += speed;
+                    lengthPos++;
+                }
+                pl->lengthPos = lengthPos;
             }
-            idx[samples] = i[(int)inPos];
-            inPos += speed;
+        } else {
+            float *ls = get_buffer_data(syn, pl->startBuffer);
+            int startPos = pl->startPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->startBuffer) - startPos);
+            unsigned int loopStart;
+            if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+                float loopLen = pl->loopLength;
+                for(samples = 0; samples < todo; samples++) {
+                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    if(inPos > loopLen) {
+                        inPos = fmodf(inPos, loopLen);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, loopLen) + loopLen;
+                    }
+                    idx[samples] = i[(int)inPos + loopStart];
+                    inPos += speed;
+                    startPos++;
+                }
+            } else {
+                float *ll = get_buffer_data(syn, pl->lengthBuffer);
+                int lengthPos = pl->lengthPos;
+                todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
+                float len;
+                for(samples = 0; samples < todo; samples++) {
+                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    if(inPos > len) {
+                        inPos = fmodf(inPos, len);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, len) + len;
+                    }
+                    idx[samples] = i[(int)inPos + loopStart];
+                    inPos += speed;
+                    startPos++;
+                    lengthPos++;
+                }
+                pl->lengthPos = lengthPos;
+            }
+            pl->startPos = startPos;
         }
         pl->inPos = pl->loopStart + inPos;
     } else if(pl->mode == SYNTH_MODE_LOOP &&
@@ -2020,16 +2276,79 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
-        float loopLen = pl->loopLength;
-        for(samples = 0; samples < todo; samples++) {
-            if(inPos > loopLen) {
-                inPos = fmodf(inPos, loopLen);
-            } else if(inPos < 0) {
-                inPos = fmodf(inPos, loopLen) + loopLen;
+        if(pl->startMode == SYNTH_AUTO_CONSTANT) {
+            if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+                float loopLen = pl->loopLength;
+                for(samples = 0; samples < todo; samples++) {
+                    if(inPos > loopLen) {
+                        inPos = fmodf(inPos, loopLen);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, loopLen) + loopLen;
+                    }
+                    idx[samples] = i[(int)inPos];
+                    inPos += speed * powf(2, s[speedPos]);
+                    speedPos++;
+                }
+            } else {
+                float *ll = get_buffer_data(syn, pl->lengthBuffer);
+                int lengthPos = pl->lengthPos;
+                todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
+                float len;
+                for(samples = 0; samples < todo; samples++) {
+                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    if(inPos > len) {
+                        inPos = fmodf(inPos, len);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, len) + len;
+                    }
+                    idx[samples] = i[(int)inPos];
+                    inPos += speed * powf(2, s[speedPos]);
+                    speedPos++;
+                    lengthPos++;
+                }
+                pl->lengthPos = lengthPos;
             }
-            idx[samples] = i[(int)inPos];
-            inPos += speed * powf(2, s[speedPos]);
-            speedPos++;
+        } else {
+            float *ls = get_buffer_data(syn, pl->startBuffer);
+            int startPos = pl->startPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->startBuffer) - startPos);
+            unsigned int loopStart;
+            if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+                float loopLen = pl->loopLength;
+                for(samples = 0; samples < todo; samples++) {
+                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    if(inPos > loopLen) {
+                        inPos = fmodf(inPos, loopLen);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, loopLen) + loopLen;
+                    }
+                    idx[samples] = i[(int)inPos + loopStart];
+                    inPos += speed * powf(2, s[speedPos]);
+                    speedPos++;
+                    startPos++;
+                }
+            } else {
+                float *ll = get_buffer_data(syn, pl->lengthBuffer);
+                int lengthPos = pl->lengthPos;
+                todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
+                float len;
+                for(samples = 0; samples < todo; samples++) {
+                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    if(inPos > len) {
+                        inPos = fmodf(inPos, len);
+                    } else if(inPos < 0) {
+                        inPos = fmodf(inPos, len) + len;
+                    }
+                    idx[samples] = i[(int)inPos + loopStart];
+                    inPos += speed * powf(2, s[speedPos]);
+                    speedPos++;
+                    lengthPos++;
+                    startPos++;
+                }
+                pl->lengthPos = lengthPos;
+            }
+            pl->startPos = startPos;
         }
         pl->inPos = inPos + pl->loopStart;
         pl->speedPos = speedPos;
@@ -2037,13 +2356,63 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float *p = get_buffer_data(syn, pl->phaseBuffer);
         int phasePos = pl->phasePos;
         float loopLen = pl->loopLength;
-        int max = get_buffer_size(syn, pl->inBuffer) - pl->loopStart;
+        i = &(i[pl->loopStart]);
+        unsigned int max = get_buffer_size(syn, pl->inBuffer) - pl->loopStart;
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
-        for(samples = 0; samples < todo; samples++) {
-            idx[samples] =
-                i[((int)fabsf(p[phasePos] * loopLen) % max)
-                  + pl->loopStart];
-            phasePos++;
+        if(pl->startMode == SYNTH_AUTO_CONSTANT) {
+            if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+                for(samples = 0; samples < todo; samples++) {
+                    idx[samples] =
+                        i[(int)fabsf(p[phasePos] * loopLen) % max];
+                    phasePos++;
+                }
+            } else {
+                float *ll = get_buffer_data(syn, pl->lengthBuffer);
+                int lengthPos = pl->lengthPos;
+                todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
+                float len;
+                for(samples = 0; samples < todo; samples++) {
+                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    idx[samples] =
+                        i[((int)fabsf(p[phasePos] * len) % max)];
+                    phasePos++;
+                    lengthPos++;
+                }
+                pl->lengthPos = lengthPos;
+            }
+        } else {
+            float *ls = get_buffer_data(syn, pl->startBuffer);
+            int startPos = pl->startPos;
+            todo = MIN(todo, get_buffer_size(syn, pl->startBuffer) - startPos);
+            unsigned int loopStart;
+            unsigned int thismax;
+            if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+                for(samples = 0; samples < todo; samples++) {
+                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    thismax = max - loopStart;
+                    idx[samples] =
+                        i[(((int)fabsf(p[phasePos] * loopLen) + loopStart) % thismax)];
+                    phasePos++;
+                    startPos++;
+                }
+            } else {
+                float *ll = get_buffer_data(syn, pl->lengthBuffer);
+                int lengthPos = pl->lengthPos;
+                todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
+                float len;
+                for(samples = 0; samples < todo; samples++) {
+                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    thismax = max - loopStart;
+                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    idx[samples] =
+                        i[(((int)fabsf(p[phasePos] * len) + loopStart) % thismax)];
+                    phasePos++;
+                    startPos++;
+                    lengthPos++;
+                }
+                pl->lengthPos = lengthPos;
+            }
+            pl->startPos = startPos;
         }
         pl->phasePos = phasePos;
     }
@@ -2183,6 +2552,16 @@ int synth_player_stopped_reason(Synth *syn,
         }
     } else if(pl->mode == SYNTH_MODE_LOOP &&
               pl->speedMode == SYNTH_AUTO_CONSTANT) {
+        if(pl->startMode == SYNTH_AUTO_SOURCE) {
+            if(pl->startPos >= get_buffer_size(syn, pl->startBuffer)) {
+                reason |= SYNTH_STOPPED_STARTBUFFER;
+            }
+        }
+        if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+            if(pl->lengthPos >= get_buffer_size(syn, pl->lengthBuffer)) {
+                reason |= SYNTH_STOPPED_LENGTHBUFFER;
+            }
+        }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
             if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
                 reason |= SYNTH_STOPPED_VOLBUFFER;
@@ -2190,6 +2569,16 @@ int synth_player_stopped_reason(Synth *syn,
         }
     } else if(pl->mode == SYNTH_MODE_LOOP &&
               pl->speedMode == SYNTH_AUTO_SOURCE) {
+        if(pl->startMode == SYNTH_AUTO_SOURCE) {
+            if(pl->startPos >= get_buffer_size(syn, pl->startBuffer)) {
+                reason |= SYNTH_STOPPED_STARTBUFFER;
+            }
+        }
+        if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+            if(pl->lengthPos >= get_buffer_size(syn, pl->lengthBuffer)) {
+                reason |= SYNTH_STOPPED_LENGTHBUFFER;
+            }
+        }
         if(pl->speedPos >= get_buffer_size(syn, pl->speedBuffer)) {
             reason |= SYNTH_STOPPED_SPEEDBUFFER;
         }
@@ -2201,6 +2590,16 @@ int synth_player_stopped_reason(Synth *syn,
     } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
         if(pl->phasePos >= get_buffer_size(syn, pl->phaseBuffer)) {
             reason |= SYNTH_STOPPED_PHASEBUFFER;
+        }
+        if(pl->startMode == SYNTH_AUTO_SOURCE) {
+            if(pl->startPos >= get_buffer_size(syn, pl->startBuffer)) {
+                reason |= SYNTH_STOPPED_STARTBUFFER;
+            }
+        }
+        if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
+            if(pl->lengthPos >= get_buffer_size(syn, pl->lengthBuffer)) {
+                reason |= SYNTH_STOPPED_LENGTHBUFFER;
+            }
         }
         if(pl->volMode == SYNTH_AUTO_SOURCE) {
             if(pl->volPos >= get_buffer_size(syn, pl->volBuffer)) {
