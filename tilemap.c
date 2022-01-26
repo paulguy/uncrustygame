@@ -1084,7 +1084,7 @@ int tilemap_copy_block(LayerList *ll,
                           tm->tex,
                           &srcrect,
                           &dstrect) < 0) {
-            LOG_PRINTF(ll, "%s: Failed to render tile.\n", tm->name);
+            LOG_PRINTF(ll, "%s: Failed to render copy.\n", tm->name);
             return(-1);
         }
 

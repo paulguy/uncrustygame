@@ -235,7 +235,7 @@ class ScrollingTilemap():
     NOSCROLL_X = 1 << 0
     NOSCROLL_Y = 1 << 1
 
-    def __init__(self, tileset, tilemap, tmwidth, tmheight, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0, flags=None, colormod=None):
+    def __init__(self, tileset, tilemap, tmwidth, tmheight, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0, flags=None, colormod=None, optimize=False):
         if noscroll & (ScrollingTilemap.NOSCROLL_X | \
                        ScrollingTilemap.NOSCROLL_Y):
             raise ValueError("Scrolling must be allowed in some direction.")
@@ -259,14 +259,15 @@ class ScrollingTilemap():
         starty = int(starty)
         self.scroll(startx, starty)
         # set to some values that could never intersect to force update
-        self._x = -self._tmw * self._twidth
-        self._y = -self._tmh * self._theight
+        self._tmx = -self._tmw
+        self._tmy = -self._tmh
         self._l = self._tm.layer("Scrolling Layer {}".format(tileset.name()))
         # don't bother sanity checking the buffer, just try to update it which
         # should do all the sanity checking. :p
         self.update()
         self._l.window(self._width * self._twidth, \
                        self._height * self._theight)
+        self._optimize = optimize
 
     @property
     def layer(self):
@@ -292,8 +293,8 @@ class ScrollingTilemap():
         self._newy = y
 
     def update(self):
-        ox = self._x // self._twidth
-        oy = self._y // self._theight
+        ox = self._tmx
+        oy = self._tmy
         nx = self._newx // self._twidth
         ny = self._newy // self._theight
         if nx + self._tmw > self._tmwidth:
@@ -301,16 +302,17 @@ class ScrollingTilemap():
         if ny + self._tmh > self._tmheight:
             ny = self._tmheight - self._tmh
         if (nx + self._tmw < ox or nx >= ox + self._tmw) or \
-           (ny + self._tmh < oy or ny >= oy + self._tmw):
-            # no overlap, redraw the whole thing
+           (ny + self._tmh < oy or ny >= oy + self._tmw) or \
+           not self._optimize:
+            # no overlap or optimization disabled, redraw the whole thing
             self._setmap(nx, ny)
             self._tmx = nx
             self._tmy = ny
         else:
-            if nx < self._tmx:
+            if nx < ox:
                 rw = ox - nx
                 w  = self._tmw - rw
-                if ny < self._tmy:
+                if ny < oy:
                     # push to bottom right
                     rh = oy - ny
                     h  = self._tmh - rh
@@ -318,7 +320,7 @@ class ScrollingTilemap():
                     self._setmap(nx, ny,      0,  0, self._tmw, rh)
                     self._setmap(nx, ny + rh, 0, rh, rw,        h)
                     self._tmy = ny
-                elif ny + self._tmh > self._tmy + self._tmh:
+                elif ny > oy:
                     # push to top right
                     rh = ny - oy
                     h  = self._tmh - rh
@@ -331,10 +333,10 @@ class ScrollingTilemap():
                     self._tm.copy(0, 0, w, self._tmh, rw, 0)
                     self._setmap(nx, ny, 0, 0, rw, self._tmh)
                 self._tmx = nx
-            elif nx + self._tmw > self._tmx + self._tmw:
+            elif nx > ox:
                 rw = nx - ox
                 w  = self._tmw - rw
-                if ny < self._tmy:
+                if ny < oy:
                     # push to bottom left
                     rh = oy - ny
                     h  = self._tmh - rh
@@ -342,7 +344,7 @@ class ScrollingTilemap():
                     self._setmap(nx,     ny,      0, 0,  self._tmw, rh)
                     self._setmap(nx + w, ny + rh, w, rh, rw,        h)
                     self._tmy = ny
-                elif ny + self._tmh > self._tmy + self._tmh:
+                elif ny > oy:
                     # push to top left
                     rh = ny - oy
                     h  = self._tmh - rh
@@ -356,14 +358,14 @@ class ScrollingTilemap():
                     self._setmap(nx + w, ny, w, 0, rw, self._tmh)
                 self._tmx = nx
             else:
-                if ny < self._tmy:
+                if ny < oy:
                     # push to bottom
                     rh = oy - ny
                     h  = self._tmh - rh
                     self._tm.copy(0, 0, self._tmw, h, 0, rh)
                     self._setmap(nx, ny, 0, 0, self._tmw, rh)
                     self._tmy = ny
-                elif ny + self._tmh > self._tmy + self._tmh:
+                elif ny > oy:
                     # push to top
                     rh = ny - oy
                     h  = self._tmh - rh
@@ -375,40 +377,38 @@ class ScrollingTilemap():
                     pass 
         self._l.scroll_pos(self._newx - (nx * self._twidth), \
                            self._newy - (ny * self._theight))
-        self._x = self._newx
-        self._y = self._newy
 
     def updateregion(self, x, y, w, h):
         tmx = x
         tmy = y
-        if tmx < self._x:
-            if tmx + w > self._x + self._tmw:
+        if tmx < self._tmx:
+            if tmx + w > self._tmx + self._tmw:
                 tmx = 0
                 w = self._tmw
-            elif tmx + w > self._x:
+            elif tmx + w > self._tmx:
                 tmx = 0
-                w = (tmx + w) - self._x
+                w = (tmx + w) - self._tmx
             else:
                 return
-        else: # tmx >= self._x
-            if tmx >= self._x + self._tmw:
+        else: # tmx >= self._tmx
+            if tmx >= self._tmx + self._tmw:
                 return
-            else: # tmx < self._x + self._tmw
-                tmx = tmx - self._x
-                w = (self._x + self._tmw) - (tmx + w)
-        if tmy < self._y:
-            if tmy + h > self._y + self._tmh:
+            else: # tmx < self._tmx + self._tmw
+                tmx = tmx - self._tmx
+                w = (self._tmx + self._tmw) - (tmx + w)
+        if tmy < self._tmy:
+            if tmy + h > self._tmy + self._tmh:
                 tmy = 0
                 h = self._tmh
-            elif tmy + h > self._y:
+            elif tmy + h > self._tmy:
                 tmy = 0
-                h = (tmy + h) - self._y
+                h = (tmy + h) - self._tmy
             else:
                 return
-        else: # tmy >= self._y
-            if tmy >= self._y + self._tmh:
+        else: # tmy >= self._tmy
+            if tmy >= self._tmy + self._tmh:
                 return
-            else: # tmy < self._y + self._tmh
-                tmy = tmy - self._y
-                h = (self._y + self._tmh) - (tmy + h)
+            else: # tmy < self._tmy + self._tmh
+                tmy = tmy - self._tmy
+                h = (self._tmy + self._tmh) - (tmy + h)
         self._setmap(x, y, tmx, tmy, w, h)
