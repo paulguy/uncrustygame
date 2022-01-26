@@ -273,6 +273,9 @@ class ScrollingTilemap():
     def layer(self):
         return self._l
 
+    def optimize(self, val):
+        self._optimize = not not val
+
     def _setmap(self, x, y, tmx=0, tmy=0, w=0, h=0):
         self._tm.map(tmx, tmy, self._tmwidth, w, h, self._tilemap[y * self._tmwidth + x:])
         if self._flags is not None:

@@ -481,10 +481,10 @@ def do_main(window, renderer, pixfmt):
     bigcm = numpy.zeros(128 * 256, numpy.uint32)
     bigcm.fill(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE))
     for num in range(1, 255):
-        #r, g, b = color_from_rad(numpy.pi * (num / 255) * 2.0, 0, 255)
-        #bigcm[num*128+1:num*128+127].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
-        a = num % 2 * 255
-        bigcm[num*128+1:num*128+127].fill(display.make_color(a, a, a, SDL_ALPHA_OPAQUE))
+        r, g, b = color_from_rad(numpy.pi * (num / 255) * 2.0, 0, 255)
+        bigcm[num*128+1:num*128+127].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
+        #a = num % 2 * 255
+        #bigcm[num*128+1:num*128+127].fill(display.make_color(a, a, a, SDL_ALPHA_OPAQUE))
     stm = display.ScrollingTilemap(text, bigtm, 128, 256, 320 / 8, 240 / 8, 8, 8, colormod=bigcm)
     stm.layer.scale(2.0, 2.0)
     pt3 = BouncingPoint(0, 0, (128 * 8) - 320, (256 * 8) - 240, 200, minspeed=60)
@@ -509,7 +509,7 @@ def do_main(window, renderer, pixfmt):
     l1dl.append(l1)
     l1dl.append(lambda: tm2.update(0, 0, 1, 1))
     scene.append(l1dl)
-    #scene.append(l2)
+    scene.append(l2)
 
     aud = audio.AudioSystem(log_cb_return, None, 48000, 2, trace=TRACEAUDIO)
     audbuffers = load_audio(aud, WAVEFORM_HARMONICS)
@@ -523,6 +523,7 @@ def do_main(window, renderer, pixfmt):
     scoper = None
     running = True
     playing = True
+    optimize = False
     lastTime = time.monotonic()
     while running:
         thisTime = time.monotonic()
@@ -674,6 +675,9 @@ def do_main(window, renderer, pixfmt):
                     else:
                         aud.open_wav("output.wav")
                         wavout = True
+                elif event.key.keysym.sym == SDLK_o:
+                    optimize = not optimize
+                    stm.optimize(optimize)
 
         pt1.update(timetaken)
         if pt2.update(timetaken):
