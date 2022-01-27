@@ -1063,6 +1063,7 @@ int tilemap_copy_block(LayerList *ll,
     }
 
     if(tm->tex != NULL) {
+        /* TODO: Experiment creating a second texture to swap between */
         x *= ts->tw; dx *= ts->tw; w *= ts->tw;
         y *= ts->th; dy *= ts->th; h *= ts->th;
 

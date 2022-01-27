@@ -21,6 +21,9 @@ TRACEVIDEO=False
 # enable tracing of audio sequencer processing
 TRACEAUDIO=True
 
+RES_WIDTH=1920
+RES_HEIGHT=1080
+
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"
 
@@ -438,7 +441,7 @@ def do_main(window, renderer, pixfmt):
 
     random.seed(None)
 
-    pt1 = BouncingPoint(0.0, 0.0, 640 - (64 * 4), 480 - (64 * 4), 480.0)
+    pt1 = BouncingPoint(0.0, 0.0, RES_WIDTH - (64 * 4), RES_HEIGHT - (64 * 4), 480.0)
     pt2 = BouncingPoint(-20.0, -8.0, 64 - 20, 64 - 8, 64.0, x = -20.0, y = -8.0)
     blendmode = cg.TILEMAP_BLENDMODE_ADD
     colorrad = 0.0
@@ -474,20 +477,20 @@ def do_main(window, renderer, pixfmt):
     display.clear(ll, osc2, 0, 0, 0, SDL_ALPHA_OPAQUE)
     osc2l = cg.Layer(ll, osc2, "OSC 2 Layer")
 
-    bigtm = numpy.zeros(127 * 259, numpy.uint32)
+    bigtm = numpy.zeros(511 * 514, numpy.uint32)
     bigtm[0:127] = numpy.arange(1, 128)
-    for num in range(127, 128 * 255, 127):
+    for num in range(127, 512 * 512, 127):
         bigtm[num:num+127] = bigtm[0:127]
-    bigcm = numpy.zeros(128 * 256, numpy.uint32)
+    bigcm = numpy.zeros(512 * 512, numpy.uint32)
     bigcm.fill(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE))
-    for num in range(1, 255):
-        r, g, b = color_from_rad(numpy.pi * (num / 255) * 2.0, 0, 255)
-        bigcm[num*128+1:num*128+127].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
+    for num in range(1, 511):
+        r, g, b = color_from_rad(numpy.pi * (num / 512) * 2.0, 0, 255)
+        bigcm[num*512+1:num*512+511].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
         #a = num % 2 * 255
         #bigcm[num*128+1:num*128+127].fill(display.make_color(a, a, a, SDL_ALPHA_OPAQUE))
-    stm = display.ScrollingTilemap(text, bigtm, 128, 256, 320 / 8, 240 / 8, 8, 8, colormod=bigcm)
-    stm.layer.scale(2.0, 2.0)
-    pt3 = BouncingPoint(0, 0, (128 * 8) - 320, (256 * 8) - 240, 200, minspeed=60)
+    stm = display.ScrollingTilemap(text, bigtm, 512, 512, RES_WIDTH / 8, RES_HEIGHT / 8, 8, 8, colormod=bigcm)
+    #stm.layer.scale(2.0, 2.0)
+    pt3 = BouncingPoint(0, 0, (512 * 8) - RES_WIDTH, (512 * 8) - RES_HEIGHT, 1000, minspeed=60)
 
     scene = display.DisplayList(ll, display.SCREEN)
     osc1dl = display.DisplayList(ll, osc2)
@@ -502,7 +505,7 @@ def do_main(window, renderer, pixfmt):
     oscdl.append(lambda: osc2l.scale(1.0, 1.0))
     oscdl.append(osc1dl)
     oscdl.append(osc2dl)
-    oscdl.append(lambda: osc2l.scale(2.0, 2.0))
+    oscdl.append(lambda: osc2l.scale(RES_WIDTH/320, RES_HEIGHT/240))
     oscdl.append(osc2l)
     oscid = scene.append(None)
     l1dl = display.DisplayList(ll, ts2)
@@ -678,6 +681,7 @@ def do_main(window, renderer, pixfmt):
                 elif event.key.keysym.sym == SDLK_o:
                     optimize = not optimize
                     stm.optimize(optimize)
+                    print("Optimization enabled: {}".format(optimize))
 
         pt1.update(timetaken)
         if pt2.update(timetaken):
@@ -732,8 +736,7 @@ def do_main(window, renderer, pixfmt):
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
-    window, renderer, pixfmt = display.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE, batching=RENDERBATCHING)
-    #window, renderer, pixfmt = display.initialize_video("asdf", 640, 480, SDL_WINDOW_SHOWN, SDL_RENDERER_TARGETTEXTURE, batching=RENDERBATCHING)
+    window, renderer, pixfmt = display.initialize_video("asdf", RES_WIDTH, RES_HEIGHT, SDL_WINDOW_SHOWN, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE, batching=RENDERBATCHING)
 
     do_main(window, renderer, pixfmt)
 
