@@ -319,7 +319,7 @@ class ScrollingTilemap():
                     # push to bottom right
                     rh = oy - ny
                     h  = self._tmh - rh
-                    self._tm.copy(0, 0, w, h, rw, rh)
+                    self._tm.copy(0, 0, w, h, rw, rh, False)
                     self._setmap(nx, ny,      0,  0, self._tmw, rh)
                     self._setmap(nx, ny + rh, 0, rh, rw,        h)
                     self._tmy = ny
@@ -327,13 +327,13 @@ class ScrollingTilemap():
                     # push to top right
                     rh = ny - oy
                     h  = self._tmh - rh
-                    self._tm.copy(0, rh, w, h, rw, 0)
+                    self._tm.copy(0, rh, w, h, rw, 0, False)
                     self._setmap(nx, ny,     0, 0, rw,        h)
                     self._setmap(nx, ny + h, 0, h, self._tmw, rh)
                     self._tmy = ny
                 else:
                     # push to right
-                    self._tm.copy(0, 0, w, self._tmh, rw, 0)
+                    self._tm.copy(0, 0, w, self._tmh, rw, 0, False)
                     self._setmap(nx, ny, 0, 0, rw, self._tmh)
                 self._tmx = nx
             elif nx > ox:
@@ -343,7 +343,7 @@ class ScrollingTilemap():
                     # push to bottom left
                     rh = oy - ny
                     h  = self._tmh - rh
-                    self._tm.copy(rw, 0, w, h, 0, rh)
+                    self._tm.copy(rw, 0, w, h, 0, rh, False)
                     self._setmap(nx,     ny,      0, 0,  self._tmw, rh)
                     self._setmap(nx + w, ny + rh, w, rh, rw,        h)
                     self._tmy = ny
@@ -351,13 +351,13 @@ class ScrollingTilemap():
                     # push to top left
                     rh = ny - oy
                     h  = self._tmh - rh
-                    self._tm.copy(rw, rh, w, h, 0, 0)
+                    self._tm.copy(rw, rh, w, h, 0, 0, False)
                     self._setmap(nx + w, ny,     w, 0, rw,        h)
                     self._setmap(nx,     ny + h, 0, h, self._tmw, rh)
                     self._tmy = ny
                 else:
                     # push to left
-                    self._tm.copy(rw, 0, w, self._tmh, 0, 0)
+                    self._tm.copy(rw, 0, w, self._tmh, 0, 0, False)
                     self._setmap(nx + w, ny, w, 0, rw, self._tmh)
                 self._tmx = nx
             else:
@@ -365,14 +365,14 @@ class ScrollingTilemap():
                     # push to bottom
                     rh = oy - ny
                     h  = self._tmh - rh
-                    self._tm.copy(0, 0, self._tmw, h, 0, rh)
+                    self._tm.copy(0, 0, self._tmw, h, 0, rh, False)
                     self._setmap(nx, ny, 0, 0, self._tmw, rh)
                     self._tmy = ny
                 elif ny > oy:
                     # push to top
                     rh = ny - oy
                     h  = self._tmh - rh
-                    self._tm.copy(0, rh, self._tmw, h, 0, 0)
+                    self._tm.copy(0, rh, self._tmw, h, 0, 0, False)
                     self._setmap(nx, ny + h, 0, h, self._tmw, rh)
                     self._tmy = ny
                 else:

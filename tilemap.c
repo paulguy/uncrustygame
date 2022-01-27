@@ -56,6 +56,7 @@ typedef struct {
     unsigned int *attr_flags;
     Uint32 *attr_colormod;
     SDL_Texture *tex; /* cached surface */
+    SDL_Texture *tex2; /* surface for flipping between copies */
 
     unsigned int refs; /* layers referencing this tileset */
 
@@ -655,6 +656,7 @@ static int init_tilemap(LayerList *ll, Tilemap *t,
     t->h = h;
     t->tileset = tileset;
     t->tex = NULL;
+    t->tex2 = NULL;
     t->attr_flags = NULL;
     t->attr_colormod = NULL;
     t->refs = 0;
@@ -802,10 +804,14 @@ int tilemap_free_tilemap(LayerList *ll, unsigned int index) {
        free(tm->attr_colormod);
         tm->attr_colormod = NULL;
     }
-    /* clear cached surface */
+    /* clear cached surfaces */
     if(tm->tex != NULL) {
         SDL_DestroyTexture(tm->tex);
         tm->tex = NULL;
+    }
+    if(tm->tex2 != NULL) {
+        SDL_DestroyTexture(tm->tex2);
+        tm->tex2 = NULL;
     }
     free(tm->name);
 
@@ -1026,6 +1032,43 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
     return(0);
 }
 
+static SDL_Texture *make_texture(LayerList *ll,
+                                 Tilemap *tm,
+                                 Tileset *ts) {
+    SDL_Texture *tex;
+    unsigned int texw = find_power_of_two(tm->w * ts->tw);
+    unsigned int texh = find_power_of_two(tm->h * ts->th);
+    SDL_Texture *targetTexture = SDL_GetRenderTarget(ll->renderer);
+
+    tex = SDL_CreateTexture(ll->renderer,
+                            ll->format,
+                            SDL_TEXTUREACCESS_STATIC |
+                            SDL_TEXTUREACCESS_TARGET,
+                            texw, texh);
+    if(tex == NULL) {
+        LOG_PRINTF(ll, "%s: Failed to create texture.\n", tm->name);
+        return(NULL);
+    }
+    if(SDL_SetRenderTarget(ll->renderer, tex) < 0) {
+        LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
+                       tm->name, SDL_GetError());
+        SDL_DestroyTexture(tex);
+        return(NULL);
+    }
+    if(SDL_RenderClear(ll->renderer) < 0) {
+        LOG_PRINTF(ll, "%s: Failed to clear texture.\n", tm->name);
+        if(SDL_SetRenderTarget(ll->renderer, targetTexture) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to restore render target: %s.\n",
+                           tm->name, SDL_GetError());
+            return(NULL);
+        }
+        SDL_DestroyTexture(tex);
+        return(NULL);
+    }
+
+    return(tex);
+}
+
 int tilemap_copy_block(LayerList *ll,
                        unsigned int index,
                        unsigned int x,
@@ -1033,10 +1076,14 @@ int tilemap_copy_block(LayerList *ll,
                        unsigned int w,
                        unsigned int h,
                        unsigned int dx,
-                       unsigned int dy) {
+                       unsigned int dy,
+                       unsigned int valid_outside_copy) {
     unsigned int i;
     SDL_Texture *targetTexture;
     SDL_Rect srcrect, dstrect;
+#ifdef COPY_FIX
+    SDL_Texture *temp;
+#endif
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
         return(-1);
@@ -1063,21 +1110,55 @@ int tilemap_copy_block(LayerList *ll,
     }
 
     if(tm->tex != NULL) {
-        /* TODO: Experiment creating a second texture to swap between */
         x *= ts->tw; dx *= ts->tw; w *= ts->tw;
         y *= ts->th; dy *= ts->th; h *= ts->th;
+
+        targetTexture = SDL_GetRenderTarget(ll->renderer);
+        if(tm->tex2 == NULL) {
+#ifdef COPY_FIX
+            if(SDL_SetRenderDrawColor(ll->renderer,
+                                      0, 0, 0,
+                                      SDL_ALPHA_TRANSPARENT) < 0) {
+                LOG_PRINTF(ll, "%s: Failed to set render draw color.\n", tm->name);
+                return(-1);
+            }
+
+            tm->tex2 = make_texture(ll, tm, ts);
+            if(tm->tex2 == NULL) {
+                return(-1);
+            }
+#else
+            tm->tex2 = tm->tex;
+            if(SDL_SetRenderTarget(ll->renderer, tm->tex2) < 0) {
+                LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
+                               tm->name, SDL_GetError());
+                return(-1);
+            }
+#endif
+        } else {
+            if(SDL_SetRenderTarget(ll->renderer, tm->tex2) < 0) {
+                LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
+                               tm->name, SDL_GetError());
+                return(-1);
+            }
+        }
 
         if(SDL_SetTextureBlendMode(tm->tex, SDL_BLENDMODE_NONE) < 0) {
             LOG_PRINTF(ll, "%s: Failed to set blendmode.\n", tm->name);
             return(-1);
         }
 
-        targetTexture = SDL_GetRenderTarget(ll->renderer);
-        if(SDL_SetRenderTarget(ll->renderer, tm->tex) < 0) {
-            LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
-                           tm->name, SDL_GetError());
-            return(-1);
+#ifdef COPY_FIX
+        if(valid_outside_copy != 0) {
+            if(SDL_RenderCopy(ll->renderer,
+                              tm->tex,
+                              NULL,
+                              NULL) < 0) {
+                LOG_PRINTF(ll, "%s: Failed to render copy.\n", tm->name);
+                return(-1);
+            }
         }
+#endif
 
         srcrect.x =  x; srcrect.y =  y; srcrect.w = w; srcrect.h = h;
         dstrect.x = dx, dstrect.y = dy; dstrect.w = w; dstrect.h = h;
@@ -1094,6 +1175,12 @@ int tilemap_copy_block(LayerList *ll,
                            tm->name, SDL_GetError());
             return(-1);
         }
+
+#ifdef COPY_FIX
+        temp = tm->tex;
+        tm->tex = tm->tex2;
+        tm->tex2 = temp;
+#endif
     }
 
     return(0);
@@ -1111,7 +1198,6 @@ int tilemap_update_tilemap(LayerList *ll,
     Uint32 colormod;
     double angle;
     SDL_RendererFlip flip;
-    unsigned int texw, texh;
     SDL_Texture *targetTexture;
     Tilemap *tm = get_tilemap(ll, index);
     if(tm == NULL) {
@@ -1137,33 +1223,7 @@ int tilemap_update_tilemap(LayerList *ll,
         return(-1);
     }
 
-    /* create the surface if it doesn't exist */
-    if(tm->tex == NULL) {
-        texw = find_power_of_two(tm->w * ts->tw);
-        texh = find_power_of_two(tm->h * ts->th);
-
-        tm->tex = SDL_CreateTexture(ll->renderer,
-                                    ll->format,
-                                    SDL_TEXTUREACCESS_STATIC |
-                                    SDL_TEXTUREACCESS_TARGET,
-                                    texw,
-                                    texh);
-        if(tm->tex == NULL) {
-            LOG_PRINTF(ll, "%s: Failed to create texture.\n", tm->name);
-            return(-1);
-        }
-        if(SDL_RenderClear(ll->renderer) < 0) {
-            LOG_PRINTF(ll, "%s: Failed to clear texture.\n", tm->name);
-            return(-1);
-        }
-    }
-    /* set it to be rendered to */
     targetTexture = SDL_GetRenderTarget(ll->renderer);
-    if(SDL_SetRenderTarget(ll->renderer, tm->tex) < 0) {
-        LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
-                       tm->name, SDL_GetError());
-        return(-1);
-    }
 
     if(SDL_SetRenderDrawColor(ll->renderer,
                               0, 0, 0,
@@ -1171,13 +1231,30 @@ int tilemap_update_tilemap(LayerList *ll,
         LOG_PRINTF(ll, "%s: Failed to set render draw color.\n", tm->name);
         return(-1);
     }
-    dest.x = x * ts->tw; dest.y = y * ts->th;
-    dest.w = w * ts->tw; dest.h = h * ts->th;
-    if(SDL_RenderFillRect(ll->renderer, &dest) < 0) {
-        LOG_PRINTF(ll, "%s: Failed to clear region.\n", tm->name);
-        return(-1);
+
+    /* create the surface if it doesn't exist */
+    if(tm->tex == NULL) {
+        /* texture will be made the render target */
+        tm->tex = make_texture(ll, tm, ts);
+        if(tm->tex == NULL) {
+            return(-1);
+        }
+    } else {
+        /* set it to be rendered to */
+        if(SDL_SetRenderTarget(ll->renderer, tm->tex) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to set render target: %s.\n",
+                           tm->name, SDL_GetError());
+            return(-1);
+        }
+
+        dest.x = x * ts->tw; dest.y = y * ts->th;
+        dest.w = w * ts->tw; dest.h = h * ts->th;
+        if(SDL_RenderFillRect(ll->renderer, &dest) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to clear region.\n", tm->name);
+            return(-1);
+        }
     }
-    
+
     /* blit each tile to the tilemap */
     src.w = ts->tw; src.h = ts->th; src.y = 0;
     dest.w = src.w; dest.h = src.h;

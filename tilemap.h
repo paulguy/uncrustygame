@@ -286,14 +286,18 @@ int tilemap_set_tilemap_map(LayerList *ll,
 /*
  * Copy a block of a tilemap.
  *
- * ll       the LayerList
- * index    the tilemap to copy a block in
- * x        X position to copy from
- * y        Y position to copy from
- * w        width to copy
- * h        height to copy
- * dx       X position to copy to
- * dy       Y position to copy to
+ * ll                   the LayerList
+ * index                the tilemap to copy a block in
+ * x                    X position to copy from
+ * y                    Y position to copy from
+ * w                    width to copy
+ * h                    height to copy
+ * dx                   X position to copy to
+ * dy                   Y position to copy to
+ * valid_outside_copy   Whether the contents of the region outside of tthe copy
+ *                      destination should be preserved.  Useful to pass 0 to
+ *                      this to avoid an extra copy if the rest is going to be
+ *                      drawn over anyway.
  * return   0 on success, -1 on failure
  */
 int tilemap_copy_block(LayerList *ll,
@@ -303,7 +307,8 @@ int tilemap_copy_block(LayerList *ll,
                        unsigned int w,
                        unsigned int h,
                        unsigned int dx,
-                       unsigned int dy);
+                       unsigned int dy,
+                       unsigned int valid_outside_copy);
 /*
  * Add/update attribute flags to a tilemap.  Non-squared tiles can only be
  * rotated 180 degrees.

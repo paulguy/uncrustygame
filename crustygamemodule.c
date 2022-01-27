@@ -1163,6 +1163,7 @@ static PyObject *Tilemap_copy(TilemapObject *self,
                               Py_ssize_t nargs,
                               PyObject *kwnames) {
     unsigned long x, y, w, h, dx, dy;
+    int valid_outside_copy;
 
     if(self->ll == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Tilemap is not initialized");
@@ -1174,7 +1175,15 @@ static PyObject *Tilemap_copy(TilemapObject *self,
     if(nargs < 6) {
         PyErr_SetString(PyExc_TypeError, "function needs at least 4 argument");
         return(NULL);
+    } else if(nargs == 6) {
+        valid_outside_copy = 1;
+    } else {
+        valid_outside_copy = PyObject_RichCompareBool(args[6], Py_True, Py_EQ);
+        if(valid_outside_copy < 0) {
+            return(NULL);
+        }
     }
+
     x = PyLong_AsUnsignedLong(args[0]);
     if(PyErr_Occurred() != NULL) {
         return(NULL);
@@ -1200,7 +1209,9 @@ static PyObject *Tilemap_copy(TilemapObject *self,
         return(NULL);
     }
 
-    if(tilemap_copy_block(self->ll->ll, self->tilemap, x, y, w, h, dx, dy) < 0) {
+    if(tilemap_copy_block(self->ll->ll, self->tilemap,
+                          x, y, w, h, dx, dy,
+                          valid_outside_copy) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_copy_block failed");
         return(NULL);
     }
@@ -1308,12 +1319,14 @@ static PyMethodDef Tilemap_methods[] = {
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Copy a block of a tilemap.\n\n"
         "copy(x, y, width, height, dx, dy)\n"
-        "x       Where to start copying from from the left.\n"
-        "y       Where to start copying from from the top.\n"
-        "width   How wide of a rectangle to copy.\n"
-        "height  How tall of a rectangle to copy.\n"
-        "dx      Where to start copying to from the left.\n"
-        "dy      Where to start copying to from the top."},
+        "x                   Where to start copying from from the left.\n"
+        "y                   Where to start copying from from the top.\n"
+        "width               How wide of a rectangle to copy.\n"
+        "height              How tall of a rectangle to copy.\n"
+        "dx                  Where to start copying to from the left.\n"
+        "dy                  Where to start copying to from the top.\n"
+        "valid_outside_copy  Whether the contents outside of the copy region should be\n"
+        "                    kept."},
     {
         "layer",
         (PyCMethod) LayerList_TM_layer,
@@ -2288,7 +2301,6 @@ static PyObject *Synth_has_underrun(SynthObject *self,
 
     return(PyBool_FromLong(ret));
 }
-
 
 static PyObject *Synth_frame(SynthObject *self,
                              PyTypeObject *defining_class,
