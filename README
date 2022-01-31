@@ -32,3 +32,4 @@ R - Run synth (default)
 N - Disable synth (pause)
 I - Print synth stats at any time
 W - Tiggle WAV output
+O - Toggle tilemap scrolling optimization

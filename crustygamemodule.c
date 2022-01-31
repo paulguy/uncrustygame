@@ -1326,7 +1326,7 @@ static PyMethodDef Tilemap_methods[] = {
         "dx                  Where to start copying to from the left.\n"
         "dy                  Where to start copying to from the top.\n"
         "valid_outside_copy  Whether the contents outside of the copy region should be\n"
-        "                    kept."},
+        "                    kept. Optional: defaults to True."},
     {
         "layer",
         (PyCMethod) LayerList_TM_layer,
