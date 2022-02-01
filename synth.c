@@ -2316,7 +2316,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 float loopLen = pl->loopLength;
                 for(samples = 0; samples < todo; samples++) {
-                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    loopStart = pl->loopStart + (fabsf(ls[startPos]) * pl->startValues * pl->startGranularity);
                     if(inPos > loopLen) {
                         inPos = fmodf(inPos, loopLen);
                     } else if(inPos < 0) {
@@ -2333,8 +2333,8 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
                 float len;
                 for(samples = 0; samples < todo; samples++) {
+                    loopStart = pl->loopStart + (fabsf(ls[startPos]) * pl->startValues * pl->startGranularity);
                     len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
-                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
                     if(inPos > len) {
                         inPos = fmodf(inPos, len);
                     } else if(inPos < 0) {
@@ -2355,14 +2355,13 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
     } else if(pl->mode == SYNTH_MODE_PHASE_SOURCE) {
         float *p = get_buffer_data(syn, pl->phaseBuffer);
         int phasePos = pl->phasePos;
-        float loopLen = pl->loopLength;
         unsigned int max = get_buffer_size(syn, pl->inBuffer);
         todo = MIN(todo, get_buffer_size(syn, pl->phaseBuffer) - phasePos);
         if(pl->startMode == SYNTH_AUTO_CONSTANT) {
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 for(samples = 0; samples < todo; samples++) {
                     idx[samples] =
-                        i[abs((int)(p[phasePos] * loopLen) + pl->loopStart) % max];
+                        i[abs((int)(p[phasePos] * pl->loopLength) + (int)(pl->loopStart)) % max];
                     phasePos++;
                 }
             } else {
@@ -2373,7 +2372,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 for(samples = 0; samples < todo; samples++) {
                     len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
                     idx[samples] =
-                        i[abs((int)(p[phasePos] * len) + pl->loopStart) % max];
+                        i[abs((int)(p[phasePos] * len) + (int)(pl->loopStart)) % max];
                     phasePos++;
                     lengthPos++;
                 }
@@ -2383,12 +2382,12 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             float *ls = get_buffer_data(syn, pl->startBuffer);
             int startPos = pl->startPos;
             todo = MIN(todo, get_buffer_size(syn, pl->startBuffer) - startPos);
-            unsigned int loopStart;
+            int loopStart;
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 for(samples = 0; samples < todo; samples++) {
-                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    loopStart = pl->loopStart + (fabsf(ls[startPos]) * pl->startValues * pl->startGranularity);
                     idx[samples] =
-                        i[abs((int)(p[phasePos] * loopLen) + loopStart) % max];
+                        i[abs((int)(p[phasePos] * pl->loopLength) + loopStart) % max];
                     phasePos++;
                     startPos++;
                 }
@@ -2398,7 +2397,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
                 float len;
                 for(samples = 0; samples < todo; samples++) {
-                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
+                    loopStart = pl->loopStart + (fabsf(ls[startPos]) * pl->startValues * pl->startGranularity);
                     len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
                     idx[samples] =
                         i[abs((int)(p[phasePos] * len) + loopStart) % max];

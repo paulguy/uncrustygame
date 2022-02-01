@@ -1,0 +1,66 @@
+CrustyTracker
+2 2
+include macros.txt
+include modular.txt
+macro MAXREQ=1000
+tag max-request=MAXREQ
+macro LFOINBUF=2
+buffer sinelfo.wav ; leave this here because there's no consequence for it
+                   ; really other than being sint16 when everything else is
+                   ; float32 but leave it as a test to assure WAV loading
+                   ; continues to function
+macro SLOPEINBUF=3
+buffer external
+macro BENDUPINBUF=4
+buffer external
+macro BENDDNINBUF=5
+buffer external
+macro NOISEINBUF=6
+buffer external
+macro LPFINBUF=7
+buffer external
+macro HPFINBUF=8
+buffer external
+macro SININBUF=9
+buffer external
+macro SQRINBUF=10
+buffer external
+macro TRIINBUF=11
+buffer external
+macro SAWINBUF=12
+buffer external
+; reusable buffers
+macro LFOBUF=13
+buffer MAXREQ
+macro ENVBUF=14
+buffer MAXREQ
+macro BENDBUF=15
+buffer MAXREQ
+macro FILTERBUF=16
+buffer MAXREQ
+macro OSCGBUF=17
+buffer MAXREQ
+; channel lead 1
+channel player ; tone envelope generator
+channel player ; modulator gen
+channel player ; carrier gen
+channel player ; filter envelope generator
+channel filter
+channel player ; left output
+channel player ; right output
+; lead voice macros
+macro LEAD_INST OSCBUF=CH_PLAYER SLOPEINBUF ENVBUF | CH_PLAYER SININBUF OSCBUF | CH_PM_PLAYER LFOINBUF OSCBUF OSCBUF 22050 22050 | CH_PLAYER SLOPEINBUF ENVBUF | CH_FILTER OSCBUF LPFINBUF FILTER_SIZE OSCBUF FILTER_SLICES | CH_TOSTEREO OSCBUF
+macro LEAD_INIT VOLL VOLR=ENV_INIT | -1 | OSC_V_INIT 1.0 ENVBUF | ENV_INIT | FILT_S_INIT 0 ENVBUF 1.0 | P_TOS_VOL VOLL VOLR
+macro LEAD_PARAM VOLL VOLR=-5 | P_TOS_VOL VOLL VOLR
+macro LEAD_START SPD=P_STARTENV 1.0 40.0 50 10.0 50 1.0 999999 | P_TONE SPD 999999 | P_TONE 1.0 999999 | P_STARTENV 1.0 1000.0 10 5.0 100 1.0 999999 | F_RUN 999999 | P_TOS_RUN 999999
+macro LEAD_REL=P_RELENV 20.0 50 | P_RUN 50 | P_RUN 50 | P_RELENV 20.0 50 | F_RUN 50 | P_TOS_RUN 50
+macro LEAD_NOP=-7
+sequence
+0 | LEAD_INST OSCGBUF
+2
+1
+1 0 | LEAD_INIT 0.8 0.8
+2
+1 950 | LEAD_START D3
+1 50  | LEAD_REL
+0 1
