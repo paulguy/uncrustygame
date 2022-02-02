@@ -48,11 +48,15 @@ P_CPOS _POS=80800000 _POS 0.0
 ; set event to hold at end
 P_END_HOLD=20 80800000 -1.0 0.0
 ; set a buffer as a volume source and loop over it
-P_VLSRC _BVOL=3000010 _BVOL SYNTH_AUTO_SOURCE 8000 _BVOL
+P_VLSRC _BVOL=3000010 _BVOL SYNTH_AUTO_SOURCE 2000000 _BVOL
 ; set a buffer as a speed source and loop over it
-P_SLSRC _BSPD=600008 _BSPD SYNTH_AUTO_SOURCE 1000 _BSPD
+P_SLSRC _BSPD=600008 _BSPD SYNTH_AUTO_SOURCE 400000 _BSPD
 ; set a buffer as a phase source and loop over it
-P_PLSRC _BPHS=120004 _BPHS MODE_PHASE_SOURCE 400 _BPHS
+P_PLSRC _BPHS=120004 _BPHS MODE_PHASE_SOURCE 100000 _BPHS
+; set a buffer as a loop start source and loop over it
+P_LSLSRC _BLS=12002 _BLS MODE_PHASE_SOURCE 10000 _BLS
+; set a buffer as a loop length source and loop over it
+P_LLLSRC _BLL=1201 _BLL MODE_PHASE_SOURCE 1000 _BLL
 ; play at some speed for some time
 P_TONE _SPEED _TIME=800100 _SPEED _TIME
 ; play at some speed for some time starting at some position
