@@ -68,13 +68,11 @@ class TextBox():
         else:
             self._tm = array.array('u', itertools.repeat(' ', self._w * self._h))
             self._stm = display.ScrollingTilemap(ts, self._tm, self._w, self._h, vw, vh, 8, 8, noscroll=noscroll)
+            self._l = self._stm.layer
 
     @property
     def layer(self):
-        try:
-            return self._l
-        except AttributeError:
-            return self._stm.layer
+        return self._l
 
     def put_text(self, lines, x, y):
         x = int(x)
