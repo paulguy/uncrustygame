@@ -9,8 +9,9 @@ import audio
 from traceback import print_tb
 from sys import argv
 import numpy
-from scipy import signal
 import display
+import effects
+import waves
 
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
@@ -27,35 +28,7 @@ RES_HEIGHT=1080
 DEFAULT_SEQ = "test3.crustysequence"
 DEFAULT_WAV = "output.wav"
 
-FILTER_TAPS = 1024
-BASE_FREQ = 20
-FILTERS_PER_DECADE = 100
-DECADES = 3
-SLICES = FILTERS_PER_DECADE * DECADES
-MIN_TRANS_WIDTH = 80
-TRANS_WIDTH_DIV = 500
-
 WAVEFORM_HARMONICS = 8
-
-def color_from_rad(rad, cmin, cmax):
-    if rad >= 0 and rad < (numpy.pi * 2 / 6):
-        rad = (rad * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
-        return cmax, rad, cmin
-    elif rad >= (numpy.pi * 2 / 6) and rad < (numpy.pi * 2 / 6 * 2):
-        rad = cmax - ((rad - (numpy.pi * 2 / 6)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
-        return rad, cmax, cmin
-    elif rad >= (numpy.pi * 2 / 6 * 2) and rad < (numpy.pi * 2 / 6 * 3):
-        rad = ((rad - (numpy.pi * 2 / 6 * 2)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
-        return cmin, cmax, rad
-    elif rad >= (numpy.pi * 2 / 6 * 3) and rad < (numpy.pi * 2 / 6 * 4):
-        rad = cmax - ((rad - (numpy.pi * 2 / 6 * 3)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
-        return cmin, rad, cmax
-    elif rad >= (numpy.pi * 2 / 6 * 4) and rad < (numpy.pi * 2 / 6 * 5):
-        rad = ((rad - (numpy.pi * 2 / 6 * 4)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin)) + cmin
-        return rad, cmin, cmax
-
-    rad = cmax - ((rad - (numpy.pi * 2 / 6 * 5)) * (1 / (numpy.pi * 2 / 6)) * (cmax - cmin))
-    return cmax, cmin, rad
 
 # this is probably bad but whichever
 def string_to_ints(string):
@@ -70,183 +43,28 @@ def string_to_ints(string):
 
     return(array)
 
-def create_linear_slope(start, end, num):
-    step = (end - start) / (num - 1)
-    slope = array.array('f', islice(count(start, step), num))
-    return(slope)
-
-class LogSlope():
-    def __init__(self, start, end, num):
-        self._num = num
-        self._start = start
-        self._range = end - start
-        self._val = 0
-        self._step = 1.0 / num
-
-    def __len__(self):
-        return self._num
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        val = numpy.sqrt(self._val * self._step)
-        if self._val == self._num:
-            raise StopIteration()
-        self._val += 1
-        return self._start + (val * self._range)
-
-def create_sqrt_slope(start, end, num):
-    slope = array.array('f', LogSlope(start, end, num))
-    return(slope)
-
-class RandomNoise():
-    def __init__(self, low, high, num):
-        self._low = low
-        self._high = high
-        self._num = num
-        self._val = 0
-
-    def __len__(self):
-        return self._num
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        self._val += 1
-        if self._val > self._num:
-            raise StopIteration()
-        return random.uniform(self._low, self._high)
-
-def create_random_noise(low, high, num):
-    noise = array.array('f', RandomNoise(low, high, num))
-    return(noise)
-
-def make_filter(rate, lowpass):
-    filt = None
-#    fileexists = False
-
-#    filename = "{}t{}b{}fd{}d{}mtw{}twd{}r.npy".format(FILTER_TAPS, BASE_FREQ, FILTERS_PER_DECADE, DECADES, MIN_TRANS_WIDTH, TRANS_WIDTH_DIV, rate)
-
-#    try:
-#        filt = numpy.load(filename, allow_pickle=False)
-#        fileexists = True
-#        print("Filters loaded from file.")
-#    except IOError as e:
-#        pass
-
-    if filt is None:
-        try:
-            filt = numpy.zeros(SLICES * FILTER_TAPS, numpy.float32)
-            maxval = DECADES * FILTERS_PER_DECADE
-            for dec in range(DECADES):
-                for i in range(FILTERS_PER_DECADE):
-                    mul = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
-                    freq = BASE_FREQ * mul
-                    transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
-                    pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS) + (i * FILTER_TAPS)
-#                    filt[pos:pos + FILTER_TAPS] = \
-#                        signal.remez(FILTER_TAPS,
-#                                     [0, freq, freq + transwidth, rate / 2],
-#                                     [1, 0], fs=rate)
-                    if lowpass:
-                        filt[pos:pos + FILTER_TAPS] = \
-                             signal.firwin(FILTER_TAPS, freq,
-                                           pass_zero=lowpass, fs=rate)
-                    else:
-                        filt[pos:pos + FILTER_TAPS] = \
-                             signal.firwin(FILTER_TAPS, (freq, rate/2-1),
-                                           pass_zero=lowpass, fs=rate)
-                    print("{} / {}".format(dec * FILTERS_PER_DECADE + i + 1, maxval), end='\r')
-        except Exception as e:
-            raise e
-        finally:
-            print()
-
-#    if not fileexists:
-#        print("Saving filter to file...")
-#        try:
-#            numpy.save(filename, filt, allow_pickle=False)
-#        except IOError:
-#            print("Saving failed.")
-
-    return(filt)
-
-class WaveGen():
-    def __init__(self, rate):
-        self._rate = rate
-        self._harmonics = {}
-
-    def gen(self, harmonics):
-        wave = numpy.zeros(self._rate, dtype=numpy.float32)
-
-        for h in harmonics:
-            # try to cache results for reuse
-            if h[0] not in self._harmonics:
-                maxpt = numpy.pi * 2 * h[0]
-                points = numpy.arange(0, maxpt, maxpt / self._rate)
-                self._harmonics[h[0]] = numpy.sin(points, dtype=numpy.float32)
-
-            split = int(self._rate * h[2])
-            remain = self._rate - split
-            wave[:split] += self._harmonics[h[0]][remain:] * h[1]
-            wave[split:] += self._harmonics[h[0]][:remain] * h[1]
-
-        return wave
-
-    def sine(self, freq):
-        return(self.gen(((freq, 1.0, 0.0),)))
-
-    # information for these was found at:
-    # <https://pages.uoregon.edu/emi/9.php>
-    # but it's well-known stuff.
-    def square(self, harmonics, freq):
-        # odd harmonics
-        # each 1/harmonic in amplitude
-        # all in phase
-        return self.gen(zip([x * freq for x in range(1, harmonics * 2 + 1, 2)],
-                            [1 / x for x in range(1, harmonics * 2 + 1, 2)],
-                            [0 for x in range(harmonics)]))
-
-    def triangle(self, harmonics, freq):
-        # odd harmonics
-        # each 1/(harmonic ** 2) in amplitude
-        # every other harmonic is out of phase
-        return self.gen(zip([x * freq for x in range(1, harmonics * 2 + 1, 2)],
-                            [1 / (x ** 2) for x in range(1, harmonics * 2 + 1, 2)],
-                            [(x % 2) * 0.5 for x in range(harmonics)]))
-
-    def sawtooth(self, harmonics, freq):
-        # all harmonics
-        # each 1/harmonic in amplitude
-        # odd harmonics are 180 deg out of phase
-        return self.gen(zip([x * freq for x in range(1, harmonics + 1)],
-                            [1 / x for x in range(1, harmonics + 1)],
-                            [(x % 2) * 0.5 for x in range(harmonics)]))
-
 def load_audio(aud, harmonics):
     rate = aud.rate
     envslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                          array.array('f', create_sqrt_slope(0.0, 1.0, rate)),
+                          waves.create_sqrt_slope(0.0, 1.0, rate),
                           rate, "EnvSlope")
     benddownslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                               array.array('f', create_sqrt_slope(1.0, 0.5, rate)),
+                               waves.create_sqrt_slope(1.0, 0.5, rate),
                                rate, "BendDownSlope")
     bendupslope = aud.buffer(cg.SYNTH_TYPE_F32,
-                             array.array('f', create_sqrt_slope(1.0, 2.0, rate)),
+                             waves.create_sqrt_slope(1.0, 2.0, rate),
                              rate, "BendUpSlope")
     noise = aud.buffer(cg.SYNTH_TYPE_F32,
-                       array.array('f', create_random_noise(-1.0, 1.0, rate)),
+                       waves.create_random_noise(-1.0, 1.0, rate),
                        rate, "Noise")
 
     print("Generating filters...")
-    filt = make_filter(rate, lowpass=True)
+    filt = waves.make_filter(rate, lowpass=True)
     lpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt), "Lowpass Filters")
-    filt = make_filter(rate, lowpass=False)
+    filt = waves.make_filter(rate, lowpass=False)
     hpfilt = aud.buffer(cg.SYNTH_TYPE_F32, filt, len(filt), "Highpass Filters")
 
-    wave = WaveGen(rate)
+    wave = waves.WaveGen(rate)
     sine = aud.buffer(cg.SYNTH_TYPE_F32, wave.sine(440), rate, "Sine")
     square = aud.buffer(cg.SYNTH_TYPE_F32, wave.square(harmonics, 440), rate, "Square")
     triangle = aud.buffer(cg.SYNTH_TYPE_F32, wave.triangle(harmonics, 440), rate, "Triangle")
@@ -313,71 +131,6 @@ class Scope():
         if SDL_SetRenderTarget(self._renderer, origtarget) < 0:
             raise Exception("Failed to restore render target")
 
-class BouncingPoint():
-    def __init__(self, minx, miny, maxx, maxy, maxspeed, minspeed=0, x=0, y=0):
-        self._minx = minx
-        self._maxx = maxx
-        self._miny = miny
-        self._maxy = maxy
-        self._minspeed = minspeed
-        self._maxspeed = maxspeed
-        self._x = x
-        self._y = y
-        self._xspeed = self._val()
-        self._yspeed = self._val()
-
-    def _val(self):
-        return random.uniform(self._minspeed, self._maxspeed)
-
-    @property
-    def point(self):
-        return self._x, self._y
-
-    def update(self, timetaken):
-        bounced = False
-
-        self._x = self._x + (self._xspeed * timetaken)
-        if self._x > self._maxx:
-            self._xspeed = -self._val()
-            if self._yspeed > 0.0:
-                self._yspeed = self._val()
-            else:
-                self._yspeed = -self._val()
-            self._x = self._maxx
-            bounced = True
-        elif self._x < self._minx:
-            self._xspeed = self._val()
-            if self._yspeed > 0.0:
-                self._yspeed = self._val()
-            else:
-                self._yspeed = -self._val()
-            self._x = self._minx
-            bounced = True
-
-        self._y = self._y + (self._yspeed * timetaken)
-        if self._y > self._maxy:
-            self._yspeed = -self._val()
-            if self._xspeed > 0.0:
-                self._xspeed = self._val()
-            else:
-                self._xspeed = -self._val()
-            self._y = self._maxy
-            bounced = True
-        elif self._y < self._miny:
-            self._yspeed = self._val()
-            if self._xspeed > 0.0:
-                self._xspeed = self._val()
-            else:
-                self._xspeed = -self._val()
-            self._y = self._miny
-            bounced = True
-
-        while self._xspeed == 0.0 and self._yspeed == 0.0:
-            self._xspeed = -self._val()
-            self._yspeed = -self._val()
-
-        return bounced
-
 
 def log_cb_return(priv, string):
     print(string, end='')
@@ -441,8 +194,8 @@ def do_main(window, renderer, pixfmt):
 
     random.seed(None)
 
-    pt1 = BouncingPoint(0.0, 0.0, RES_WIDTH - (64 * 4), RES_HEIGHT - (64 * 4), 480.0)
-    pt2 = BouncingPoint(-20.0, -8.0, 64 - 20, 64 - 8, 64.0, x = -20.0, y = -8.0)
+    pt1 = effects.BouncingPoint(0.0, 0.0, RES_WIDTH - (64 * 4), RES_HEIGHT - (64 * 4), 480.0)
+    pt2 = effects.BouncingPoint(-20.0, -8.0, 64 - 20, 64 - 8, 64.0, x = -20.0, y = -8.0)
     blendmode = cg.TILEMAP_BLENDMODE_ADD
     colorrad = 0.0
     colorrad2 = 0.25
@@ -484,13 +237,13 @@ def do_main(window, renderer, pixfmt):
     bigcm = numpy.zeros(512 * 512, numpy.uint32)
     bigcm.fill(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE))
     for num in range(1, 511):
-        r, g, b = color_from_rad(numpy.pi * (num / 512) * 2.0, 0, 255)
+        r, g, b = effects.color_from_rad(numpy.pi * (num / 512) * 2.0, 0, 255)
         bigcm[num*512+1:num*512+511].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
         #a = num % 2 * 255
         #bigcm[num*128+1:num*128+127].fill(display.make_color(a, a, a, SDL_ALPHA_OPAQUE))
     stm = display.ScrollingTilemap(text, bigtm, 512, 512, RES_WIDTH / 8, RES_HEIGHT / 8, 8, 8, colormod=bigcm)
     #stm.layer.scale(2.0, 2.0)
-    pt3 = BouncingPoint(0, 0, (512 * 8) - RES_WIDTH, (512 * 8) - RES_HEIGHT, 1000, minspeed=60)
+    pt3 = effects.BouncingPoint(0, 0, (512 * 8) - RES_WIDTH, (512 * 8) - RES_HEIGHT, 1000, minspeed=60)
 
     scene = display.DisplayList(ll, display.SCREEN)
     osc1dl = display.DisplayList(ll, osc2)
@@ -593,8 +346,8 @@ def do_main(window, renderer, pixfmt):
                         scopel = None
                         scoper = None
                         seq = None
-                    macros = (("FILTER_SIZE", (), str(FILTER_TAPS)),
-                              ("FILTER_SLICES", (), str(SLICES)))
+                    macros = (("FILTER_SIZE", (), str(waves.FILTER_TAPS)),
+                              ("FILTER_SLICES", (), str(waves.SLICES)))
                     # load first sequence
                     seq = []
                     try:
@@ -706,13 +459,13 @@ def do_main(window, renderer, pixfmt):
         colorrad2 = colorrad2 + (numpy.pi * timetaken)
         if colorrad2 >= numpy.pi * 2:
             colorrad2 = colorrad2 - (numpy.pi * 2)
-        modr, modg, modb = color_from_rad(colorrad, 0, 255)
+        modr, modg, modb = effects.color_from_rad(colorrad, 0, 255)
         l1.colormod(display.make_color(modr, modg, modb, 255))
 
         if scopell != None:
-            modr, modg, modb = color_from_rad(colorrad, 0, 250)
+            modr, modg, modb = effects.color_from_rad(colorrad, 0, 250)
             scopell.colormod(display.make_color(modr, modg, modb, SDL_ALPHA_OPAQUE))
-            modr, modg, modb = color_from_rad(colorrad2, 0, 250)
+            modr, modg, modb = effects.color_from_rad(colorrad2, 0, 250)
             scoperl.colormod(display.make_color(modr, modg, modb, SDL_ALPHA_OPAQUE))
 
         scene.draw(display.SCREEN, trace=TRACEVIDEO)
