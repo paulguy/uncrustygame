@@ -40,8 +40,7 @@ class NewScreen():
         self._tw = RES_WIDTH / TEXT_WIDTH / 2
         self._th = RES_HEIGHT / TEXT_HEIGHT / 2
         need_text(state)
-        self._tb = textbox.TextBox(state.ll,
-                                   self._tw, self._th,
+        self._tb = textbox.TextBox(self._tw, self._th,
                                    self._tw, self._th,
                                    self._state.tileset('ts_text'))
         self._tb.layer.scale(2.0, 2.0)
