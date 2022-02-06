@@ -40,19 +40,44 @@ class NewScreen():
         self._tw = RES_WIDTH / TEXT_WIDTH / 2
         self._th = RES_HEIGHT / TEXT_HEIGHT / 2
         need_text(state)
+        tstext = self._state.tileset('ts_text')
         self._tb = textbox.TextBox(self._tw, self._th,
                                    self._tw, self._th,
-                                   self._state.tileset('ts_text'))
+                                   tstext)
         self._tb.layer.scale(2.0, 2.0)
         put_centered_line(self._tb, "New Tilemap", 1, self._tw)
         self._dl.append(self._tb.layer)
+        self._menu = textbox.Menu(self._state.ll, tstext, 8, 8, 10, None)
+        self._menu.add_item("item 1", onActivate=lambda x: x)
+        self._menu.add_item("item 2", value="test", maxlen=20, onEnter=lambda x: x)
+        self._menu.update()
+        mlayer, _ = self._menu.layers
+        mlayer.scale(2.0, 2.0)
+        mlayer.pos(TEXT_WIDTH * 2, TEXT_HEIGHT * 6)
+        self._dl.append(self._menu.displaylist)
 
     @property
     def dl(self):
         return self._dl
 
     def input(self, event):
-        pass
+        if event.type == SDL_TEXTINPUT:
+            self._menu.text_event(event)
+        elif event.type == SDL_KEYDOWN:
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_LEFT:
+                self._menu.left()
+            elif event.key.keysym.sym == SDLK_RIGHT:
+                self._menu.right()
+            elif event.key.keysym.sym == SDLK_BACKSPACE:
+                self._menu.backspace()
+            elif event.key.keysym.sym == SDLK_DELETE:
+                self._menu.delete()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                self._menu.activate_selection()
 
     def update(self, time):
         pass
@@ -115,12 +140,12 @@ class MapeditState():
         if event.type == SDL_QUIT:
             self.stop()
         elif event.type == SDL_KEYDOWN:
-            if event.key.keysym.sym == SDLK_q:
+            if event.key.keysym.sym == SDLK_ESCAPE:
                 self.stop()
 
     def input(self, event):
         self._common_input(event)
-        if not self._running or self._newscreen:
+        if self._running and not self._newscreen:
             self._screen.input(event)
 
     def update(self, time):

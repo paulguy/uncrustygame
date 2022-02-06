@@ -1739,11 +1739,15 @@ int tilemap_set_layer_relative(LayerList *ll, unsigned int index, int rel) {
     return(0);
 }
 
-static void get_relative_pos(double *x, double *y, double *angle,
+static void get_relative_pos(double *x, double *y,
+                             double *angle,
+                             double *scale_x, double *scale_y,
                              LayerList *ll, Layer *l) {
     *x = 0.0;
     *y = 0.0;
     *angle = 0.0;
+    *scale_x = 1.0;
+    *scale_y = 1.0;
     Layer *this = l;
     while(this->rel >= 0) {
         Layer *prev = get_layer(ll, this->rel);
@@ -1763,7 +1767,7 @@ static void get_relative_pos(double *x, double *y, double *angle,
                                 this->y - prev->center.y);
         double pangle = angle_from_xy(this->x - prev->center.x,
                                       this->y - prev->center.y);
-        pangle -= prev->angle;
+        pangle += prev->angle;
         double nextx, nexty;
         xy_from_angle(&nextx, &nexty, pangle);
         nextx *= pdist;
@@ -1772,7 +1776,11 @@ static void get_relative_pos(double *x, double *y, double *angle,
         nexty += prev->center.y;
         *x += relx + nextx;
         *y += rely + nexty;
-        *angle += prev->angle;
+        *angle += this->angle;
+        *scale_x *= this->scale_x;
+        *scale_y *= this->scale_y;
+        *x *= prev->scale_x;
+        *y *= prev->scale_y;
 
         this = prev;
     }
@@ -1780,6 +1788,8 @@ static void get_relative_pos(double *x, double *y, double *angle,
    *x += this->x;
    *y += this->y;
    *angle += this->angle;
+   *scale_x *= this->scale_x;
+   *scale_y *= this->scale_y;
 }
 
 int tilemap_draw_layer(LayerList *ll, unsigned int index) {
@@ -1788,7 +1798,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     int overRight, overBottom;
     int remainRight, remainBottom;
     SDL_Texture *tex;
-    double x, y, angle;
+    double x, y, angle, scale_x, scale_y;
     Layer *l = get_layer(ll, index);
     if(l == NULL) {
         return(-1);
@@ -1840,7 +1850,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     remainRight = l->w - overRight;
     remainBottom = l->h - overBottom;
 
-    get_relative_pos(&x, &y, &angle, ll, l);
+    get_relative_pos(&x, &y, &angle, &scale_x, &scale_y, ll, l);
     /* SDL wants degrees */
     angle = radian_to_degree(angle);
 
@@ -1850,8 +1860,8 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     src.h = overBottom > 0 ? remainBottom : (int)(l->h);
     dest.x = x;
     dest.y = y;
-    dest.w = src.w * l->scale_x;
-    dest.h = src.h * l->scale_y;
+    dest.w = src.w * scale_x;
+    dest.h = src.h * scale_y;
     if(FLOAT_COMPARE(angle, 0.0)) {
         if(SDL_RenderCopy(ll->renderer, tex, &src, &dest) < 0) {
             LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
@@ -1862,10 +1872,10 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
             src.y = l->scroll_y;
             src.w = overRight;
             src.h = overBottom > 0 ? remainBottom : (int)(l->h);
-            dest.x = x + (remainRight * l->scale_x);
+            dest.x = x + (remainRight * scale_x);
             dest.y = y;
-            dest.w = src.w * l->scale_x;
-            dest.h = src.h * l->scale_y;
+            dest.w = src.w * scale_x;
+            dest.h = src.h * scale_y;
             if(SDL_RenderCopy(ll->renderer, tex, &src, &dest) < 0) {
                 LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
                 return(-1);
@@ -1877,9 +1887,9 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
             src.w = overRight > 0 ? remainRight : (int)(l->w);
             src.h = overBottom;
             dest.x = x;
-            dest.y = y + (remainBottom * l->scale_y);
-            dest.w = src.w * l->scale_x;
-            dest.h = src.h * l->scale_y;
+            dest.y = y + (remainBottom * scale_y);
+            dest.w = src.w * scale_x;
+            dest.h = src.h * scale_y;
             if(SDL_RenderCopy(ll->renderer, tex, &src, &dest) < 0) {
                 LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
                 return(-1);
@@ -1890,10 +1900,10 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
             src.y = 0;
             src.w = overRight;
             src.h = overBottom;
-            dest.x = x + (remainRight * l->scale_x);
-            dest.y = y + (remainBottom * l->scale_y);
-            dest.w = src.w * l->scale_x;
-            dest.h = src.h * l->scale_y;
+            dest.x = x + (remainRight * scale_x);
+            dest.y = y + (remainBottom * scale_y);
+            dest.w = src.w * scale_x;
+            dest.h = src.h * scale_y;
             if(SDL_RenderCopy(ll->renderer, tex, &src, &dest) < 0) {
                 LOG_PRINTF(ll, "%s: Failed to render layer.\n", l->name);
                 return(-1);

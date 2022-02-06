@@ -1,3 +1,5 @@
+from sdl2 import *
+import crustygame
 import array
 import itertools
 import display
@@ -65,8 +67,8 @@ class TextBox():
         if self._h == self._vh:
             self._noscroll |= display.ScrollingTilemap.NOSCROLL_Y
         self._tm = None
-        if self._noscroll == display.ScrollingTilemap.NOSCROLL_X | display.ScrollingTilemap.NOSCROLL_Y:
-            self._tm = ts.tilemap(self._w, self._h, "{}x{} Textbox Tilemap".format(self._w, self._h))
+        if self._noscroll == (display.ScrollingTilemap.NOSCROLL_X | display.ScrollingTilemap.NOSCROLL_Y):
+            self._tm = self._ts.tilemap(self._w, self._h, "{}x{} Textbox Tilemap".format(self._w, self._h))
 
         self.clear()
 
@@ -81,12 +83,12 @@ class TextBox():
 
     def clear(self):
         # fill with spaces
-        if isinstance(self._tm, array.array):
-            self._tm = array.array('u', itertools.repeat(' ', self._w * self._h))
-            self._stm = display.ScrollingTilemap(self._ts, self._tm, self._w, self._h, self._vw, self._vh, 8, 8, noscroll=self._noscroll)
-        else:
+        if isinstance(self._tm, crustygame.Tilemap):
             self._tm.map(0, 0, 0, self._w, self._h, array.array('u', itertools.repeat(' ', self._w)))
             self._tm.update(0, 0, 0, 0)
+        else:
+            self._tm = array.array('u', itertools.repeat(' ', self._w * self._h))
+            self._stm = display.ScrollingTilemap(self._ts, self._tm, self._w, self._h, self._vw, self._vh, 8, 8, noscroll=self._noscroll)
 
     def put_text(self, lines, x, y):
         x = int(x)
@@ -94,6 +96,8 @@ class TextBox():
         w = self._w - x
         h = self._h - y
         for num, line in enumerate(lines):
+            if isinstance(line, str):
+                line = array.array('u', line)
             if y + num > h:
                 if self._debug:
                     print("WARNING: Text box rows cut off {} > {}".format(len(lines), h))
@@ -103,30 +107,32 @@ class TextBox():
                     print("WARNING: Text box line cut off len(\"{}\") > {}".format(line, w))
                 if isinstance(self._tm, array.array):
                     self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
-                        array.array('u', line[:w])
+                        line[:w]
                     self._stm.updateregion(x, y+num, w, 1)
                 else:
-                    self._tm.map(x, y+num, 0, w, 1, array.array('u', line[:w]))
+                    self._tm.map(x, y+num, 0, w, 1, line[:w])
                     self._tm.update(x, y+num, w, 1)
             else:
                 if isinstance(self._tm, array.array):
                     self._tm[(y+num)*self._w+x:(y+num)*self._w+x+len(line)] = \
-                        array.array('u', line)
+                        line
                     self._stm.updateregion(x, y+num, len(line), 1)
                 else:
-                    self._tm.map(x, y+num, 0, len(line), 1, array.array('u', line))
+                    self._tm.map(x, y+num, 0, len(line), 1, line)
                     self._tm.update(x, y+num, len(line), 1)
 
     def put_char(self, char, x, y):
+        if isinstance(char, str):
+            char = array.array('u', char)
         if isinstance(self._tm, array.array):
             self._tm[y*self._w+x] = char
             self._stm.updateregion(x, y, 1, 1)
         else:
-            self._tm.map(x, y, 0, 1, 1, array.array('u', char))
+            self._tm.map(x, y, 0, 1, 1, char)
             self._tm.update(x, y, 1, 1)
 
     def scroll(self, x, y):
-        if isinstance(self._tm, array.array):
+        if isinstance(self._tm, crustygame.Tilemap):
             if x != 0 or y != 0:
                 raise ValueError("Scroll in non-scrollable textbox to not 0, 0")
         else:
@@ -136,11 +142,12 @@ class TextBox():
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ts, tw, th, valuelen, priv):
+    def __init__(self, ll, ts, tw, th, valuelen, priv):
+        self._ll = ll
         self._ts = ts
-        self._tw = tw
-        self._th = th
-        self._valuelen = valuelen
+        self._tw = int(tw)
+        self._th = int(th)
+        self._valuelen = int(valuelen)
         self._priv = priv
         self._entries = []
         self._selection = 0
@@ -152,6 +159,9 @@ class Menu():
         self._w = None
         self._h = None
         self._updated = False
+        self._longestlabel = 0
+        self._curvalue = None
+        self._curpos = 0
 
     @property
     def layers(self):
@@ -170,7 +180,9 @@ class Menu():
     def selection(self):
         return self._selection
 
-    def add_option(self, label, value=None, maxlen=None, onEnter=None, onActivate=None):
+    def add_item(self, label, value=None, maxlen=None, onEnter=None, onActivate=None):
+        if self._curvalue is not None:
+            raise Exception("Editing the menu while text editing is unsupported.")
         if onEnter != None and onActivate != None:
             raise ValueError("Only one of onEnter and onActivate must be defined")
         if value is not None:
@@ -185,6 +197,8 @@ class Menu():
         self._updated = False
 
     def remove(self, item):
+        if self._curvalue is not None:
+            raise Exception("Editing the menu while text editing is unsupported.")
         del self._entries[item]
         del self._valtbs[item]
         if self._dl != None:
@@ -192,32 +206,52 @@ class Menu():
         self._updated = False
 
     def _update_cursor(self):
-        self._cursorl.pos(-self._tw, self._selection * self._th)
+        if self._curvalue is not None:
+            self._cursorl.rotation(-90)
+            pos = self._curpos
+            halflen = self._valuelen // 2
+            if self._curpos > halflen:
+                if self._curpos < len(self._curvalue) - halflen:
+                    self._valtbs[self._selection].scroll((self._curpos - halflen) * self._tw, 0)
+                    pos = halflen
+                else:
+                    self._valtbs[self._selection].scroll((len(self._curvalue) - self._valuelen) * self._tw, 0)
+                    pos = self._curpos - (len(self._curvalue) - self._valuelen)
+            else:
+                self._valtbs[self._selection].scroll(0, 0)
+            self._cursorl.pos((1 + self._longestlabel + 1 + pos) * self._tw,
+                              (self._selection + 2) * self._th)
+        else:
+            self._cursorl.rotation(0)
+            self._cursorl.pos(0, self._selection * self._th)
 
     def update(self):
-        longestlabel = 0
+        if self._curvalue is not None:
+            raise Exception("Editing the menu while text editing is unsupported.")
+        self._longestlabel = 0
         for entry in self._entries:
-            if len(entry[0]) > longestlabel:
-                longestlabel = len(entry[0])
+            if len(entry[0]) > self._longestlabel:
+                self._longestlabel = len(entry[0])
 
-        w = longestlabel
-        h = len(entries)
+        w = self._longestlabel
+        h = len(self._entries)
         if w != self._w or h != self._h:
             self._w = w
             self._h = h
             self._tb = TextBox(1 + self._w, self._h, 1 + self._w, self._h, self._ts)
-            self._cursortm = ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(entries)))
+            self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
             self._cursortm.map(0, 0, 0, 1, 1, array.array('u', MENU_DEFAULT_CURSOR))
-            self._cursorl = self._cursortm.layer("{} Item Menu Cursor Layer".format(len(entries)))
+            self._cursortm.update(0, 0, 0, 0)
+            self._cursorl = self._cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
             self._cursorl.relative(self._tb.layer)
-            self._dl = display.DisplayList(None)
+            self._dl = display.DisplayList(self._ll, None)
             self._dl.append(self._tb.layer)
             self._dl.append(self._cursorl)
         else:
             self._tb.clear()
 
-        if self._selection >= len(entries):
-            self._selection = len(entries) - 1
+        if self._selection >= len(self._entries):
+            self._selection = len(self._entries) - 1
 
         self._update_cursor()
 
@@ -235,15 +269,18 @@ class Menu():
                 if width > self._valuelen:
                     width = self._valuelen
                 self._valtbs[num] = TextBox(entry[2], 1, width, 1, self._ts)
+                self._valtbs[num].put_text((entry[1],), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
-                self._valtbs[num].layer.pos((1 + longestlabel + 1) * self._tw, num * self._th)
+                self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th)
                 self._dl.append(self._valtbs[num].layer)
             else:
                 self._dl.append(None)
         self._updated = True
 
     def move_selection(self, movement):
-        if self._updated == False:
+        if self._curvalue is not None:
+            raise Exception("Moving the selection while text editing is unsupported.")
+        if not self._updated:
             raise Exception("Menu must be updated to process movement.")
         newval = self._selection + movement
         if newval < 0:
@@ -255,5 +292,66 @@ class Menu():
         self._selection = newval
         self._update_cursor()
 
+    def up(self):
+        if self._curvalue is None:
+            self.move_selection(-1)
+
+    def down(self):
+        if self._curvalue is None:
+            self.move_selection(1)
+
+    def left(self):
+        if self._curvalue is not None:
+            if self._curpos > 0:
+                self._curpos -= 1
+                self._update_cursor()
+
+    def right(self):
+        if self._curvalue is not None:
+            if self._curpos < len(self._curvalue):
+                self._curpos += 1
+                self._update_cursor()
+
+    def _update_value(self):
+        self._valtbs[self._selection].put_text((self._curvalue[self._curpos:],), self._curpos, 0)
+
+    def backspace(self):
+        if self._curvalue is not None:
+            if self._curpos > 0:
+                self._curvalue[self._curpos-1:-1] = self._curvalue[self._curpos:]
+                self._curvalue[-1] = ' '
+                self._curpos -= 1
+                self._update_value()
+                self._update_cursor()
+
+    def delete(self):
+        if self._curvalue is not None:
+            if self._curpos + 1 < len(self._curvalue):
+                self._curvalue[self._curpos:-1] = self._curvalue[self._curpos+1:]
+                self._curvalue[-1] = ' '
+                self._update_value()
+
     def activate_selection(self):
-        pass
+        if self._curvalue is not None:
+            raise Exception("Item can't be activated during text editing.")
+        if not self._updated:
+            raise Exception("Menu must be updated to process movement.")
+        if self._entries[self._selection][4] is not None:
+            self._entries[self._selection][4](self._selection, self._priv)
+        elif self._entries[self._selection][3] is not None:
+            self._curvalue = array.array('u', self._entries[self._selection][1])
+            self._curvalue.extend(array.array('u', itertools.repeat(' ', self._entries[self._selection][2] - len(self._entries[self._selection][1]))))
+            self._curpos = 0
+            self._update_cursor()
+
+    def text_event(self, event):
+        if not self._updated:
+            raise Exception("Menu must be updated to process movement.")
+        if self._curvalue is not None:
+            if self._curpos < len(self._curvalue):
+                char = event.text.text.decode('utf-8')
+                self._curvalue[self._curpos+1:] = self._curvalue[self._curpos:-1]
+                self._curvalue[self._curpos] = char
+                self._update_value()
+                self._curpos += 1
+                self._update_cursor()
