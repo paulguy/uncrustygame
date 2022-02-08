@@ -87,6 +87,9 @@ class NewScreen():
                 self._menu.delete()
             elif event.key.keysym.sym == SDLK_RETURN:
                 self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                if not self._menu.cancel_entry():
+                    self._state.stop()
 
     def update(self, time):
         pass
@@ -148,9 +151,6 @@ class MapeditState():
     def _common_input(self, event):
         if event.type == SDL_QUIT:
             self.stop()
-        elif event.type == SDL_KEYDOWN:
-            if event.key.keysym.sym == SDLK_ESCAPE:
-                self.stop()
 
     def input(self, event):
         self._common_input(event)
