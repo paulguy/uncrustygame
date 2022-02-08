@@ -9,6 +9,7 @@ import textbox
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
 # see what if any difference it makes
+# update: it actually makes a lot of difference
 RENDERBATCHING=True
 # enable tracing of display list processing
 TRACEVIDEO=False
@@ -18,6 +19,7 @@ TRACEAUDIO=True
 RES_WIDTH=640
 RES_HEIGHT=480
 TEXT_FILENAME="cdemo/font.bmp"
+TEXT_MAP_FILENAME="font.txt"
 TEXT_WIDTH=8
 TEXT_HEIGHT=8
 
@@ -27,9 +29,16 @@ def need_text(state):
         state.tileset('ts_text')
     except KeyError:
         state.add_tileset(state.ll.tileset(TEXT_FILENAME, TEXT_WIDTH, TEXT_HEIGHT, None), 'ts_text')
+        with open(TEXT_MAP_FILENAME, 'r') as f:
+            textbox.load_tileset_codec(f, 'text')
 
 def put_centered_line(tb, line, y, w):
     tb.put_text((line,), (w - len(line)) / 2, y)
+
+def printval(priv, sel, val):
+    print("{} : {}".format(sel, val))
+
+    return val
 
 class NewScreen():
     NAME='new'
@@ -43,13 +52,13 @@ class NewScreen():
         tstext = self._state.tileset('ts_text')
         self._tb = textbox.TextBox(self._tw, self._th,
                                    self._tw, self._th,
-                                   tstext)
+                                   tstext, 'crusty_text')
         self._tb.layer.scale(2.0, 2.0)
         put_centered_line(self._tb, "New Tilemap", 1, self._tw)
         self._dl.append(self._tb.layer)
-        self._menu = textbox.Menu(self._state.ll, tstext, 8, 8, 10, None)
-        self._menu.add_item("item 1", onActivate=lambda x: x)
-        self._menu.add_item("item 2", value="test", maxlen=20, onEnter=lambda x: x)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', 8, 8, 10, None)
+        self._menu.add_item("item 1", onActivate=lambda p, s: None)
+        self._menu.add_item("item 2", value="test", maxlen=20, onEnter=printval)
         self._menu.update()
         mlayer, _ = self._menu.layers
         mlayer.scale(2.0, 2.0)

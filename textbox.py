@@ -3,8 +3,9 @@ import crustygame
 import array
 import itertools
 import display
+import codecs
 
-MENU_DEFAULT_CURSOR = '>'
+MENU_DEFAULT_CURSOR = '▶'
 
 def wrap_text(text, w, h):
     lines = []
@@ -51,12 +52,75 @@ def wrap_text(text, w, h):
 
     return lines, spc
 
+def tileset_encoder(table, obj, errors):
+    out = array.array('I', itertools.repeat(0, len(obj)))
+    for num, char in enumerate(obj):
+        try:
+            out[num] = table[char]
+        except KeyError:
+            pass
+
+    return out.tobytes(), len(out)
+
+def tileset_decoder(table, obj, errors):
+    inp = array.array('I', bytes(obj))
+    out = array.array('u', itertools.repeat(chr(0xfffd), len(inp)))
+    for num, char in enumerate(inp):
+        try:
+            out[num] = table[char]
+        except KeyError:
+            if errors=='strict':
+                raise ValueError("Tileset decode table has no conversion for tilenum {}.".format(char))
+
+    return out.tounicode(), len(out)
+
+def tileset_codec_search(sname, name, func):
+    if sname == name:
+        return func
+    return None
+
+def load_tileset_codec(f, name):
+    enctable = {}
+    dectable = {}
+
+    for line in f:
+        codepoint, tilenum = line.split(' ', maxsplit=1)
+        try:
+            tilenum, _ = tilenum.split(' ', maxsplit=1)
+        except ValueError:
+            pass
+        endcodepoint = '0'
+        try:
+            codepoint, endcodepoint = codepoint.split('-', maxsplit=1)
+        except ValueError:
+            pass
+        endcodepoint = int(endcodepoint, base=16)
+        codepoint = int(codepoint, base=16)
+        tilenum = int(tilenum)
+        if endcodepoint == 0:
+            if chr(codepoint) in enctable:
+                raise ValueError("Duplicate char definition for {}.".format(hex(codepoint)))
+            enctable[chr(codepoint)] = tilenum
+            dectable[tilenum] = chr(codepoint)
+        else:
+            if endcodepoint <= codepoint:
+                raise ValueError("End point before start point.")
+            for num in range(endcodepoint - codepoint + 1):
+                if chr(codepoint + num) in enctable:
+                    raise ValueError("Duplicate char definition for {}.".format(hex(codepoint + num)))
+                enctable[chr(codepoint + num)] = tilenum + num
+                dectable[tilenum + num] = chr(codepoint + num)
+
+    # EUGH!
+    codecs.register(lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codecs.CodecInfo(encode=lambda o, e='strict': tileset_encoder(enctable, o, e), decode=lambda o, e='strict': tileset_decoder(dectable, o, e))))
+
 class TextBox():
-    def __init__(self, w, h, vw, vh, ts, debug=False):
+    def __init__(self, w, h, vw, vh, ts, codec, debug=False):
         if array.array('u').itemsize != 4:
             raise Exception("Unicode array item size must be 4 bytes wide.")
         self._debug = debug
         self._ts = ts
+        self._codec = codec
         self._w = int(w)
         self._h = int(h)
         self._vw = int(vw)
@@ -87,7 +151,7 @@ class TextBox():
             self._tm.map(0, 0, 0, self._w, self._h, array.array('u', itertools.repeat(' ', self._w)))
             self._tm.update(0, 0, 0, 0)
         else:
-            self._tm = array.array('u', itertools.repeat(' ', self._w * self._h))
+            self._tm = array.array('I', itertools.repeat(ord(' '), self._w * self._h))
             self._stm = display.ScrollingTilemap(self._ts, self._tm, self._w, self._h, self._vw, self._vh, 8, 8, noscroll=self._noscroll)
 
     def put_text(self, lines, x, y):
@@ -97,7 +161,7 @@ class TextBox():
         h = self._h - y
         for num, line in enumerate(lines):
             if isinstance(line, str):
-                line = array.array('u', line)
+                line = array.array('I', line.encode(self._codec))
             if y + num > h:
                 if self._debug:
                     print("WARNING: Text box rows cut off {} > {}".format(len(lines), h))
@@ -123,7 +187,7 @@ class TextBox():
 
     def put_char(self, char, x, y):
         if isinstance(char, str):
-            char = array.array('u', char)
+            char = char.encode(self._codec)
         if isinstance(self._tm, array.array):
             self._tm[y*self._w+x] = char
             self._stm.updateregion(x, y, 1, 1)
@@ -142,9 +206,10 @@ class TextBox():
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ll, ts, tw, th, valuelen, priv):
+    def __init__(self, ll, ts, codec, tw, th, valuelen, priv):
         self._ll = ll
         self._ts = ts
+        self._codec = codec
         self._tw = int(tw)
         self._th = int(th)
         self._valuelen = int(valuelen)
@@ -186,13 +251,15 @@ class Menu():
         if onEnter != None and onActivate != None:
             raise ValueError("Only one of onEnter and onActivate must be defined")
         if value is not None:
+            value = array.array('I', value.encode(self._codec))
             if maxlen is None:
                 maxlen = len(value)
             else:
                 if maxlen < len(value):
                     raise ValueError("Maximum value length is less than initial value length.")
 
-        self._entries.append((label, value, maxlen, onEnter, onActivate))
+        label = array.array('I', label.encode(self._codec))
+        self._entries.append([label, value, maxlen, onEnter, onActivate])
         self._valtbs.append(None)
         self._updated = False
 
@@ -238,9 +305,9 @@ class Menu():
         if w != self._w or h != self._h:
             self._w = w
             self._h = h
-            self._tb = TextBox(1 + self._w, self._h, 1 + self._w, self._h, self._ts)
+            self._tb = TextBox(1 + self._w, self._h, 1 + self._w, self._h, self._ts, self._codec)
             self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
-            self._cursortm.map(0, 0, 0, 1, 1, array.array('u', MENU_DEFAULT_CURSOR))
+            self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._codec)))
             self._cursortm.update(0, 0, 0, 0)
             self._cursorl = self._cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
             self._cursorl.relative(self._tb.layer)
@@ -268,7 +335,7 @@ class Menu():
                 width = entry[2]
                 if width > self._valuelen:
                     width = self._valuelen
-                self._valtbs[num] = TextBox(entry[2], 1, width, 1, self._ts)
+                self._valtbs[num] = TextBox(entry[2], 1, width, 1, self._ts, self._codec)
                 self._valtbs[num].put_text((entry[1],), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
                 self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th)
@@ -319,7 +386,7 @@ class Menu():
         if self._curvalue is not None:
             if self._curpos > 0:
                 self._curvalue[self._curpos-1:-1] = self._curvalue[self._curpos:]
-                self._curvalue[-1] = ' '
+                self._curvalue[-1] = ord(' ')
                 self._curpos -= 1
                 self._update_value()
                 self._update_cursor()
@@ -328,19 +395,27 @@ class Menu():
         if self._curvalue is not None:
             if self._curpos + 1 < len(self._curvalue):
                 self._curvalue[self._curpos:-1] = self._curvalue[self._curpos+1:]
-                self._curvalue[-1] = ' '
+                self._curvalue[-1] = ord(' ')
                 self._update_value()
 
     def activate_selection(self):
-        if self._curvalue is not None:
-            raise Exception("Item can't be activated during text editing.")
         if not self._updated:
             raise Exception("Menu must be updated to process movement.")
-        if self._entries[self._selection][4] is not None:
-            self._entries[self._selection][4](self._selection, self._priv)
+
+        if self._curvalue is not None:
+            val = self._entries[self._selection][3](self._priv, self._selection, self._curvalue.tobytes().decode(self._codec))
+            self._curvalue = array.array('I', val.encode(self._codec))
+            self._curpos = 0
+            self._update_value()
+            self._update_cursor()
+            self._entries[self._selection][1] = self._curvalue
+            self._curvalue = None
+            self._update_cursor()
+        elif self._entries[self._selection][4] is not None:
+            val = self._entries[self._selection][4](self._selection, self._priv)
         elif self._entries[self._selection][3] is not None:
-            self._curvalue = array.array('u', self._entries[self._selection][1])
-            self._curvalue.extend(array.array('u', itertools.repeat(' ', self._entries[self._selection][2] - len(self._entries[self._selection][1]))))
+            self._curvalue = self._entries[self._selection][1]
+            self._curvalue.extend(array.array('I', itertools.repeat(ord(' '), self._entries[self._selection][2] - len(self._entries[self._selection][1]))))
             self._curpos = 0
             self._update_cursor()
 
@@ -351,7 +426,7 @@ class Menu():
             if self._curpos < len(self._curvalue):
                 char = event.text.text.decode('utf-8')
                 self._curvalue[self._curpos+1:] = self._curvalue[self._curpos:-1]
-                self._curvalue[self._curpos] = char
+                self._curvalue[self._curpos:self._curpos+1] = array.array('I', char.encode(self._codec))
                 self._update_value()
                 self._curpos += 1
                 self._update_cursor()
