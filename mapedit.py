@@ -5,6 +5,7 @@ from sys import argv
 import time
 import display
 import textbox
+import copy
 
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
@@ -22,7 +23,15 @@ TEXT_FILENAME="cdemo/font.bmp"
 TEXT_MAP_FILENAME="font.txt"
 TEXT_WIDTH=8
 TEXT_HEIGHT=8
+TEXT_SCALE=2.0
+ERROR_TIME=10.0
 
+TEXT_SCALED_WIDTH=TEXT_WIDTH * TEXT_SCALE
+TEXT_SCALED_HEIGHT=TEXT_HEIGHT * TEXT_SCALE
+TILES_WIDTH=RES_WIDTH / TEXT_SCALED_WIDTH
+TILES_HEIGHT=RES_HEIGHT / TEXT_SCALED_HEIGHT
+
+crustyerror = ''
 
 def need_text(state):
     try:
@@ -35,50 +44,43 @@ def need_text(state):
 def put_centered_line(tb, line, y, w):
     tb.put_text((line,), (w - len(line)) / 2, y)
 
-def printval(priv, sel, val):
-    print("{} : {}".format(sel, val))
-
-    return val
-
-def validate_int(priv, sel, val):
-    try:
-        return str(int(val))
-    except ValueError:
-        return None
-
-def validate_float(priv, sel, val):
-    try:
-        return str(float(val))
-    except ValueError:
-        return None
-
 class NewScreen():
     NAME='new'
 
     def __init__(self, state):
         self._state = state
         self._dl = display.DisplayList(self._state.ll)
-        self._tw = RES_WIDTH / TEXT_WIDTH / 2
-        self._th = RES_HEIGHT / TEXT_HEIGHT / 2
+        self._tw = TILES_WIDTH
+        self._th = TILES_HEIGHT
         need_text(state)
         tstext = self._state.tileset('ts_text')
         self._tb = textbox.TextBox(self._tw, self._th,
                                    self._tw, self._th,
                                    tstext, 'crusty_text')
-        self._tb.layer.scale(2.0, 2.0)
+        self._tb.layer.scale(TEXT_SCALE, TEXT_SCALE)
         put_centered_line(self._tb, "New Tilemap", 1, self._tw)
         self._dl.append(self._tb.layer)
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', 8, 8, 10, None)
-        self._menu.add_item("item 1", onActivate=lambda p, s: None)
-        self._menu.add_item("item 2", value="test", maxlen=20, onEnter=printval)
-        self._menu.add_item("some number 1", value="1234", maxlen=20, onEnter=validate_int)
-        self._menu.add_item("some number 2", value="420.69", maxlen=20, onEnter=validate_float)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', 8, 8, 20, self, spacing=2)
+        self._menu.add_item("Tileset", value='', maxlen=255, onEnter=NewScreen._setname)
+        self._menu.add_item("Tile Width", value="8", maxlen=4, onEnter=NewScreen._settilewidth)
+        self._menu.add_item("Tile Height", value="8", maxlen=4, onEnter=NewScreen._settileheight)
+        self._menu.add_item("Map Width", value="32", maxlen=4, onEnter=NewScreen._setmapwidth)
+        self._menu.add_item("Map Height", value="32", maxlen=4, onEnter=NewScreen._setmapheight)
+        self._menu.add_item("Proceed", onActivate=NewScreen._proceed)
         self._menu.update()
         mlayer, _ = self._menu.layers
-        mlayer.scale(2.0, 2.0)
-        mlayer.rotation(1)
-        mlayer.pos(TEXT_WIDTH * 2, TEXT_HEIGHT * 6)
+        mlayer.scale(TEXT_SCALE, TEXT_SCALE)
+        mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * 3))
         self._dl.append(self._menu.displaylist)
+        self._filename = ''
+        self._tileset = None
+        self._tilewidth = 8
+        self._tileheight = 8
+        self._mapwidth = 32
+        self._mapheight = 32
+        self._error = 0.0
+        self._errorbox = None
+        self._errorpos = self._dl.append(None)
 
     @property
     def dl(self):
@@ -88,6 +90,7 @@ class NewScreen():
         if event.type == SDL_TEXTINPUT:
             self._menu.text_event(event)
         elif event.type == SDL_KEYDOWN:
+            self._error = 0.0
             if event.key.keysym.sym == SDLK_UP:
                 self._menu.up()
             elif event.key.keysym.sym == SDLK_DOWN:
@@ -107,7 +110,71 @@ class NewScreen():
                     self._state.stop()
 
     def update(self, time):
-        pass
+        if self._error > 0.0:
+            if self._errorbox is None:
+                error = get_error()
+                if len(error) == 0:
+                    error = "Unknown error"
+                lines, _, w, h = textbox.wrap_text(error, TILES_WIDTH - 2, 10)
+                self._errorbox = textbox.TextBox(w, h, w, h, self._state.tileset('ts_text'), 'crusty_text')
+                self._errorbox.put_text(lines, 0, 0)
+                self._errorbox.layer.pos(int(TEXT_SCALED_WIDTH), int((TILES_HEIGHT - h - 1) * TEXT_SCALED_HEIGHT))
+                self._errorbox.layer.scale(TEXT_SCALE, TEXT_SCALE)
+                self._dl.replace(self._errorpos, self._errorbox.layer)
+            self._error -= time
+        if self._error <= 0.0 and self._errorbox is not None:
+            self._dl.replace(self._errorpos, None)
+            self._errorbox = None
+
+    def _setname(self, sel, val):
+        self._filename = val.lstrip().rstrip()
+        return val
+
+    def _settilewidth(self, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 1:
+            return None
+        self._tilewidth = val
+        return str(self._tilewidth)
+
+    def _settileheight(self, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 1:
+            return None
+        self._tileheight = val
+        return str(self._tileheight)
+
+    def _setmapwidth(self, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 1:
+            return None
+        self._mapwidth = val
+        return str(self._mapwidth)
+
+    def _setmapheight(self, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 1:
+            return None
+        self._mapheight = val
+        return str(self._mapheight)
+
+    def _proceed(self, sel):
+        try:
+            tileset = self._state.ll.tileset(self._filename, self._tilewidth, self._tileheight, None)
+        except cg.CrustyException:
+            self._error = ERROR_TIME
 
 class EditScreen():
     NAME='edit'
@@ -187,7 +254,14 @@ class MapeditState():
 
 
 def log_cb_return(priv, string):
-    print(string, end='')
+    global crustyerror
+    crustyerror += string
+
+def get_error():
+    global crustyerror
+    error = copy.copy(crustyerror)
+    crustyerror = ''
+    return error
 
 def do_main(window, renderer, pixfmt):
     event = SDL_Event()
@@ -220,4 +294,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except cg.CrustyException as e:
+        print(crustyerror)
+        raise e

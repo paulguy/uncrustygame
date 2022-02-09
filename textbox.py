@@ -9,49 +9,64 @@ import copy
 MENU_DEFAULT_CURSOR = '▶'
 
 def wrap_text(text, w, h):
+    w = int(w)
+    h = int(h)
     lines = []
     spc = 0
+    width = 0
+    height = 0
     while spc < len(text) and len(lines) < h:
         remaining = w
         if len(text) - spc < remaining:
             remaining = len(text) - spc
-        line = ""
-        while spc < len(text) and remaining > 0:
-            try:
-                spc2 = text[spc:spc+remaining].index(' ')
-            except ValueError:
-                if spc + remaining + 1 < len(text) and text[spc+remaining] == ' ':
-                    line = line + text[spc:spc+remaining]
-                    spc += remaining + 1
-                    break
-                elif len(text) - spc <= remaining:
-                    # if the tail end would fit within the width, just copy it
-                    # in as-is and return
-                    line = line + text[spc:len(text)]
-                    spc = len(text)
-                    break
-                elif len(line) == 0:
-                    # if the line wouldn't fit but it's at the beginning of a
-                    # line anyway, just copy as much as possible
-                    line = text[spc:spc+remaining]
-                    spc += remaining
-                    break
-                else:
-                    # otherwise, start a new line and try again
-                    break
-            # try not to add leading spaces to the beginning of a line
-            if len(line) == 0:
-                if text[spc+1] == ' ':
-                    spc += 1
-                    continue
-            line = line + text[spc:spc+spc2 + 1]
-            remaining -= spc2 + 1
-            spc += spc2 + 1
-        if line[len(line) - 1] == ' ':
-            line = line[:-1]
+        line = ''
+        nl = None
+        try:
+            nl = text[spc:spc+remaining].index('\n')
+        except ValueError:
+            pass
+        if nl is not None:
+            line = text[spc:spc+nl].rstrip()
+            spc += nl + 1
+        else:
+            while spc < len(text) and remaining > 0:
+                try:
+                    spc2 = text[spc:spc+remaining].index(' ')
+                except ValueError:
+                    if spc + remaining + 1 < len(text) and text[spc+remaining] == ' ':
+                        line = line + text[spc:spc+remaining]
+                        spc += remaining + 1
+                        break
+                    elif len(text) - spc <= remaining:
+                        # if the tail end would fit within the width, just copy it
+                        # in as-is and return
+                        line = line + text[spc:len(text)]
+                        spc = len(text)
+                        break
+                    elif len(line) == 0:
+                        # if the line wouldn't fit but it's at the beginning of a
+                        # line anyway, just copy as much as possible
+                        line = text[spc:spc+remaining]
+                        spc += remaining
+                        break
+                    else:
+                        # otherwise, start a new line and try again
+                        break
+                # try not to add leading spaces to the beginning of a line
+                if len(line) == 0:
+                    if text[spc+1] == ' ':
+                        spc += 1
+                        continue
+                line = line + text[spc:spc+spc2 + 1]
+                remaining -= spc2 + 1
+                spc += spc2 + 1
+        line = line.rstrip()
+        if len(line) > width:
+            width = len(line)
         lines.append(line)
+        height += 1
 
-    return lines, spc
+    return lines, spc, width, height
 
 def tileset_encoder(table, obj, errors):
     out = array.array('I', itertools.repeat(0, len(obj)))
@@ -161,30 +176,31 @@ class TextBox():
         w = self._w - x
         h = self._h - y
         for num, line in enumerate(lines):
-            if isinstance(line, str):
-                line = array.array('I', line.encode(self._codec))
-            if num > h:
-                if self._debug:
-                    print("WARNING: Text box rows cut off {} + {} > {}".format(y, num, h))
-                break
-            if len(line) > w:
-                if self._debug:
-                    print("WARNING: Text box line cut off {} + len(\"{}\") > {}".format(x, line, w))
-                if isinstance(self._tm, array.array):
-                    self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
-                        line[:w]
-                    self._stm.updateregion(x, y+num, w, 1)
+            if len(line) > 0:
+                if isinstance(line, str):
+                    line = array.array('I', line.encode(self._codec))
+                if num > h:
+                    if self._debug:
+                        print("WARNING: Text box rows cut off {} + {} > {}".format(y, num, h))
+                    break
+                if len(line) > w:
+                    if self._debug:
+                        print("WARNING: Text box line cut off {} + len(\"{}\") > {}".format(x, line, w))
+                    if isinstance(self._tm, array.array):
+                        self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
+                            line[:w]
+                        self._stm.updateregion(x, y+num, w, 1)
+                    else:
+                        self._tm.map(x, y+num, 0, w, 1, line[:w])
+                        self._tm.update(x, y+num, w, 1)
                 else:
-                    self._tm.map(x, y+num, 0, w, 1, line[:w])
-                    self._tm.update(x, y+num, w, 1)
-            else:
-                if isinstance(self._tm, array.array):
-                    self._tm[(y+num)*self._w+x:(y+num)*self._w+x+len(line)] = \
-                        line
-                    self._stm.updateregion(x, y+num, len(line), 1)
-                else:
-                    self._tm.map(x, y+num, 0, len(line), 1, line)
-                    self._tm.update(x, y+num, len(line), 1)
+                    if isinstance(self._tm, array.array):
+                        self._tm[(y+num)*self._w+x:(y+num)*self._w+x+len(line)] = \
+                            line
+                        self._stm.updateregion(x, y+num, len(line), 1)
+                    else:
+                        self._tm.map(x, y+num, 0, len(line), 1, line)
+                        self._tm.update(x, y+num, len(line), 1)
 
     def put_char(self, char, x, y):
         if isinstance(char, str):
@@ -207,7 +223,7 @@ class TextBox():
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ll, ts, codec, tw, th, valuelen, priv):
+    def __init__(self, ll, ts, codec, tw, th, valuelen, priv, spacing=1):
         self._ll = ll
         self._ts = ts
         self._space = array.array('I', ' '.encode(codec))[0]
@@ -216,6 +232,7 @@ class Menu():
         self._th = int(th)
         self._valuelen = int(valuelen)
         self._priv = priv
+        self._spacing = spacing
         self._entries = []
         self._selection = 0
         self._tb = None
@@ -241,7 +258,8 @@ class Menu():
     @property
     def dimensions(self):
         return (1 + self._w + 1 + self._valuelen) * self._tw, \
-               self._h * self._th
+               (self._h * (self._th * self._spacing - 1)) + \
+               (self._h * self._th)
 
     @property
     def selection(self):
@@ -294,10 +312,10 @@ class Menu():
             else:
                 self._valtbs[self._selection].scroll(0, 0)
             self._cursorl.pos((1 + self._longestlabel + 1 + pos) * self._tw,
-                              (self._selection + 2) * self._th)
+                              (self._selection * self._spacing + 2) * self._th)
         else:
             self._cursorl.rotation(0)
-            self._cursorl.pos(0, self._selection * self._th)
+            self._cursorl.pos(0, self._selection * self._spacing * self._th)
 
     def update(self):
         if self._curvalue is not None:
@@ -312,7 +330,11 @@ class Menu():
         if w != self._w or h != self._h:
             self._w = w
             self._h = h
-            self._tb = TextBox(1 + self._w, self._h, 1 + self._w, self._h, self._ts, self._codec, debug=True)
+            self._tb = TextBox(1 + self._w,
+                               ((self._h - 1) * self._spacing) + 1,
+                               1 + self._w,
+                               ((self._h - 1) * self._spacing) + 1,
+                               self._ts, self._codec, debug=True)
             self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
             self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._codec)))
             self._cursortm.update(0, 0, 0, 0)
@@ -336,7 +358,7 @@ class Menu():
             pass
 
         for num, entry in enumerate(self._entries):
-            self._tb.put_text((entry[0],), 1, num)
+            self._tb.put_text((entry[0],), 1, num * self._spacing)
             self._valtbs[num] = None
             if entry[1] is not None:
                 width = entry[2]
@@ -345,7 +367,7 @@ class Menu():
                 self._valtbs[num] = TextBox(entry[2], 1, width, 1, self._ts, self._codec)
                 self._valtbs[num].put_text((entry[1],), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
-                self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th)
+                self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
                 self._dl.append(self._valtbs[num].layer)
             else:
                 self._dl.append(None)
@@ -428,8 +450,10 @@ class Menu():
             val = self._entries[self._selection][3](self._priv, self._selection, self._curvalue.tobytes().decode(self._codec))
             self._accept_value(val)
         elif self._entries[self._selection][4] is not None:
-            val = self._entries[self._selection][4](self._selection, self._priv)
-            if self._entries[self._selection][1] is not None:
+            if self._entries[self._selection][1] is None:
+                self._entries[self._selection][4](self._priv, self._selection)
+            else:
+                val = self._entries[self._selection][4](self._priv, self._selection, self._entries[self._selection][1].tobytes().decode(self._codec))
                 self._accept_value(val)
         elif self._entries[self._selection][3] is not None:
             self._curvalue = copy.copy(self._entries[self._selection][1])
