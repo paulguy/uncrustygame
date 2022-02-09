@@ -163,13 +163,13 @@ class TextBox():
         for num, line in enumerate(lines):
             if isinstance(line, str):
                 line = array.array('I', line.encode(self._codec))
-            if y + num > h:
+            if num > h:
                 if self._debug:
-                    print("WARNING: Text box rows cut off {} > {}".format(len(lines), h))
+                    print("WARNING: Text box rows cut off {} + {} > {}".format(y, num, h))
                 break
             if len(line) > w:
                 if self._debug:
-                    print("WARNING: Text box line cut off len(\"{}\") > {}".format(line, w))
+                    print("WARNING: Text box line cut off {} + len(\"{}\") > {}".format(x, line, w))
                 if isinstance(self._tm, array.array):
                     self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
                         line[:w]
@@ -312,7 +312,7 @@ class Menu():
         if w != self._w or h != self._h:
             self._w = w
             self._h = h
-            self._tb = TextBox(1 + self._w, self._h, 1 + self._w, self._h, self._ts, self._codec)
+            self._tb = TextBox(1 + self._w, self._h, 1 + self._w, self._h, self._ts, self._codec, debug=True)
             self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
             self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._codec)))
             self._cursortm.update(0, 0, 0, 0)
@@ -406,6 +406,9 @@ class Menu():
                 self._update_value()
 
     def _accept_value(self, val):
+        if val is None:
+            self.cancel_entry()
+            return
         if len(val) > self._entries[self._selection][2]:
             raise ValueError("Returned value longer than max value length")
         self._curvalue = array.array('I', val.encode(self._codec))

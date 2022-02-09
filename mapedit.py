@@ -40,6 +40,18 @@ def printval(priv, sel, val):
 
     return val
 
+def validate_int(priv, sel, val):
+    try:
+        return str(int(val))
+    except ValueError:
+        return None
+
+def validate_float(priv, sel, val):
+    try:
+        return str(float(val))
+    except ValueError:
+        return None
+
 class NewScreen():
     NAME='new'
 
@@ -59,9 +71,12 @@ class NewScreen():
         self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', 8, 8, 10, None)
         self._menu.add_item("item 1", onActivate=lambda p, s: None)
         self._menu.add_item("item 2", value="test", maxlen=20, onEnter=printval)
+        self._menu.add_item("some number 1", value="1234", maxlen=20, onEnter=validate_int)
+        self._menu.add_item("some number 2", value="420.69", maxlen=20, onEnter=validate_float)
         self._menu.update()
         mlayer, _ = self._menu.layers
         mlayer.scale(2.0, 2.0)
+        mlayer.rotation(1)
         mlayer.pos(TEXT_WIDTH * 2, TEXT_HEIGHT * 6)
         self._dl.append(self._menu.displaylist)
 
