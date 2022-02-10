@@ -26,7 +26,7 @@ def wrap_text(text, w, h):
         except ValueError:
             pass
         if nl is not None:
-            line = text[spc:spc+nl].rstrip()
+            line = text[spc:spc+nl]
             spc += nl + 1
         else:
             while spc < len(text) and remaining > 0:
@@ -141,21 +141,9 @@ class TextBox():
         self._h = int(h)
         self._vw = int(vw)
         self._vh = int(vh)
-        self._noscroll = 0
-        if self._w == self._vw:
-            self._noscroll |= display.ScrollingTilemap.NOSCROLL_X
-        if self._h == self._vh:
-            self._noscroll |= display.ScrollingTilemap.NOSCROLL_Y
-        self._tm = None
-        if self._noscroll == (display.ScrollingTilemap.NOSCROLL_X | display.ScrollingTilemap.NOSCROLL_Y):
-            self._tm = self._ts.tilemap(self._w, self._h, "{}x{} Textbox Tilemap".format(self._w, self._h))
-
-        self.clear()
-
-        if isinstance(self._tm, array.array):
-            self._l = self._stm.layer
-        else:
-            self._l = self._tm.layer("{}x{} Textbox Layer".format(self._w, self._h))
+        self._tm = array.array('I', itertools.repeat(ord(' '), self._w * self._h))
+        self._stm = display.ScrollingTilemap(self._ts, self._tm, self._w, self._h, self._vw, self._vh, 8, 8)
+        self._l = self._stm.layer
 
     @property
     def layer(self):
@@ -163,12 +151,8 @@ class TextBox():
 
     def clear(self):
         # fill with spaces
-        if isinstance(self._tm, crustygame.Tilemap):
-            self._tm.map(0, 0, 0, self._w, self._h, array.array('u', itertools.repeat(' ', self._w)))
-            self._tm.update(0, 0, 0, 0)
-        else:
-            self._tm = array.array('I', itertools.repeat(ord(' '), self._w * self._h))
-            self._stm = display.ScrollingTilemap(self._ts, self._tm, self._w, self._h, self._vw, self._vh, 8, 8, noscroll=self._noscroll)
+        self._tm = array.array('I', itertools.repeat(ord(' '), self._w * self._h))
+        self._stm.updateregion(0, 0, self._w, self._h)
 
     def put_text(self, lines, x, y):
         x = int(x)
@@ -186,39 +170,23 @@ class TextBox():
                 if len(line) > w:
                     if self._debug:
                         print("WARNING: Text box line cut off {} + len(\"{}\") > {}".format(x, line, w))
-                    if isinstance(self._tm, array.array):
-                        self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
-                            line[:w]
-                        self._stm.updateregion(x, y+num, w, 1)
-                    else:
-                        self._tm.map(x, y+num, 0, w, 1, line[:w])
-                        self._tm.update(x, y+num, w, 1)
+                    self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
+                        line[:w]
+                    self._stm.updateregion(x, y+num, w, 1)
                 else:
-                    if isinstance(self._tm, array.array):
-                        self._tm[(y+num)*self._w+x:(y+num)*self._w+x+len(line)] = \
-                            line
-                        self._stm.updateregion(x, y+num, len(line), 1)
-                    else:
-                        self._tm.map(x, y+num, 0, len(line), 1, line)
-                        self._tm.update(x, y+num, len(line), 1)
+                    self._tm[(y+num)*self._w+x:(y+num)*self._w+x+len(line)] = \
+                        line
+                    self._stm.updateregion(x, y+num, len(line), 1)
 
     def put_char(self, char, x, y):
         if isinstance(char, str):
             char = char.encode(self._codec)
-        if isinstance(self._tm, array.array):
-            self._tm[y*self._w+x] = char
-            self._stm.updateregion(x, y, 1, 1)
-        else:
-            self._tm.map(x, y, 0, 1, 1, char)
-            self._tm.update(x, y, 1, 1)
+        self._tm[y*self._w+x] = char
+        self._stm.updateregion(x, y, 1, 1)
 
     def scroll(self, x, y):
-        if isinstance(self._tm, crustygame.Tilemap):
-            if x != 0 or y != 0:
-                raise ValueError("Scroll in non-scrollable textbox to not 0, 0")
-        else:
-            self._stm.scroll(x, y)
-            self._stm.update()
+        self._stm.scroll(x, y)
+        self._stm.update()
 
 class Menu():
     _INITIAL_DL_ITEMS = 2
@@ -424,8 +392,8 @@ class Menu():
         if self._curvalue is not None:
             if self._curpos + 1 < len(self._curvalue):
                 self._curvalue[self._curpos:-1] = self._curvalue[self._curpos+1:]
-                self._curvalue[-1] = ord(' ')
-                self._update_value()
+            self._curvalue[-1] = ord(' ')
+            self._update_value()
 
     def _accept_value(self, val):
         if val is None:

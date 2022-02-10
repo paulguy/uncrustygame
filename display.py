@@ -235,8 +235,14 @@ class ScrollingTilemap():
     NOSCROLL_X = 1 << 0
     NOSCROLL_Y = 1 << 1
 
-    def __init__(self, tileset, tilemap, tmwidth, tmheight, width, height, twidth, theight, startx = 0, starty = 0, noscroll = 0, flags=None, colormod=None, optimize=False):
-        if (noscroll & (ScrollingTilemap.NOSCROLL_X | \
+    def __init__(self, tileset, tilemap, tmwidth, tmheight, width, height, twidth, theight, startx = 0, starty = 0, flags=None, colormod=None, optimize=False, debug=False):
+        noscroll = 0
+        if width == tmwidth:
+            noscroll |= ScrollingTilemap.NOSCROLL_X
+        if height == tmheight:
+            noscroll |= ScrollingTilemap.NOSCROLL_Y
+        if debug and \
+           (noscroll & (ScrollingTilemap.NOSCROLL_X | \
                         ScrollingTilemap.NOSCROLL_Y)) == \
            (ScrollingTilemap.NOSCROLL_X |
             ScrollingTilemap.NOSCROLL_Y):
