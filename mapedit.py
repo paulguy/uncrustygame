@@ -7,6 +7,8 @@ import display
 import textbox
 import copy
 import itertools
+import math
+import effects
 
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
@@ -18,8 +20,8 @@ TRACEVIDEO=False
 # enable tracing of audio sequencer processing
 TRACEAUDIO=True
 
-RES_WIDTH=640
-RES_HEIGHT=480
+RES_WIDTH=1024
+RES_HEIGHT=768
 TEXT_FILENAME="cdemo/font.bmp"
 TEXT_MAP_FILENAME="font.txt"
 TEXT_WIDTH=8
@@ -179,6 +181,7 @@ class NewScreen():
             tileset = self._state.ll.tileset(self._filename, self._tilewidth, self._tileheight, None)
         except cg.CrustyException:
             self._error = ERROR_TIME
+            return
         self._state.add_tileset(tileset, 'ts_tm0')
         try:
             editscreen = self._state.get_screen('edit')
@@ -196,6 +199,7 @@ class EditScreen():
         self._state = state
         need_text(state)
         self._tilemap = None
+        self._cursorrad = 0.0
 
     @property
     def dl(self):
@@ -230,8 +234,9 @@ class EditScreen():
                     ypos = self._cury - (self._height - self._vh)
         self._stm.scroll(xscroll * self._twidth,
                          yscroll * self._theight)
-        self._cursorl.pos((xpos - 1) * self._twidth,
-                          (ypos - 1) * self._theight)
+        self._stm.update()
+        self._cursorl.pos(xpos * self._twidth - TEXT_WIDTH,
+                          ypos * self._theight - TEXT_HEIGHT)
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
@@ -251,29 +256,35 @@ class EditScreen():
                 if self._curx < self._width - 1:
                     self._curx += 1
                     self._update_cursor()
+            elif event.key.keysym.sym == SDLK_KP_PLUS:
+                self._tilemap[self._cury * self._width + self._curx] += 1
+                self._stm.updateregion(self._curx, self._cury, 1, 1)
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 self._state.stop()
 
     def update(self, time):
-        pass
+        self._cursorrad += math.pi * time
+        self._cursorrad %= math.tau
+        r, g, b = effects.color_from_rad(self._cursorrad, 0, 255)
+        self._cursorl.colormod(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
 
     def tilemap(self, ts, w, h, tw, th):
         self._width = int(w)
         self._height = int(h)
-        self._vw = TILES_WIDTH
-        if self._vw > self._width:
-            self._vw = self._width
-        self._vh = TILES_HEIGHT
-        if self._vh > self._height:
-            self._vh = self._height
         self._twidth = int(tw)
         self._theight = int(th)
+        self._vw = int(RES_WIDTH / SCALE) // self._twidth
+        if self._vw > self._width:
+            self._vw = self._width
+        self._vh = int(RES_HEIGHT / SCALE) // self._theight
+        if self._vh > self._height:
+            self._vh = self._height
         self._curx = 0
         self._cury = 0
         self._dl = display.DisplayList(self._state.ll)
         self._tilemap = array.array('I', itertools.repeat(0, self._width * self._height))
         self._flags = copy.copy(self._tilemap)
-        self._colormod = copy.copy(self._tilemap)
+        self._colormod = array.array('I', itertools.repeat(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE), self._width * self._height))
         self._stm = display.ScrollingTilemap(self._state.tileset(ts),
                                              self._tilemap,
                                              self._width, self._height,
