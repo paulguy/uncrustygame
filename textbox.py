@@ -5,6 +5,8 @@ import itertools
 import display
 import codecs
 import copy
+from dataclasses import dataclass
+from typing import Callable
 
 MENU_DEFAULT_CURSOR = '▶'
 
@@ -188,6 +190,14 @@ class TextBox():
         self._stm.scroll(x, y)
         self._stm.update()
 
+@dataclass
+class MenuItem():
+    label: str
+    value: str
+    maxlen: int
+    onEnter: Callable[[object, int, str], str]
+    onActivate: Callable[[object, int], None]
+
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
@@ -252,7 +262,7 @@ class Menu():
             self._pad_value(value, maxlen)
 
         label = array.array('I', label.encode(self._codec))
-        self._entries.append([label, value, maxlen, onEnter, onActivate])
+        self._entries.append(MenuItem(label, value, maxlen, onEnter, onActivate))
         self._valtbs.append(None)
         self._updated = False
 
@@ -290,8 +300,8 @@ class Menu():
             raise Exception("Editing the menu while text editing is unsupported.")
         self._longestlabel = 0
         for entry in self._entries:
-            if len(entry[0]) > self._longestlabel:
-                self._longestlabel = len(entry[0])
+            if len(entry.label) > self._longestlabel:
+                self._longestlabel = len(entry.label)
 
         w = self._longestlabel
         h = len(self._entries)
@@ -326,14 +336,14 @@ class Menu():
             pass
 
         for num, entry in enumerate(self._entries):
-            self._tb.put_text((entry[0],), 1, num * self._spacing)
+            self._tb.put_text((entry.label,), 1, num * self._spacing)
             self._valtbs[num] = None
-            if entry[1] is not None:
-                width = entry[2]
+            if entry.value is not None:
+                width = entry.maxlen
                 if width > self._valuelen:
                     width = self._valuelen
-                self._valtbs[num] = TextBox(entry[2], 1, width, 1, self._ts, self._codec)
-                self._valtbs[num].put_text((entry[1],), 0, 0)
+                self._valtbs[num] = TextBox(entry.maxlen, 1, width, 1, self._ts, self._codec)
+                self._valtbs[num].put_text((entry.value,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
                 self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
                 self._dl.append(self._valtbs[num].layer)
@@ -399,14 +409,14 @@ class Menu():
         if val is None:
             self.cancel_entry()
             return
-        if len(val) > self._entries[self._selection][2]:
+        if len(val) > self._entries[self._selection].maxlen:
             raise ValueError("Returned value longer than max value length")
         self._curvalue = array.array('I', val.encode(self._codec))
-        self._pad_value(self._curvalue, self._entries[self._selection][2])
+        self._pad_value(self._curvalue, self._entries[self._selection].maxlen)
         self._curpos = 0
         self._update_value()
         self._update_cursor()
-        self._entries[self._selection][1] = self._curvalue
+        self._entries[self._selection].value = self._curvalue
         self._curvalue = None
         self._update_cursor()
 
@@ -415,22 +425,22 @@ class Menu():
             raise Exception("Menu must be updated to process movement.")
 
         if self._curvalue is not None:
-            val = self._entries[self._selection][3](self._priv, self._selection, self._curvalue.tobytes().decode(self._codec))
+            val = self._entries[self._selection].onEnter(self._priv, self._selection, self._curvalue.tobytes().decode(self._codec))
             self._accept_value(val)
-        elif self._entries[self._selection][4] is not None:
-            if self._entries[self._selection][1] is None:
-                self._entries[self._selection][4](self._priv, self._selection)
+        elif self._entries[self._selection].onActivate is not None:
+            if self._entries[self._selection].value is None:
+                self._entries[self._selection].onActivate(self._priv, self._selection)
             else:
-                val = self._entries[self._selection][4](self._priv, self._selection, self._entries[self._selection][1].tobytes().decode(self._codec))
+                val = self._entries[self._selection].onActivate(self._priv, self._selection, self._entries[self._selection].value.tobytes().decode(self._codec))
                 self._accept_value(val)
-        elif self._entries[self._selection][3] is not None:
-            self._curvalue = copy.copy(self._entries[self._selection][1])
+        elif self._entries[self._selection].onEnter is not None:
+            self._curvalue = copy.copy(self._entries[self._selection].value)
             self._curpos = 0
             self._update_cursor()
 
     def cancel_entry(self):
         if self._curvalue is not None:
-            self._curvalue = self._entries[self._selection][1]
+            self._curvalue = self._entries[self._selection].value
             self._curpos = 0
             self._update_value()
             self._update_cursor()
