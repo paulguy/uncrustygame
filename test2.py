@@ -405,6 +405,7 @@ def do_main(window, renderer, pixfmt):
                         scoperl.pos(0, 90)
                         osc2dl.replace(scoperid, scoperl)
                         scene.replace(oscid, oscdl)
+                        pass
 
                 elif event.key.keysym.sym == SDLK_s:
                     if seq != None:
@@ -454,11 +455,9 @@ def do_main(window, renderer, pixfmt):
         stm.update()
 
         colorrad = colorrad + (numpy.pi * timetaken)
-        if colorrad >= numpy.pi * 2:
-            colorrad = colorrad - (numpy.pi * 2)
+        colorrad %= numpy.pi * 2
         colorrad2 = colorrad2 + (numpy.pi * timetaken)
-        if colorrad2 >= numpy.pi * 2:
-            colorrad2 = colorrad2 - (numpy.pi * 2)
+        colorrad2 %= numpy.pi * 2
         modr, modg, modb = effects.color_from_rad(colorrad, 0, 255)
         l1.colormod(display.make_color(modr, modg, modb, 255))
 

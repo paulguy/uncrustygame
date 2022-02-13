@@ -312,8 +312,8 @@ class ScrollingTilemap():
             nx = self._tmwidth - self._tmw
         if ny + self._tmh > self._tmheight:
             ny = self._tmheight - self._tmh
-        if (nx + self._tmw < ox or nx >= ox + self._tmw) or \
-           (ny + self._tmh < oy or ny >= oy + self._tmw) or \
+        if nx + self._tmw < ox or nx >= ox + self._tmw or \
+           ny + self._tmh < oy or ny >= oy + self._tmh or \
            not self._optimize:
             # no overlap or optimization disabled, redraw the whole thing
             self._setmap(nx, ny)

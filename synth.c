@@ -1296,7 +1296,7 @@ static int is_valid_buffer(Synth *s, unsigned int index, int input) {
 
 static void *get_buffer_data(Synth *s, unsigned int index) {
     if(index < s->channels) {
-        return(&(s->channelbuffer[index].data[s->writecursor]));
+        return(s->channelbuffer[index].data);
     }
 
     return(s->buffer[index - s->channels].data);
@@ -2196,16 +2196,13 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
               pl->speedMode == SYNTH_AUTO_CONSTANT) {
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
+        unsigned int max = get_buffer_size(syn, pl->inBuffer) - pl->loopStart;
         float speed = pl->speed;
         if(pl->startMode == SYNTH_AUTO_CONSTANT) {
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 float loopLen = pl->loopLength;
                 for(samples = 0; samples < todo; samples++) {
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
+                    inPos = fabsf(fmodf(inPos, loopLen));
                     idx[samples] = i[(int)inPos];
                     inPos += speed;
                 }
@@ -2215,13 +2212,9 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
                 float len;
                 for(samples = 0; samples < todo; samples++) {
-                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
-                    if(inPos > len) {
-                        inPos = fmodf(inPos, len);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, len) + len;
-                    }
-                    idx[samples] = i[(int)inPos];
+                    len = pl->loopLength + (ll[lengthPos] * pl->lengthValues * pl->lengthGranularity);
+                    inPos = fabsf(fmodf(inPos, len));
+                    idx[samples] = i[(int)inPos % max];
                     inPos += speed;
                     lengthPos++;
                 }
@@ -2235,13 +2228,9 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 float loopLen = pl->loopLength;
                 for(samples = 0; samples < todo; samples++) {
-                    loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
-                    idx[samples] = i[(int)inPos + loopStart];
+                    loopStart = ls[startPos] * pl->startValues * pl->startGranularity;
+                    inPos = fabsf(fmodf(inPos, loopLen));
+                    idx[samples] = i[((int)inPos + loopStart) % max];
                     inPos += speed;
                     startPos++;
                 }
@@ -2251,14 +2240,10 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
                 float len;
                 for(samples = 0; samples < todo; samples++) {
-                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
+                    len = pl->loopLength + (ll[lengthPos] * pl->lengthValues * pl->lengthGranularity);
                     loopStart = fabsf(ls[startPos]) * pl->startValues * pl->startGranularity;
-                    if(inPos > len) {
-                        inPos = fmodf(inPos, len);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, len) + len;
-                    }
-                    idx[samples] = i[(int)inPos + loopStart];
+                    inPos = fabsf(fmodf(inPos, len));
+                    idx[samples] = i[((int)inPos + loopStart) % max];
                     inPos += speed;
                     startPos++;
                     lengthPos++;
@@ -2273,6 +2258,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
         float *s = get_buffer_data(syn, pl->speedBuffer);
         float inPos = pl->inPos - pl->loopStart;
         i = &(i[pl->loopStart]);
+        unsigned int max = get_buffer_size(syn, pl->inBuffer) - pl->loopStart;
         int speedPos = pl->speedPos;
         float speed = pl->speed;
         todo = MIN(todo, get_buffer_size(syn, pl->speedBuffer) - speedPos);
@@ -2280,11 +2266,7 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 float loopLen = pl->loopLength;
                 for(samples = 0; samples < todo; samples++) {
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
+                    inPos = fabsf(fmodf(inPos, loopLen));
                     idx[samples] = i[(int)inPos];
                     inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
@@ -2295,13 +2277,9 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 todo = MIN(todo, get_buffer_size(syn, pl->lengthBuffer) - lengthPos);
                 float len;
                 for(samples = 0; samples < todo; samples++) {
-                    len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
-                    if(inPos > len) {
-                        inPos = fmodf(inPos, len);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, len) + len;
-                    }
-                    idx[samples] = i[(int)inPos];
+                    len = pl->loopLength + (ll[lengthPos] * pl->lengthValues * pl->lengthGranularity);
+                    inPos = fabsf(fmodf(inPos, len));
+                    idx[samples] = i[(int)inPos % max];
                     inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     lengthPos++;
@@ -2316,13 +2294,9 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
             if(pl->lengthMode == SYNTH_AUTO_CONSTANT) {
                 float loopLen = pl->loopLength;
                 for(samples = 0; samples < todo; samples++) {
-                    loopStart = pl->loopStart + (fabsf(ls[startPos]) * pl->startValues * pl->startGranularity);
-                    if(inPos > loopLen) {
-                        inPos = fmodf(inPos, loopLen);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, loopLen) + loopLen;
-                    }
-                    idx[samples] = i[(int)inPos + loopStart];
+                    loopStart = pl->loopStart + (ls[startPos] * pl->startValues * pl->startGranularity);
+                    inPos = fabsf(fmodf(inPos, loopLen));
+                    idx[samples] = i[((int)inPos + loopStart) % max];
                     inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     startPos++;
@@ -2335,12 +2309,8 @@ static unsigned int do_synth_run_player(Synth *syn, SynthPlayer *pl,
                 for(samples = 0; samples < todo; samples++) {
                     loopStart = pl->loopStart + (fabsf(ls[startPos]) * pl->startValues * pl->startGranularity);
                     len = pl->loopLength + (fabsf(ll[lengthPos]) * pl->lengthValues * pl->lengthGranularity);
-                    if(inPos > len) {
-                        inPos = fmodf(inPos, len);
-                    } else if(inPos < 0) {
-                        inPos = fmodf(inPos, len) + len;
-                    }
-                    idx[samples] = i[(int)inPos + loopStart];
+                    inPos = fabsf(fmodf(inPos, len));
+                    idx[samples] = i[((int)inPos + loopStart) % max];
                     inPos += speed * powf(2, s[speedPos]);
                     speedPos++;
                     lengthPos++;
@@ -2461,46 +2431,28 @@ int synth_run_player(Synth *s,
     float *o = get_buffer_data(s, p->outBuffer);
 
     unsigned int outPos = p->outPos;
+    todo = MIN(reqSamples, get_buffer_size(s, p->outBuffer) - outPos);
 
     /* Try to get the entire task done in 1 call */
     /* if it's an ouptut buffer, try to fill it as much as possible */
     if(p->outBuffer < s->channels) {
-        todo = MIN(reqSamples,
-                   get_buffer_size(s, p->outBuffer) - outPos);
+        outPos += s->writecursor;
+        outPos %= s->buffersize;
 
-        if((unsigned int)s->writecursor + outPos >= s->buffersize) {
-            /* if it starts past the end, figure out where to start from the
-             * beginning */
-            unsigned int temp = s->writecursor;
-            s->writecursor = 0;
-            o = get_buffer_data(s, p->outBuffer);
-            s->writecursor = temp;
-
-            samples = do_synth_run_player(s, p, o, s->writecursor + outPos - s->buffersize, todo);
-        } else if((unsigned int)s->writecursor + outPos + todo >= s->buffersize) {
+        if(outPos + todo >= s->buffersize) {
             /* if it would go past the end, split it in to 2 calls */
             samples = do_synth_run_player(s, p, o, outPos,
-                                          s->buffersize - s->writecursor - outPos);
+                                          s->buffersize - outPos);
             todo -= samples;
             /* if there's more to do, try updating the pointer and trying
              * again. */
             if(todo > 0) {
-                /* store it temporarily so when it's properly updated later,
-                 * it'll be correct */
-                unsigned int temp = s->writecursor;
-                s->writecursor = 0;
-                o = get_buffer_data(s, p->outBuffer);
-                s->writecursor = temp;
-
                 samples += do_synth_run_player(s, p, o, 0, todo);
             }
         } else {
             samples = do_synth_run_player(s, p, o, outPos, todo);
         }
     } else {
-        todo = MIN(reqSamples,
-                   get_buffer_size(s, p->outBuffer) - outPos);
-
         samples = do_synth_run_player(s, p, o, outPos, todo);
     }
     p->outPos = outPos + samples;
@@ -3241,46 +3193,28 @@ int synth_run_filter(Synth *s,
     float *o = get_buffer_data(s, f->outBuffer);
 
     unsigned int outPos = f->outPos;
+    todo = MIN(reqSamples, get_buffer_size(s, f->outBuffer) - outPos);
 
     /* Try to get the entire task done in 1 call */
     /* if it's an ouptut buffer, try to fill it as much as possible */
     if(f->outBuffer < s->channels) {
-        todo = MIN(reqSamples,
-                   get_buffer_size(s, f->outBuffer) - (int)outPos);
+        outPos += s->writecursor;
+        outPos %= s->buffersize;
 
-        if((unsigned int)s->writecursor + outPos >= s->buffersize) {
-            /* if it starts past the end, figure out where to start from the
-             * beginning */
-            unsigned int temp = s->writecursor;
-            s->writecursor = 0;
-            o = get_buffer_data(s, f->outBuffer);
-            s->writecursor = temp;
-
-            samples = do_synth_run_filter(s, f, o, s->writecursor + outPos - s->buffersize, todo);
-        } else if((unsigned int)s->writecursor + outPos + todo >= s->buffersize) {
+        if(outPos + todo >= s->buffersize) {
             /* if it would go past the end, split it in to 2 calls */
             samples = do_synth_run_filter(s, f, o, outPos,
-                                          s->buffersize - s->writecursor - outPos);
+                                          s->buffersize - outPos);
             todo -= samples;
             /* if there's more to do, try updating the pointer and trying
              * again. */
             if(todo > 0) {
-                /* store it temporarily so when it's properly updated later,
-                 * it'll be correct */
-                unsigned int temp = s->writecursor;
-                s->writecursor = 0;
-                o = get_buffer_data(s, f->outBuffer);
-                s->writecursor = temp;
-
                 samples += do_synth_run_filter(s, f, o, 0, todo);
             }
         } else {
             samples = do_synth_run_filter(s, f, o, outPos, todo);
         }
     } else {
-        todo = MIN(reqSamples,
-                   get_buffer_size(s, f->outBuffer) - (int)outPos);
-
         samples = do_synth_run_filter(s, f, o, outPos, todo);
     }
     f->outPos = outPos + samples;

@@ -3078,7 +3078,7 @@ static int InternalBuffer_getbuffer(InternalBufferObject *self, Py_buffer *view,
     }
     /* never needed here */
     view->suboffsets = NULL;
-    view->len = self->size * sizeof(float);
+    view->len = self->size * view->itemsize;
     view->buf = self->data;
     view->ndim = 1;
     if((flags & PyBUF_ND) == PyBUF_ND) {

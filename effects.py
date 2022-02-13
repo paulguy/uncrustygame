@@ -44,7 +44,7 @@ class BouncingPoint():
     def update(self, timetaken):
         bounced = False
 
-        self._x = self._x + (self._xspeed * timetaken)
+        self._x += self._xspeed * timetaken
         if self._x > self._maxx:
             self._xspeed = -self._val()
             if self._yspeed > 0.0:
@@ -62,7 +62,7 @@ class BouncingPoint():
             self._x = self._minx
             bounced = True
 
-        self._y = self._y + (self._yspeed * timetaken)
+        self._y += self._yspeed * timetaken
         if self._y > self._maxy:
             self._yspeed = -self._val()
             if self._xspeed > 0.0:
