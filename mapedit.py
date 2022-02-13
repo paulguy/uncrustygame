@@ -84,6 +84,8 @@ class NewScreen():
         self._error = 0.0
         self._errorbox = None
         self._errorpos = self._dl.append(None)
+        self._cursorrad = 0.0
+        _, self._cursorl = self._menu.layers
 
     def active(self):
         pass
@@ -131,6 +133,12 @@ class NewScreen():
         if self._error <= 0.0 and self._errorbox is not None:
             self._dl.replace(self._errorpos, None)
             self._errorbox = None
+
+        self._cursorrad += math.pi * time
+        self._cursorrad %= math.tau
+        r, g, b = effects.color_from_rad(self._cursorrad, 0, 255)
+        self._cursorl.colormod(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
+
 
     def _setname(self, sel, val):
         self._filename = val.lstrip().rstrip()
