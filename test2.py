@@ -30,18 +30,9 @@ DEFAULT_WAV = "output.wav"
 
 WAVEFORM_HARMONICS = 8
 
-# this is probably bad but whichever
+# this is bad but just for a simple test
 def string_to_ints(string):
-    array = list()
-
-    for item in string:
-        encoded = item.encode("utf-32")
-        array.append(encoded[4] +
-                     (encoded[5] * 0x100) +
-                     (encoded[6] * 0x10000) +
-                     (encoded[7] * 0x1000000))
-
-    return(array)
+    return array.array('u', string)
 
 def load_audio(aud, harmonics):
     rate = aud.rate
@@ -346,8 +337,8 @@ def do_main(window, renderer, pixfmt):
                         scopel = None
                         scoper = None
                         seq = None
-                    macros = (("FILTER_SIZE", (), str(waves.FILTER_TAPS)),
-                              ("FILTER_SLICES", (), str(waves.SLICES)))
+                    macros = {"FILTER_SIZE": ((), str(waves.FILTER_TAPS)),
+                              "FILTER_SLICES": ((), str(waves.SLICES))}
                     # load first sequence
                     seq = []
                     try:

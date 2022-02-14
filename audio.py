@@ -44,55 +44,52 @@ class MacroReader():
         """
         self._trace = trace
         self._file = file
-        self._macros = list()
+        self._macros = dict()
         self._line = None
         self._lines = startLine
 
         if macros != None:
-            try:
-                self._macros.extend(macros._macros)
-            except AttributeError:
-                self.add_macros(macros)
-
-    def print_macros(self):
-        print(self._macros)
-
-    def add_macros(self, macros):
-        if isinstance(macros[0], tuple):
-            # try to find each macro arg in the macro body
-            for macro in macros:
-                for macro_b in self._macros:
-                    if macro[0] in macro_b[0]:
-                        raise ValueError("Macro {} would be aliased by macro {}.".format(macro_b[0], macro[0]))
-                    elif macro_b[0] in macro[0]:
-                        raise ValueError("Macro {} would be aliased by macro {}.".format(macro[0], macro_b[0]))
-                for arg in macro[1]:
-                    try:
-                        macro[2].index(arg)
-                    except ValueError:
-                        raise ValueError("Macro {} has arg {} not found in body.".format(macro[0], arg))
-            self._macros.extend(macros)
-        else:
-            for macro_b in self._macros:
-                if macros[0] in macro_b[0]:
-                    raise ValueError("Macro {} would be aliased by macro {}.".format(macro_b[0], macros[0]))
-                elif macro_b[0] in macros[0]:
-                    raise ValueError("Macro {} would be aliased by macro {}.".format(macros[0], macro_b[0]))
-            # try to find each macro arg in the macro body
-            for arg in macros[1]:
-                try:
-                    macros[2].index(arg)
-                except ValueError:
-                    raise ValueError("Macro {} has arg {} not found in body.".format(macros[0], arg))
-            self._macros.append(macros)
+            self.add_macros(macros)
 
     @property
     def curline(self):
+        """
+        Return current line being processed.
+        """
         return self._lines
 
     @property
     def name(self):
+        """
+        return filename
+        """
         return self._file.name
+
+    @property
+    def macros(self):
+        """
+        Return the dict of this reader's macros.
+        """
+        return self._macros
+
+    def add_macros(self, macros):
+        """
+        Add a single macro or a list of macros.
+
+        A macro is a tuple or list of name, a tuple or list of argument names, and a
+        string containing the replacement string that would contain the argument
+        strings.
+        """
+        for macro in macros.keys():
+            if macro in self._macros:
+                print("WARNING: Macro {} would overwrite existing macro.".format(macro))
+            # try to find each macro arg in the macro body
+            for arg in macros[macro][0]:
+                try:
+                    macros[macro][1].index(arg)
+                except ValueError:
+                    raise ValueError("Macro {} has arg {} not found in body.".format(macro, arg))
+            self._macros[macro] = macros[macro]
 
     def readline(self):
         """
@@ -124,7 +121,7 @@ class MacroReader():
                         index = 0
                         try:
                             # search for instance of macro name
-                            index = line[index:].index(macro[0])
+                            index = line[index:].index(macro)
                         except ValueError:
                             # no macro found, just append the rest
                             newLine += line
@@ -133,23 +130,23 @@ class MacroReader():
                         # append everything up to the macro name to be replaced
                         newLine += line[:index]
                         # results in args, remainder
-                        args = line[index+len(macro[0]):].split(maxsplit=len(macro[1]))
+                        args = line[index+len(macro):].split(maxsplit=len(self._macros[macro][0]))
                         # make a copy of the replacement string
-                        replacement = str(macro[2])
+                        replacement = str(self._macros[macro][1])
                         # replace all instances of argument names with the provided
                         # values
-                        for i in range(len(macro[1])):
+                        for num, macroarg in enumerate(self._macros[macro][0]):
                             try:
-                                replacement = replacement.replace(macro[1][i], args[i])
+                                replacement = replacement.replace(macroarg, args[num])
                             except IndexError:
-                                raise ValueError("Invalid arguments used for macro {} ({} != {})".format(macro[0], len(macro[1]), len(args)))
+                                raise ValueError("Invalid arguments used for macro {} ({} != {})".format(macro, len(self._macros[macro][0]), len(args)))
                         # append the replacement string
                         newLine += replacement + ' '
                         # if there's nothing left, break
-                        if len(args) <= len(macro[1]):
+                        if len(args) <= len(self._macros[macro][0]):
                             break
                         # continue with the remainder
-                        line = args[len(macro[1])]
+                        line = args[-1]
                     line = newLine
                 if not changed:
                     break
@@ -167,6 +164,9 @@ class MacroReader():
         return _MacroReaderIterator(self)
 
 def read_macro(line):
+    """
+    Read one macro args ...=contents and return name, args and macro contents
+    """
     macroline = line.split('=', maxsplit=1)
     lhs = macroline[0].split()
     macroname = lhs[0]
@@ -176,28 +176,30 @@ def read_macro(line):
 
 def read_macros(infile):
     """
-    read a list of macros, macros are formatted:
+    read a list of macros from a file, macros are formatted:
     name arg0name arg1name ...=replacement
     macro names are found in the file and replaced with replacement
     and instances of argument names are replaced with the arguments
     provided when the macro is used like:
     name arg0 arg1 ...
+    Returna dict of keys read.
     """
-    macro = list()
+    macros = dict()
     for line in infile:
-        macro.append(read_macro(line.strip()))
+        name, args, line = read_macro(line.strip())
+        macros[name] = (args, line)
 
-    return macro
+    return macros
 
-_BUILTIN_MACROS = (
-    ("SYNTH_OUTPUT_REPLACE", (), str(cg.SYNTH_OUTPUT_REPLACE)),
-    ("SYNTH_OUTPUT_ADD", (), str(cg.SYNTH_OUTPUT_ADD)),
-    ("SYNTH_AUTO_CONSTANT", (), str(cg.SYNTH_AUTO_CONSTANT)),
-    ("SYNTH_AUTO_SOURCE", (), str(cg.SYNTH_AUTO_SOURCE)),
-    ("SYNTH_MODE_ONCE", (), str(cg.SYNTH_MODE_ONCE)),
-    ("SYNTH_MODE_LOOP", (), str(cg.SYNTH_MODE_LOOP)),
-    ("SYNTH_MODE_PHASE_SOURCE", (), str(cg.SYNTH_MODE_PHASE_SOURCE))
-)
+_BUILTIN_MACROS = {
+    "SYNTH_OUTPUT_REPLACE": ((), str(cg.SYNTH_OUTPUT_REPLACE)),
+    "SYNTH_OUTPUT_ADD": ((), str(cg.SYNTH_OUTPUT_ADD)),
+    "SYNTH_AUTO_CONSTANT": ((), str(cg.SYNTH_AUTO_CONSTANT)),
+    "SYNTH_AUTO_SOURCE": ((), str(cg.SYNTH_AUTO_SOURCE)),
+    "SYNTH_MODE_ONCE": ((), str(cg.SYNTH_MODE_ONCE)),
+    "SYNTH_MODE_LOOP": ((), str(cg.SYNTH_MODE_LOOP)),
+    "SYNTH_MODE_PHASE_SOURCE": ((), str(cg.SYNTH_MODE_PHASE_SOURCE))
+}
 
 @dataclass
 class BufferDesc():
@@ -278,7 +280,8 @@ class AudioSequencer():
                 linetype, line = line.split(maxsplit=1)
                 linetype = linetype.lower()
                 if linetype == 'macro':
-                    infile.add_macros(read_macro(line))
+                    macroname, macroargs, macroline = read_macro(line)
+                    infile.add_macros({macroname: (macroargs, macroline)})
                 elif linetype == 'tag':
                     tagline = line.split('=', maxsplit=1)
                     self._tag[tagline[0]] = tagline[1]
@@ -312,7 +315,7 @@ class AudioSequencer():
                         raise Exception("Invalid channel type: {}".format(channel))
                 elif linetype == 'include':
                     with open(line, 'r') as macrofile:
-                        macrofile = MacroReader(macrofile, trace=trace, macros=infile)
+                        macrofile = MacroReader(macrofile, trace=trace, macros=infile.macros)
                         try:
                             macros = read_macros(macrofile)
                         except Exception as e:
@@ -322,7 +325,7 @@ class AudioSequencer():
                 else:
                     raise Exception("Invalid line type {}".format(linetype))
             if self._trace:
-                infile.print_macros()
+                print(infile.macros)
                 print(self._tag)
                 print(self._buffer)
                 print(self._channel)
@@ -468,6 +471,9 @@ class AudioSequencer():
 
     @property
     def ended(self):
+        """
+        Determine whether sequence has reached ended state
+        """
         return self._ended
 
     def _rearrange_tunings(orig):
@@ -560,12 +566,6 @@ class AudioSequencer():
         return (outrate / inrate) * tune
 
     def _update_silence(self, silence, status):
-        # 0  output buffer
-        # 1  start position
-        # 2  requested time
-        # 3  row ID for requested time met behavior
-        # 4  row ID for output buffer filled behavior
-        # status arguments are the order in which they appear
         if status[0] != None:
             buf = status[0]
             if buf >= self._seqChannels:
@@ -594,16 +594,6 @@ class AudioSequencer():
                 silence.outBufEvent = self._seq.get_row(status[4])
 
     def _update_player(self, player, status):
-        # 0  the underlying Player object
-        # 1  requested time
-        # 2  row ID for requested time met behavior
-        # 3  row ID for output buffer filled behavior
-        # 4  row ID for input buffer exhausted behavior
-        # 5  row ID for volume buffer exhausted behavior
-        # 6  row ID for speed buffer exhausted behavior
-        # 7  row ID for phase buffer exhausted behavior
-        # 8  input Buffer object
-        # 9  output Buffer object
         p = player.player
         if status[0] != None:
             buf = status[0]
@@ -766,15 +756,6 @@ class AudioSequencer():
                 player.lengthBufEvent = self._seq.get_row(status[31])
 
     def _update_filter(self, flt, status):
-        # 0  the underlying Filter object
-        # 1  requested time
-        # 2  row ID for requested time met behavior
-        # 3  row ID for output buffer filled behavior
-        # 4  row ID for input buffer exhausted behavior
-        # 5  row ID for volume buffer exhausted behavior
-        # 6  row ID for slice buffer exhausted behavior
-        # 7  output Buffer object (yes, these are inverted from Player...)
-        # 8  input Buffer object
         f = flt.flt
         if status[0] != None:
             buf = status[0]
@@ -968,6 +949,9 @@ class AudioSequencer():
         self._loaded = False
 
     def internal(self, bufnum):
+        """
+        Get a pybuffer representation of a buffer from one of this sequence's buffers.
+        """
         if not self._loaded:
             raise Exception("sequence not loaded, so buffers don't exist.")
 
@@ -1221,6 +1205,9 @@ class AudioSequencer():
             i += 1
 
     def run(self, needed):
+        """
+        Run the sequence for needed samples.
+        """
         if self._ended:
             return
 
@@ -1242,6 +1229,9 @@ class AudioSequencer():
         return origneeded - needed
 
     def get_tag(self, name):
+        """
+        Get a tag declared in the sequence file.
+        """
         return self._tag[name]
 
     def _reset_output_positions(self):
@@ -1256,7 +1246,7 @@ class AudioSequencer():
         self._outpos = 0
 
 
-def audio_system_frame(priv):
+def _audio_system_frame(priv):
     return priv._frame_cb()
 
 class AudioSystem():
@@ -1264,8 +1254,22 @@ class AudioSystem():
                  fragsize=cg.SYNTH_DEFAULT_FRAGMENT_SIZE,
                  audformat=cg.SYNTH_TYPE_F32,
                  filename=None, opendev=True, devname=None, trace=False):
+        """
+        Make a new AudioSystem.
+
+        log_cb_return  A callable which would be called when the underlying system would log.
+        log_cb_priv    Something passed in to the log callback.
+        rate           The desired sample rate
+        channels       The desired number of channels
+        fragsize       The optional desired fragment size
+        audformat      The optional desired audio format
+        filename       The optional output WAV file
+        opendev        False to not open an audio device
+        devname        The optional SDL audio device name
+        trace          True to output a lot of realtime status info
+        """
         self._s = cg.Synth(filename, opendev, devname,
-                           audio_system_frame, self,
+                           _audio_system_frame, self,
                            log_cb_return, log_cb_priv,
                            rate, channels, fragsize, audformat)
         self._sequences = list()
@@ -1276,10 +1280,17 @@ class AudioSystem():
         self._trace = trace
 
     def print_full_stats(self):
+        """
+        Print a lot of status info.
+        """
         self._s.print_full_stats()
 
     @property
     def error(self):
+        """
+        If frame() throws an exception, get the exception which caused it to throw originally, then clear the error state.
+        returns a tuple containing the sequence which caused the error and the Exception object
+        """
         error = self._error
         self._error = None
         e = self._exception
@@ -1288,13 +1299,27 @@ class AudioSystem():
 
     @property
     def rate(self):
+        """
+        Get the rate the synth is running at.
+        """
         return self._s.rate()
 
     @property
     def channels(self):
+        """
+        Get the number of channels the synth is outputting.
+        """
         return self._s.channels()
 
-    def buffer(self, audioType, data, size, name):
+    def buffer(self, audioType, data, size, name=None):
+        """
+        Create a global buffer not bound directly to a sequence.
+
+        audioType  The audio format of the data
+        data       A buffer object containing the data
+        size       How much of the buffer object to use
+        name       An optional name for the buffer
+        """
         return self._s.buffer(audioType, data, size, name)
 
     def _inc_fragments(self):
@@ -1335,10 +1360,18 @@ class AudioSystem():
             return -1
 
     def add_sequence(self, seq, enabled=False):
+        """
+        Add a sequence.
+
+        enabled  True to have the sequence enabled (playing) immediately
+        """
         seq._load(self._s)
         self._sequences.append([seq, enabled])
 
     def del_sequence(self, seq):
+        """
+        Delete a sequence.
+        """
         for item in enumerate(self._sequences):
             if item[1][0] == seq:
                 item[1][0]._unload()
@@ -1347,6 +1380,9 @@ class AudioSystem():
         print("WARNING: Attempt to remove sequence not added.")
 
     def sequence_enabled(self, seq, enabled):
+        """
+        Set enabled state (start/stop playing) for a sequence.
+        """
         for item in self._sequences:
             if item[0] == seq:
                 item[1] = not not enabled
@@ -1354,15 +1390,27 @@ class AudioSystem():
         print("WARNING: Attempt to enable sequence not added.")
 
     def enabled(self, enabled):
+        """
+        Set enabled state (start/stop playing) for the whole synth.
+        """
         self._s.enabled(enabled)
 
     def open_wav(self, filename):
+        """
+        Open a WAV file for logging output.
+        """
         self._s.open_wav(filename)
 
     def close_wav(self):
+        """
+        Close/finalize WAV file.
+        """
         self._s.close_wav()
 
     def frame(self):
+        """
+        Indicate to the synth it's OK to request to fill buffers.
+        """
         try:
             return(self._s.frame())
         except Exception as e:

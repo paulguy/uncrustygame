@@ -23,13 +23,22 @@ class SequenceDescription():
 
     @property
     def columns(self):
+        """
+        Get number of columns in this sequence.
+        """
         return len(self._column)
 
     def add_row_description(self):
+        """
+        Add a column type description and return its ID.
+        """
         self._rowdesc.append(list())
         return len(self._rowdesc) - 1
 
     def add_field(self, desc, fieldType, rowDesc=None, func=None, priv=None):
+        """
+        Add a field to a column type description.
+        """
         if fieldType == FIELD_TYPE_ROW:
             if rowDesc < 0 or rowDesc > len(self._rowdesc) - 1:
                 raise IndexError("invalid row description index")
@@ -40,6 +49,9 @@ class SequenceDescription():
             self._rowdesc[desc].append(fieldType)
 
     def add_column(self, rowDesc):
+        """
+        Add an actual column from a type description to hold data to the sequence.
+        """
         if rowDesc < 0 or rowDesc > len(self._rowdesc) - 1:
             raise IndexError("invalid row description index")
         self._column.append(rowDesc)
@@ -48,12 +60,22 @@ class SequenceDescription():
 
 class Sequencer():
     def __init__(self, desc, file, trace=False):
+        """
+        Create a sequence.
+
+        desc   A sequence description built up with SequenceDescription.
+        file   The file to read the sequence from which must match the format described in desc.
+        trace  True to output a bunch of status information.
+        """
         self._trace = trace
         self._desc = desc
         self._read_file(file)
         self.reset()
 
     def reset(self):
+        """
+        Restart the state of the sequence to the beginning.
+        """
         self._divTime = self._row[self._initial[0]][0]
         self._curOrder = -1
         self._curLine = 0
@@ -294,6 +316,9 @@ class Sequencer():
         print(file=file)
 
     def write_file(self, file=stdout):
+        """
+        Output sequence data to a file.
+        """
         # print initial state
         self._write_line(file, self._initial)
         # print number of patterns
@@ -310,6 +335,9 @@ class Sequencer():
         print(file=file)
 
     def get_row(self, rownum):
+        """
+        Get a row of data.
+        """
         return self._row[rownum][:-1]
 
     def _get_line(self, line):
@@ -322,12 +350,18 @@ class Sequencer():
         return newLine
 
     def set_pattern(self, pattern):
+        """
+        Set the current sequence pattern to start playing from.
+        """
         if pattern < 0 or pattern > len(self._pattern):
             raise IndexError("pattern out of range")
         self._curPattern = pattern
         self._curLine = 0
 
     def set_order(self, order):
+        """
+        Set the current sequence pattern indicated by a specific sequence order to start playing from.
+        """
         if pattern < 0 or pattern > len(self._order):
             raise IndexError("order out of range")
         self._curOrder = 0
@@ -335,6 +369,12 @@ class Sequencer():
         self._curLine = 0
 
     def advance(self, time):
+        """
+        Advance the sequence by a certain amount of time.
+
+        Will return without advancing the full amount of time requested if it would get to the next line.
+        returns the amount of time advanced, and the data of the line it fell on.
+        """
         line = None
 
         if self._curOrder == -1 and self._curLine == 0 and self._lineTime == 0:
