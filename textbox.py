@@ -130,7 +130,8 @@ def load_tileset_codec(f, name):
                 dectable[tilenum + num] = chr(codepoint + num)
 
     # EUGH!
-    codecs.register(lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codecs.CodecInfo(encode=lambda o, e='strict': tileset_encoder(enctable, o, e), decode=lambda o, e='strict': tileset_decoder(dectable, o, e))))
+    codec = codecs.CodecInfo(encode=lambda o, e='strict': tileset_encoder(enctable, o, e), decode=lambda o, e='strict': tileset_decoder(dectable, o, e))
+    codecs.register(lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codec))
 
 class TextBox():
     def __init__(self, w, h, vw, vh, ts, codec, debug=False):
