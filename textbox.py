@@ -130,8 +130,11 @@ def load_tileset_codec(f, name):
                 dectable[tilenum + num] = chr(codepoint + num)
 
     # EUGH!
-    codec = codecs.CodecInfo(encode=lambda o, e='strict': tileset_encoder(enctable, o, e), decode=lambda o, e='strict': tileset_decoder(dectable, o, e))
-    codecs.register(lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codec))
+    codec = codecs.CodecInfo(
+        encode=lambda o, e='strict': tileset_encoder(enctable, o, e),
+        decode=lambda o, e='strict': tileset_decoder(dectable, o, e))
+    codecs.register(
+        lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codec))
 
 class TextBox():
     def __init__(self, w, h, vw, vh, ts, codec, debug=False):
@@ -198,18 +201,19 @@ class MenuItem():
     maxlen: int
     onEnter: Callable[[object, int, str], str]
     onActivate: Callable[[object, int], None]
+    width: int = 0
 
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ll, ts, codec, tw, th, valuelen, priv, spacing=1):
+    def __init__(self, ll, ts, codec, tw, th, width, priv, spacing=1):
         self._ll = ll
         self._ts = ts
         self._space = array.array('I', ' '.encode(codec))[0]
         self._codec = codec
         self._tw = int(tw)
         self._th = int(th)
-        self._valuelen = int(valuelen)
+        self._width = int(width)
         self._priv = priv
         self._spacing = spacing
         self._entries = []
@@ -236,7 +240,7 @@ class Menu():
 
     @property
     def dimensions(self):
-        return (1 + self._w + 1 + self._valuelen) * self._tw, \
+        return self._width * self._tw, \
                (self._h * (self._th * self._spacing - 1)) + \
                (self._h * self._th)
 
@@ -253,6 +257,9 @@ class Menu():
             raise Exception("Editing the menu while text editing is unsupported.")
         if onEnter != None and onActivate != None:
             raise ValueError("Only one of onEnter and onActivate must be defined")
+        if len(label) > self._width - 1:
+            raise ValueError("Label length longer than menu width.")
+
         if value is not None:
             if maxlen is None:
                 maxlen = len(value)
@@ -280,14 +287,15 @@ class Menu():
         if self._curvalue is not None:
             self._cursorl.rotation(-90)
             pos = self._curpos
-            halflen = self._valuelen // 2
+            valuelen = self._entries[self._selection].width
+            halflen = valuelen // 2
             if self._curpos > halflen:
                 if self._curpos < len(self._curvalue) - halflen:
                     self._valtbs[self._selection].scroll((self._curpos - halflen) * self._tw, 0)
                     pos = halflen
                 else:
-                    self._valtbs[self._selection].scroll((len(self._curvalue) - self._valuelen) * self._tw, 0)
-                    pos = self._curpos - (len(self._curvalue) - self._valuelen)
+                    self._valtbs[self._selection].scroll((len(self._curvalue) - valuelen) * self._tw, 0)
+                    pos = self._curpos - (len(self._curvalue) - valuelen)
             else:
                 self._valtbs[self._selection].scroll(0, 0)
             self._cursorl.pos((1 + self._longestlabel + 1 + pos) * self._tw,
@@ -303,6 +311,12 @@ class Menu():
         for entry in self._entries:
             if len(entry.label) > self._longestlabel:
                 self._longestlabel = len(entry.label)
+
+        valuelen = self._width - 1 - 1 - self._longestlabel - 1
+        if valuelen <= 0:
+            for entry in self._entries:
+                if entry.value is not None:
+                    raise ValueError("No space for values.")
 
         w = self._longestlabel
         h = len(self._entries)
@@ -340,10 +354,10 @@ class Menu():
             self._tb.put_text((entry.label,), 1, num * self._spacing)
             self._valtbs[num] = None
             if entry.value is not None:
-                width = entry.maxlen
-                if width > self._valuelen:
-                    width = self._valuelen
-                self._valtbs[num] = TextBox(entry.maxlen, 1, width, 1, self._ts, self._codec)
+                entry.width = entry.maxlen
+                if entry.width > valuelen:
+                    entry.width = valuelen
+                self._valtbs[num] = TextBox(entry.maxlen, 1, entry.width, 1, self._ts, self._codec)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
                 self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)

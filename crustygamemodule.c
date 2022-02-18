@@ -714,6 +714,29 @@ static PyObject *Tilemap_tileset_name(TilesetObject *self,
     return(PyUnicode_FromString(name));
 }
 
+static PyObject *Tilemap_tileset_tiles(TilesetObject *self,
+                                       PyTypeObject *defining_class,
+                                       PyObject *const *args,
+                                       Py_ssize_t nargs,
+                                       PyObject *kwnames) {
+    int ret;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = tilemap_tileset_tiles(self->ll->ll, self->tileset);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_tileset_tiles failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
 static PyObject *LayerList_TS_tilemap(TilesetObject *self,
                                       PyTypeObject *defining_class,
                                       PyObject *const *args,
@@ -755,6 +778,13 @@ static PyMethodDef Tileset_methods[] = {
         "Get the tileset name.\n\n"
         "name(...) -> name\n"
         "name  The tileset's name."},
+    {
+        "tiles",
+        (PyCMethod) Tilemap_tileset_tiles,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the number of tiles.\n\n"
+        "tiles(...) -> tiles\n"
+        "tiles  The number of tiles."},
     {
         "tilemap",
         (PyCMethod) LayerList_TS_tilemap,
@@ -1752,7 +1782,8 @@ static PyObject *Tilemap_set_layer_relative(LayerObject *self,
                                             PyObject *const *args,
                                             Py_ssize_t nargs,
                                             PyObject *kwnames) {
-    LayerObject *layer;
+    LayerObject *pylayer = NULL;
+    int layer;
 
     if(self->ll == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "this Layer is not initialized");
@@ -1765,19 +1796,25 @@ static PyObject *Tilemap_set_layer_relative(LayerObject *self,
         PyErr_SetString(PyExc_TypeError, "function needs at least 1 argument");
         return(NULL);
     }
-    if(!PyObject_TypeCheck(args[0], state->LayerType)) {
+    if(args[0] == Py_None) {
+        /* already NULL */
+        layer = -1;
+    } else if(PyObject_TypeCheck(args[0], state->LayerType)) {
+        pylayer = ((LayerObject *)args[0]);
+        layer = pylayer->layer;
+    } else {
         PyErr_SetString(PyExc_TypeError, "relative layer type must be a Layer");
         return(NULL);
     }
-    layer = (LayerObject *)args[0];
 
-    if(tilemap_set_layer_relative(self->ll->ll, self->layer, layer->layer) < 0) {
+    if(tilemap_set_layer_relative(self->ll->ll, self->layer, layer) < 0) {
         PyErr_SetString(state->CrustyException, "tilemap_set_layer_blendmode failed");
         return(NULL);
     }
+
     Py_XDECREF(self->relative);
-    self->relative = layer;
-    Py_INCREF(self->relative);
+    self->relative = pylayer;
+    Py_XINCREF(self->relative);
 
     Py_RETURN_NONE;
 }

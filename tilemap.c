@@ -642,6 +642,15 @@ const char *tilemap_tileset_name(LayerList *ll, unsigned int index) {
     return(ts->name);
 }
 
+int tilemap_tileset_tiles(LayerList *ll, unsigned int index) {
+    Tileset *ts = get_tileset(ll, index);
+    if(ts == NULL) {
+        return(-1);
+    }
+
+    return(ts->max);
+}
+
 static int init_tilemap(LayerList *ll, Tilemap *t,
                         unsigned int tileset,
                         unsigned int w, unsigned int h,
@@ -1266,7 +1275,7 @@ int tilemap_update_tilemap(LayerList *ll,
             /* check to see if index is within tileset */
             /* src.x can't be negative, because tm->map is unsigned,
              * silences a warning */
-            if((unsigned int)(src.x) > ts->max) {
+            if((unsigned int)(src.x) >= ts->max) {
                 LOG_PRINTF(ll, "%s: Tilemap index beyond tileset %s: %u\n", tm->name, ts->name, src.x);
                 return(-1);
             }

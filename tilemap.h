@@ -220,6 +220,14 @@ int tilemap_free_tileset(LayerList *ll, unsigned int index);
  * return   the name or NULL on failure
  */
 const char *tilemap_tileset_name(LayerList *ll, unsigned int index);
+/*
+ * Get the number of tiles (max tile index + 1) in this tileset.
+ *
+ * ll       the LayerList
+ * index    the tileset handle index
+ * return   the number of tiles, -1 on failure
+ */
+int tilemap_tileset_tiles(LayerList *ll, unsigned int index);
 
 /*
  * Add a tilemap.
