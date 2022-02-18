@@ -524,10 +524,15 @@ class MapeditState():
 
     def active_screen(self, screen):
         try:
-            name = screen.NAME
+            if isinstance(screen, type):
+                # lookup by type
+                self._screen = self._screens[screen.NAME]
+            else:
+                # assign a screen object directly
+                self._screen = screen
         except AttributeError:
-            name = screen
-        self._screen = self._screens[name]
+            # lookup by name/key
+            self._screen = self._screens[screen]
         self._screen.active()
         if self._screendl == None:
             self._screendl = self._dl.append(self._screen.dl)
@@ -536,10 +541,11 @@ class MapeditState():
         self._newscreen = True
 
     def get_screen(self, screen):
+        name = screen
         try:
             name = screen.NAME
         except AttributeError:
-            name = screen
+            pass
         return self._screens[name]
 
     def _common_input(self, event):
