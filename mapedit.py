@@ -453,8 +453,8 @@ class TileSelectScreen():
                     self._curx += 1
                     self._update_cursor()
             elif event.key.keysym.sym == SDLK_a:
-                if self._height - 1 >= 0:
-                    self._height += 1
+                if self._height - 1 > 0:
+                    self._height -= 1
                     self._width = self._tiles // self._height
                     if self._tiles % self._height > 0:
                         self._width += 1
@@ -467,7 +467,7 @@ class TileSelectScreen():
                         self._width += 1
                     self._make_tilemap()
             elif event.key.keysym.sym == SDLK_z:
-                if self._width - 1 >= 0:
+                if self._width - 1 > 0:
                     self._width -= 1
                     self._height = self._tiles // self._width
                     if self._tiles % self._width > 0:
