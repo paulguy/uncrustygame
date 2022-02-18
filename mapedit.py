@@ -132,13 +132,12 @@ class NewScreen():
         self._mapheight = 32
         need_text(state)
         tstext = self._state.tileset('ts_text')
-        self._tb = textbox.TextBox(self._tw, self._th,
-                                   self._tw, self._th,
+        self._tb = textbox.TextBox(self._tw, 1, self._tw, 1,
                                    tstext, 'crusty_text')
         self._tb.layer.scale(SCALE, SCALE)
         put_centered_line(self._tb, "New Tilemap", 1, self._tw)
         self._dl.append(self._tb.layer)
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', 8, 8, self._tw - 2, self, spacing=2)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, self, spacing=2)
         self._menu.add_item("Tileset", value=self._filename, maxlen=255, onEnter=NewScreen._setname)
         self._menu.add_item("Tile Width", value=str(self._tilewidth), maxlen=4, onEnter=NewScreen._settilewidth)
         self._menu.add_item("Tile Height", value=str(self._tileheight), maxlen=4, onEnter=NewScreen._settileheight)
@@ -146,7 +145,7 @@ class NewScreen():
         self._menu.add_item("Map Height", value=str(self._mapheight), maxlen=4, onEnter=NewScreen._setmapheight)
         self._menu.add_item("Proceed", onActivate=NewScreen._proceed)
         self._menu.update()
-        mlayer, _ = self._menu.layers
+        mlayer, self._cursorl = self._menu.layers
         mlayer.scale(SCALE, SCALE)
         mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * 3))
         self._dl.append(self._menu.displaylist)
@@ -155,7 +154,6 @@ class NewScreen():
         self._errorbox = None
         self._errorpos = self._dl.append(None)
         self._cursorrad = 0.0
-        _, self._cursorl = self._menu.layers
 
     def active(self):
         pass
@@ -489,6 +487,63 @@ class TileSelectScreen():
 
     def update(self, time):
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+
+class PromptScreen()
+    NAME='prompt'
+
+    def __init__(self, caller, state, title, message, options, default=0):
+        self._state = state
+        self._caller = caller
+        self._default = default
+        self._tw = TILES_WIDTH
+        self._th = TILES_HEIGHT
+        self._dl = display.DisplayList(self._state.ll)
+        pos = 1
+        need_text(state)
+        tstext = self._state.tileset('ts_text')
+        text, _, w, h = textbox.wrap_text(title, self._tw - 2, 2)
+        self._title = textbox.TextBox(self._tw, h, self._tw, h, tstext, 'crusty_text')
+        self._title.layer.scale(SCALE, SCALE)
+        self._title.layer.pos(TEXT_WIDTH, pos * TEXT_HEIGHT)
+        pos += h
+        self._dl.append(self._title.layer)
+        for num, line in enumerate(text):
+            put_centered_line(self._title, line, num, w)
+        text, _, w, h = textbox.wrap_text(message, self._tw - 2, 5)
+        self._message = textbox.TextBox(w, h, w, h, tstext, 'crusty_text')
+        self._message.put_text(text, 0, 0)
+        self._message.layer.scale(SCALE, SCALE)
+        self._message.layer.pos(TEXT_WIDTH, pos * TEXT_HEIGHT)
+        pos += h
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, self)
+        for opt in options:
+            self._menu.add_item(opt, onActivate=self._activate)
+        mlayer, self._cursorl = self._menu.layers
+        mlayer.scale(SCALE, SCALE)
+        mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * pos))
+        self._dl.append(self._menu.displaylist)
+        self._cursorrad = 0.0
+ 
+    def input(self, event):
+        elif event.type == SDL_KEYDOWN:
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                self._return(self._default)
+
+    def update(self, time):
+        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+
+    def _activate(self, sel):
+        self._return(sel)
+
+    def _return(self, option):
+        self._caller.set_option(option)
+        self._state.active_screen(caller)
 
 
 class MapeditState():
