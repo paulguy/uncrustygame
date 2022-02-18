@@ -395,11 +395,14 @@ class TileSelectScreen():
         tilemap = array.array('I', range(self._tiles))
         remainder = (self._width * self._height) - self._tiles
         tilemap.extend(array.array('I', itertools.repeat(0, remainder)))
+        colormod = array.array('I', itertools.repeat(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE), self._tiles))
+        colormod.extend(array.array('I', itertools.repeat(0, remainder)))
         self._vw, self._vh, self._curx, self._cury, self._stm = \
             make_tilemap(self._width, self._height,
                          self._twidth, self._theight,
                          self._curx, self._cury,
-                         SCALE, self._tileset, tilemap)
+                         SCALE, self._tileset, tilemap,
+                         colormod=colormod)
         if self._cury * self._width + self._curx >= self._tiles:
             self._cury = self._tiles // self._width - 1
         self._stm.layer.scale(self._scale, self._scale)
