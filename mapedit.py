@@ -274,6 +274,10 @@ class EditScreen():
         self._cursorrad = 0.0
         self._tile = 0
         self._quitting = False
+        self._red = 255
+        self._green = 255
+        self._blue = 255
+        self._alpha = SDL_ALPHA_OPAQUE
 
     @property
     def dl(self):
@@ -314,7 +318,7 @@ class EditScreen():
         self._dl = display.DisplayList(self._state.ll)
         self._tilemap = array.array('I', itertools.repeat(0, self._width * self._height))
         self._flags = copy.copy(self._tilemap)
-        self._colormod = array.array('I', itertools.repeat(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE), self._width * self._height))
+        self._colormod = array.array('I', itertools.repeat(display.make_color(self._red, self._green, self._blue, self._alpha), self._width * self._height))
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
         self._dl.append(self._stm.layer)
@@ -349,6 +353,7 @@ class EditScreen():
                     self._update_cursor()
             elif event.key.keysym.sym == SDLK_SPACE:
                     self._tilemap[self._cury * self._width + self._curx] = self._tile
+                    self._colormod[self._cury * self._width + self._curx] = display.make_color(self._red, self._green, self._blue, self._alpha)
                     self._stm.updateregion(self._curx, self._cury, 1, 1)
             elif event.key.keysym.sym == SDLK_KP_PLUS:
                 val = self._tilemap[self._cury * self._width + self._curx] + 1
@@ -362,8 +367,11 @@ class EditScreen():
                     self._stm.updateregion(self._curx, self._cury, 1, 1)
             elif event.key.keysym.sym == SDLK_v:
                 self._state.active_screen(TileSelectScreen)
+            elif event.key.keysym.sym == SDLK_c:
+                colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
+                self._state.active_screen(colorpicker)
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                prompt = PromptScreen(self, self._state, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
                 self._state.active_screen(prompt)
 
     def update(self, time):
@@ -372,6 +380,12 @@ class EditScreen():
     def set_option(self, sel):
         if sel == 0:
             self._quitting = True
+
+    def set_color(self, red, green, blue, alpha):
+        self._red = red
+        self._green = green
+        self._blue = blue
+        self._alpha = alpha
 
 class TileSelectScreen():
     NAME='tileselect'
@@ -500,7 +514,7 @@ class TileSelectScreen():
 class PromptScreen():
     NAME='prompt'
 
-    def __init__(self, caller, state, title, message, options, default=0):
+    def __init__(self, state, caller, title, message, options, default=0):
         self._state = state
         self._caller = caller
         self._default = default
@@ -514,10 +528,10 @@ class PromptScreen():
         self._title = textbox.TextBox(self._tw, h, self._tw, h, tstext, 'crusty_text')
         self._title.layer.scale(SCALE, SCALE)
         self._title.layer.pos(int(TEXT_SCALED_WIDTH), int(pos * TEXT_SCALED_HEIGHT))
-        pos += h + 1
-        self._dl.append(self._title.layer)
         for num, line in enumerate(text):
             put_centered_line(self._title, line, num, self._tw - 2)
+        self._dl.append(self._title.layer)
+        pos += h + 1
         text, _, w, h = textbox.wrap_text(message, self._tw - 2, 5)
         self._message = textbox.TextBox(w, h, w, h, tstext, 'crusty_text')
         self._message.put_text(text, 0, 0)
@@ -562,6 +576,131 @@ class PromptScreen():
 
     def _return(self, option):
         self._caller.set_option(option)
+        self._state.active_screen(self._caller)
+
+class ColorPickerScreen():
+    NAME='colorpicker'
+
+    def __init__(self, state, caller, red=0, green=0, blue=0, alpha=SDL_ALPHA_OPAQUE):
+        self._state = state
+        self._caller = caller
+        self._red = red
+        self._green = green
+        self._blue = blue
+        self._alpha = alpha
+        self._tw = TILES_WIDTH
+        self._th = TILES_HEIGHT
+        self._dl = display.DisplayList(self._state.ll)
+        need_text(state)
+        tstext = self._state.tileset('ts_text')
+        self._title = textbox.TextBox(self._tw, 1, self._tw, 1, tstext, 'crusty_text')
+        self._title.layer.scale(SCALE, SCALE)
+        self._title.layer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT))
+        put_centered_line(self._title, "Pick Color", 0, self._tw - 2)
+        self._dl.append(self._title.layer)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, None, spacing=2)
+        self._menu.add_item("Red", value=str(self._red), maxlen=3, onEnter=self.setred)
+        self._menu.add_item("Green", value=str(self._green), maxlen=3, onEnter=self.setgreen)
+        self._menu.add_item("Blue", value=str(self._blue), maxlen=3, onEnter=self.setblue)
+        self._menu.add_item("Alpha", value=str(self._alpha), maxlen=3, onEnter=self.setalpha)
+        self._menu.add_item("Accept", onActivate=self._accept)
+        self._menu.update()
+        mlayer, self._cursorl = self._menu.layers
+        mlayer.scale(SCALE, SCALE)
+        mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * 3))
+        self._dl.append(self._menu.displaylist)
+        cbtm = array.array('u', itertools.repeat('█', 56)).tounicode().encode('crusty_text')
+        bgcm = array.array('I', itertools.repeat(display.make_color(85, 85, 85, SDL_ALPHA_OPAQUE), 56))
+        bgcm[1::2] = array.array('I', itertools.repeat(display.make_color(170, 170, 170, SDL_ALPHA_OPAQUE), 28))
+        self._colorbg = display.ScrollingTilemap(tstext, cbtm, 7, 8, 7, 8, TEXT_WIDTH, TEXT_HEIGHT, colormod=bgcm)
+        self._colorbg.layer.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
+        self._dl.append(self._colorbg.layer)
+        self._colorblock = display.ScrollingTilemap(tstext, cbtm, 7, 8, 7, 8, TEXT_WIDTH, TEXT_HEIGHT)
+        self._colorblock.layer.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
+        self._update_color()
+        self._dl.append(self._colorblock.layer)
+        self._cursorrad = 0.0
+ 
+    @property
+    def dl(self):
+        return self._dl
+
+    def active(self):
+        pass
+
+    def input(self, event):
+        if event.type == SDL_TEXTINPUT:
+            self._menu.text_event(event)
+        elif event.type == SDL_KEYDOWN:
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_LEFT:
+                self._menu.left()
+            elif event.key.keysym.sym == SDLK_RIGHT:
+                self._menu.right()
+            elif event.key.keysym.sym == SDLK_BACKSPACE:
+                self._menu.backspace()
+            elif event.key.keysym.sym == SDLK_DELETE:
+                self._menu.delete()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                self._state.active_screen(self._caller)
+
+    def update(self, time):
+        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+
+    def _update_color(self):
+        self._colorblock.layer.colormod(display.make_color(self._red, self._green, self._blue, self._alpha))
+
+    def setred(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 0 or val > 255:
+            return None
+        self._red = val
+        self._update_color()
+        return str(self._red)
+
+    def setgreen(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 0 or val > 255:
+            return None
+        self._green = val
+        self._update_color()
+        return str(self._green)
+
+    def setblue(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 0 or val > 255:
+            return None
+        self._blue = val
+        self._update_color()
+        return str(self._blue)
+
+    def setalpha(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 0 or val > 255:
+            return None
+        self._alpha = val
+        self._update_color()
+        return str(self._alpha)
+
+    def _accept(self, priv, sel):
+        self._caller.set_color(self._red, self._green, self._blue, self._alpha)
         self._state.active_screen(self._caller)
 
 
