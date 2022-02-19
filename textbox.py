@@ -201,6 +201,7 @@ class MenuItem():
     maxlen: int
     onEnter: Callable[[object, int, str], str]
     onActivate: Callable[[object, int], None]
+    onChange: Callable[[object, int, int, str], str]
     width: int = 0
 
 class Menu():
@@ -252,7 +253,7 @@ class Menu():
         padding = array.array('I', itertools.repeat(self._space, maxlen - len(value)))
         value.extend(padding)
 
-    def add_item(self, label, value=None, maxlen=None, onEnter=None, onActivate=None):
+    def add_item(self, label, value=None, maxlen=None, onEnter=None, onActivate=None, onChange=None):
         if self._curvalue is not None:
             raise Exception("Editing the menu while text editing is unsupported.")
         if onEnter != None and onActivate != None:
@@ -270,7 +271,7 @@ class Menu():
             self._pad_value(value, maxlen)
 
         label = array.array('I', label.encode(self._codec))
-        self._entries.append(MenuItem(label, value, maxlen, onEnter, onActivate))
+        self._entries.append(MenuItem(label, value, maxlen, onEnter, onActivate, onChange))
         self._valtbs.append(None)
         self._updated = False
 
@@ -394,12 +395,24 @@ class Menu():
             if self._curpos > 0:
                 self._curpos -= 1
                 self._update_cursor()
+        elif self._entries[self._selection].onChange is not None:
+            if self._entries[self._selection].value is None:
+                self._entries[self._selection].onChange(self._priv, self._selection, -1)
+            else:
+                val = self._entries[self._selection].onChange(self._priv, self._selection, -1, self._entries[self._selection].value.tobytes().decode(self._codec))
+                self._accept_value(val)
 
     def right(self):
         if self._curvalue is not None:
             if self._curpos < len(self._curvalue):
                 self._curpos += 1
                 self._update_cursor()
+        elif self._entries[self._selection].onChange is not None:
+            if self._entries[self._selection].value is None:
+                self._entries[self._selection].onChange(self._priv, self._selection, 1)
+            else:
+                val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value.tobytes().decode(self._codec))
+                self._accept_value(val)
 
     def _update_value(self):
         self._valtbs[self._selection].put_text((self._curvalue[self._curpos:],), self._curpos, 0)

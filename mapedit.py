@@ -605,10 +605,10 @@ class ColorPickerScreen():
         put_centered_line(self._title, "Pick Color", 0, self._tw - 2)
         self._dl.append(self._title.layer)
         self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, None, spacing=2)
-        self._menu.add_item("Red", value=str(self._red), maxlen=3, onEnter=self.setred)
-        self._menu.add_item("Green", value=str(self._green), maxlen=3, onEnter=self.setgreen)
-        self._menu.add_item("Blue", value=str(self._blue), maxlen=3, onEnter=self.setblue)
-        self._menu.add_item("Alpha", value=str(self._alpha), maxlen=3, onEnter=self.setalpha)
+        self._menu.add_item("Red", value=str(self._red), maxlen=3, onEnter=self.setred, onChange=self.changered)
+        self._menu.add_item("Green", value=str(self._green), maxlen=3, onEnter=self.setgreen, onChange=self.changegreen)
+        self._menu.add_item("Blue", value=str(self._blue), maxlen=3, onEnter=self.setblue, onChange=self.changeblue)
+        self._menu.add_item("Alpha", value=str(self._alpha), maxlen=3, onEnter=self.setalpha, onChange=self.changealpha)
         self._menu.add_item("Accept", onActivate=self._accept)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
@@ -672,11 +672,29 @@ class ColorPickerScreen():
         self._update_color()
         return str(self._red)
 
+    def changered(self, priv, sel, change, val):
+        val = int(val)
+        val += change
+        if val < 0 or val > 255:
+            return None
+        self._red = val
+        self._update_color()
+        return str(self._red)
+
     def setgreen(self, priv, sel, val):
         try:
             val = int(val)
         except ValueError:
             return None
+        if val < 0 or val > 255:
+            return None
+        self._green = val
+        self._update_color()
+        return str(self._green)
+
+    def changegreen(self, priv, sel, change, val):
+        val = int(val)
+        val += change
         if val < 0 or val > 255:
             return None
         self._green = val
@@ -694,11 +712,29 @@ class ColorPickerScreen():
         self._update_color()
         return str(self._blue)
 
+    def changeblue(self, priv, sel, change, val):
+        val = int(val)
+        val += change
+        if val < 0 or val > 255:
+            return None
+        self._blue = val
+        self._update_color()
+        return str(self._blue)
+
     def setalpha(self, priv, sel, val):
         try:
             val = int(val)
         except ValueError:
             return None
+        if val < 0 or val > 255:
+            return None
+        self._alpha = val
+        self._update_color()
+        return str(self._alpha)
+
+    def changealpha(self, priv, sel, change, val):
+        val = int(val)
+        val += change
         if val < 0 or val > 255:
             return None
         self._alpha = val
