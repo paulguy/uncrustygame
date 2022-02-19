@@ -366,10 +366,16 @@ class EditScreen():
                     self._tilemap[self._cury * self._width + self._curx] = val
                     self._stm.updateregion(self._curx, self._cury, 1, 1)
             elif event.key.keysym.sym == SDLK_v:
-                self._state.active_screen(TileSelectScreen)
+                if event.key.keysym.mod & KMOD_SHIFT != 0:
+                    self._tile = self._tilemap[self._cury * self._width + self._curx]
+                else:
+                    self._state.active_screen(TileSelectScreen)
             elif event.key.keysym.sym == SDLK_c:
-                colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
-                self._state.active_screen(colorpicker)
+                if event.key.keysym.mod & KMOD_SHIFT != 0:
+                    self._red, self._green, self._blue, self._alpha = display.unmake_color(self._colormod[self._cury * self._width + self._curx])
+                else:
+                    colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
+                    self._state.active_screen(colorpicker)
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
                 self._state.active_screen(prompt)
