@@ -368,11 +368,17 @@ class EditScreen():
             elif event.key.keysym.sym == SDLK_v:
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._tile = self._tilemap[self._cury * self._width + self._curx]
+                elif event.key.keysym.mod & KMOD_CTRL != 0:
+                    self._tilemap[self._cury * self._width + self._curx] = self._tile
+                    self._stm.updateregion(self._curx, self._cury, 1, 1)
                 else:
                     self._state.active_screen(TileSelectScreen)
             elif event.key.keysym.sym == SDLK_c:
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._red, self._green, self._blue, self._alpha = display.unmake_color(self._colormod[self._cury * self._width + self._curx])
+                elif event.key.keysym.mod & KMOD_CTRL != 0:
+                    self._colormod[self._cury * self._width + self._curx] = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._stm.updateregion(self._curx, self._cury, 1, 1)
                 else:
                     colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
                     self._state.active_screen(colorpicker)
@@ -455,8 +461,8 @@ class TileSelectScreen():
         curheight = int(self._theight * SCALE / TEXT_SCALED_HEIGHT)
         self._cursortm = make_cursor(self._state, curwidth, curheight, "Tile Select Cursor Tilemap")
         self._cursorl = self._cursortm.layer("Tile Select Cursor Layer")
-        self._dl.append(self._cursorl)
         self._tmindex = self._dl.append(None)
+        self._dl.append(self._cursorl)
         self._curx = 0
         self._cury = 0
         self._make_tilemap()
