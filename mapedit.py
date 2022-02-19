@@ -134,16 +134,17 @@ class NewScreen():
         tstext = self._state.tileset('ts_text')
         self._tb = textbox.TextBox(self._tw, 1, self._tw, 1,
                                    tstext, 'crusty_text')
+        put_centered_line(self._tb, "New Tilemap", 0, self._tw)
+        self._tb.layer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT))
         self._tb.layer.scale(SCALE, SCALE)
-        put_centered_line(self._tb, "New Tilemap", 1, self._tw)
         self._dl.append(self._tb.layer)
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, self, spacing=2)
-        self._menu.add_item("Tileset", value=self._filename, maxlen=255, onEnter=NewScreen._setname)
-        self._menu.add_item("Tile Width", value=str(self._tilewidth), maxlen=4, onEnter=NewScreen._settilewidth)
-        self._menu.add_item("Tile Height", value=str(self._tileheight), maxlen=4, onEnter=NewScreen._settileheight)
-        self._menu.add_item("Map Width", value=str(self._mapwidth), maxlen=4, onEnter=NewScreen._setmapwidth)
-        self._menu.add_item("Map Height", value=str(self._mapheight), maxlen=4, onEnter=NewScreen._setmapheight)
-        self._menu.add_item("Proceed", onActivate=NewScreen._proceed)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, None, spacing=2)
+        self._menu.add_item("Tileset", value=self._filename, maxlen=255, onEnter=self._setname)
+        self._menu.add_item("Tile Width", value=str(self._tilewidth), maxlen=4, onEnter=self._settilewidth)
+        self._menu.add_item("Tile Height", value=str(self._tileheight), maxlen=4, onEnter=self._settileheight)
+        self._menu.add_item("Map Width", value=str(self._mapwidth), maxlen=4, onEnter=self._setmapwidth)
+        self._menu.add_item("Map Height", value=str(self._mapheight), maxlen=4, onEnter=self._setmapheight)
+        self._menu.add_item("Proceed", onActivate=self._proceed)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.scale(SCALE, SCALE)
@@ -204,11 +205,11 @@ class NewScreen():
 
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
 
-    def _setname(self, sel, val):
+    def _setname(self, priv, sel, val):
         self._filename = val.lstrip().rstrip()
         return val
 
-    def _settilewidth(self, sel, val):
+    def _settilewidth(self, priv, sel, val):
         try:
             val = int(val)
         except ValueError:
@@ -218,7 +219,7 @@ class NewScreen():
         self._tilewidth = val
         return str(self._tilewidth)
 
-    def _settileheight(self, sel, val):
+    def _settileheight(self, priv, sel, val):
         try:
             val = int(val)
         except ValueError:
@@ -228,7 +229,7 @@ class NewScreen():
         self._tileheight = val
         return str(self._tileheight)
 
-    def _setmapwidth(self, sel, val):
+    def _setmapwidth(self, priv, sel, val):
         try:
             val = int(val)
         except ValueError:
@@ -238,7 +239,7 @@ class NewScreen():
         self._mapwidth = val
         return str(self._mapwidth)
 
-    def _setmapheight(self, sel, val):
+    def _setmapheight(self, priv, sel, val):
         try:
             val = int(val)
         except ValueError:
@@ -248,7 +249,7 @@ class NewScreen():
         self._mapheight = val
         return str(self._mapheight)
 
-    def _proceed(self, sel):
+    def _proceed(self, priv, sel):
         try:
             tileset = self._state.ll.tileset(self._filename, self._tilewidth, self._tileheight, None)
         except cg.CrustyException:
@@ -272,6 +273,7 @@ class EditScreen():
         self._tilemap = None
         self._cursorrad = 0.0
         self._tile = 0
+        self._quitting = False
 
     @property
     def dl(self):
@@ -283,6 +285,8 @@ class EditScreen():
     def active(self):
         if self._tilemap is None:
             raise Exception("Edit screen not fully set up.")
+        if self._quitting:
+            self._state.stop()
 
     def _update_cursor(self):
         update_cursor(self._stm, self._cursorl,
@@ -359,10 +363,15 @@ class EditScreen():
             elif event.key.keysym.sym == SDLK_v:
                 self._state.active_screen(TileSelectScreen)
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                self._state.stop()
+                prompt = PromptScreen(self, self._state, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                self._state.active_screen(prompt)
 
     def update(self, time):
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+
+    def set_option(self, sel):
+        if sel == 0:
+            self._quitting = True
 
 class TileSelectScreen():
     NAME='tileselect'
@@ -488,7 +497,7 @@ class TileSelectScreen():
     def update(self, time):
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
 
-class PromptScreen()
+class PromptScreen():
     NAME='prompt'
 
     def __init__(self, caller, state, title, message, options, default=0):
@@ -504,28 +513,38 @@ class PromptScreen()
         text, _, w, h = textbox.wrap_text(title, self._tw - 2, 2)
         self._title = textbox.TextBox(self._tw, h, self._tw, h, tstext, 'crusty_text')
         self._title.layer.scale(SCALE, SCALE)
-        self._title.layer.pos(TEXT_WIDTH, pos * TEXT_HEIGHT)
-        pos += h
+        self._title.layer.pos(int(TEXT_SCALED_WIDTH), int(pos * TEXT_SCALED_HEIGHT))
+        pos += h + 1
         self._dl.append(self._title.layer)
         for num, line in enumerate(text):
-            put_centered_line(self._title, line, num, w)
+            put_centered_line(self._title, line, num, self._tw - 2)
         text, _, w, h = textbox.wrap_text(message, self._tw - 2, 5)
         self._message = textbox.TextBox(w, h, w, h, tstext, 'crusty_text')
         self._message.put_text(text, 0, 0)
         self._message.layer.scale(SCALE, SCALE)
-        self._message.layer.pos(TEXT_WIDTH, pos * TEXT_HEIGHT)
-        pos += h
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, self)
+        self._message.layer.pos(int(TEXT_SCALED_WIDTH), int(pos * TEXT_SCALED_HEIGHT))
+        self._dl.append(self._message.layer)
+        pos += h + 1
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, None)
         for opt in options:
             self._menu.add_item(opt, onActivate=self._activate)
+        self._menu.update()
+        self._menu.move_selection(default)
         mlayer, self._cursorl = self._menu.layers
         mlayer.scale(SCALE, SCALE)
         mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * pos))
         self._dl.append(self._menu.displaylist)
         self._cursorrad = 0.0
  
+    @property
+    def dl(self):
+        return self._dl
+
+    def active(self):
+        pass
+
     def input(self, event):
-        elif event.type == SDL_KEYDOWN:
+        if event.type == SDL_KEYDOWN:
             if event.key.keysym.sym == SDLK_UP:
                 self._menu.up()
             elif event.key.keysym.sym == SDLK_DOWN:
@@ -533,17 +552,17 @@ class PromptScreen()
             elif event.key.keysym.sym == SDLK_RETURN:
                 self._menu.activate_selection()
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                self._return(self._default)
+                self._return(None)
 
     def update(self, time):
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
 
-    def _activate(self, sel):
+    def _activate(self, priv, sel):
         self._return(sel)
 
     def _return(self, option):
         self._caller.set_option(option)
-        self._state.active_screen(caller)
+        self._state.active_screen(self._caller)
 
 
 class MapeditState():
