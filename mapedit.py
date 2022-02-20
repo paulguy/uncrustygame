@@ -10,6 +10,16 @@ import itertools
 import math
 import effects
 
+#TODO:
+# Attribute editor screen/associated attribute set/grab functions
+# Toggleable GUI status/help panels
+# Editor view scale option
+# plane/project Save/Load
+# Text tool using tilemap codec?
+# Block copy tool?
+# Multiple layers?
+# Preview of multiple layers with independent scale/scroll speed/center?
+
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
 # see what if any difference it makes
@@ -17,8 +27,6 @@ import effects
 RENDERBATCHING=True
 # enable tracing of display list processing
 TRACEVIDEO=False
-# enable tracing of audio sequencer processing
-TRACEAUDIO=True
 
 RES_WIDTH=1024
 RES_HEIGHT=768
@@ -482,7 +490,8 @@ class TileSelectScreen():
                     self._curx -= 1
                     self._update_cursor()
             elif event.key.keysym.sym == SDLK_RIGHT:
-                if self._cury * self._width + (self._curx + 1) < self._tiles:
+                if self._curx + 1 < self._width and \
+                   self._cury * self._width + (self._curx + 1) < self._tiles:
                     self._curx += 1
                     self._update_cursor()
             elif event.key.keysym.sym == SDLK_a:
