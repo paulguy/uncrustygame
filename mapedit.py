@@ -11,13 +11,13 @@ import math
 import effects
 
 #TODO:
-# Attribute editor screen/associated attribute set/grab functions
 # Toggleable GUI status/help panels
 # Editor view scale option
 # plane/project Save/Load
 # Text tool using tilemap codec?
-# Block copy tool?
+# Block copy/fill tool?
 # Multiple layers?
+# resizing tilemaps?
 # Preview of multiple layers with independent scale/scroll speed/center?
 
 # debugging options
@@ -286,6 +286,9 @@ class EditScreen():
         self._green = 255
         self._blue = 255
         self._alpha = SDL_ALPHA_OPAQUE
+        self._hflip = 0
+        self._vflip = 0
+        self._rotate = cg.TILEMAP_ROTATE_NONE
 
     @property
     def dl(self):
@@ -323,10 +326,12 @@ class EditScreen():
         self._height = int(h)
         self._twidth = int(tw)
         self._theight = int(th)
+        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+        self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
         self._dl = display.DisplayList(self._state.ll)
         self._tilemap = array.array('I', itertools.repeat(0, self._width * self._height))
-        self._flags = copy.copy(self._tilemap)
-        self._colormod = array.array('I', itertools.repeat(display.make_color(self._red, self._green, self._blue, self._alpha), self._width * self._height))
+        self._flags = array.array('I', itertools.repeat(self._attrib, self._width * self._height))
+        self._colormod = array.array('I', itertools.repeat(self._color, self._width * self._height))
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
         self._dl.append(self._stm.layer)
@@ -361,7 +366,8 @@ class EditScreen():
                     self._update_cursor()
             elif event.key.keysym.sym == SDLK_SPACE:
                     self._tilemap[self._cury * self._width + self._curx] = self._tile
-                    self._colormod[self._cury * self._width + self._curx] = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._colormod[self._cury * self._width + self._curx] = self._color
+                    self._flags[self._cury * self._width + self._curx] = self._attrib
                     self._stm.updateregion(self._curx, self._cury, 1, 1)
             elif event.key.keysym.sym == SDLK_KP_PLUS:
                 val = self._tilemap[self._cury * self._width + self._curx] + 1
@@ -383,13 +389,75 @@ class EditScreen():
                     self._state.active_screen(TileSelectScreen)
             elif event.key.keysym.sym == SDLK_c:
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
-                    self._red, self._green, self._blue, self._alpha = display.unmake_color(self._colormod[self._cury * self._width + self._curx])
+                    self._color = self._colormod[self._cury * self._width + self._curx]
+                    self._red, self._green, self._blue, self._alpha = display.unmake_color(self._color)
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._colormod[self._cury * self._width + self._curx] = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._colormod[self._cury * self._width + self._curx] = self._color
                     self._stm.updateregion(self._curx, self._cury, 1, 1)
                 else:
                     colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
                     self._state.active_screen(colorpicker)
+            elif event.key.keysym.sym == SDLK_b:
+                if event.key.keysym.mod & KMOD_SHIFT != 0:
+                    self._attrib = self._flags[self._cury * self._width + self._curx]
+                    self._hflip, self._vflip, self._rotate = display.unmake_attrib(self._attrib)
+                elif event.key.keysym.mod & KMOD_CTRL != 0:
+                    self._flags[self._cury * self._width + self._curx] = self._attrib
+                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+            elif event.key.keysym.sym == SDLK_t:
+                if self._hflip == 0:
+                    self._hflip = cg.TILEMAP_HFLIP_MASK
+                else:
+                    self._hflip = 0
+                self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+            elif event.key.keysym.sym == SDLK_y:
+                if self._vflip == 0:
+                    self._vflip = cg.TILEMAP_VFLIP_MASK
+                else:
+                    self._vflip = 0
+                self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+            elif event.key.keysym.sym == SDLK_r:
+                if self._rotate == cg.TILEMAP_ROTATE_NONE:
+                    self._rotate = cg.TILEMAP_ROTATE_90
+                elif self._rotate == cg.TILEMAP_ROTATE_90:
+                    self._rotate = cg.TILEMAP_ROTATE_180
+                elif self._rotate == cg.TILEMAP_ROTATE_180:
+                    self._rotate = cg.TILEMAP_ROTATE_270
+                else:
+                    self._rotate = cg.TILEMAP_ROTATE_NONE
+                self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+            elif event.key.keysym.sym == SDLK_q:
+                if self._red < 255:
+                    self._red += 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_a:
+                if self._red > 0:
+                    self._red -= 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_w:
+                if self._green < 255:
+                    self._green += 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_s:
+                if self._green > 0:
+                    self._green -= 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_e:
+                if self._blue < 255:
+                    self._blue += 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_d:
+                if self._blue > 0:
+                    self._blue -= 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_x:
+                if self._alpha < 255:
+                    self._alpha += 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+            elif event.key.keysym.sym == SDLK_z:
+                if self._alpha > 0:
+                    self._alpha -= 1
+                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
                 self._state.active_screen(prompt)
@@ -406,6 +474,7 @@ class EditScreen():
         self._green = green
         self._blue = blue
         self._alpha = alpha
+        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
 
 class TileSelectScreen():
     NAME='tileselect'

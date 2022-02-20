@@ -117,6 +117,14 @@ def unmake_color(color):
            (int(color) & cg.TILEMAP_BMASK) >> cg.TILEMAP_BSHIFT, \
            (int(color) & cg.TILEMAP_AMASK) >> cg.TILEMAP_ASHIFT
 
+def make_attrib(hflip, vflip, rotate):
+    return hflip | vflip | rotate
+
+def unmake_attrib(attrib):
+    return attrib & cg.TILEMAP_HFLIP_MASK, \
+           attrib & cg.TILEMAP_VFLIP_MASK, \
+           attrib & cg.TILEMAP_ROTATE_MASK
+
 def setdest(ll, dest):
     if isinstance(dest, cg.Tileset):
         ll.target_tileset(dest)
