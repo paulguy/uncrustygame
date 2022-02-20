@@ -56,7 +56,7 @@ def wrap_text(text, w, h):
                         break
                 # try not to add leading spaces to the beginning of a line
                 if len(line) == 0:
-                    if text[spc+1] == ' ':
+                    if text[spc] == ' ':
                         spc += 1
                         continue
                 line = line + text[spc:spc+spc2 + 1]
