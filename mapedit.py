@@ -395,7 +395,7 @@ class EditScreen():
         self._state.add_screen(TileSelectScreen)
         selectscreen = self._state.get_screen(TileSelectScreen)
         selectscreen.tileset(ts, self._twidth, self._theight)
-        helptext, _, width, height = textbox.wrap_text("h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSpace - Place\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nCTRL+c - Place Color\nSHIFT+c - Grab Color\nv - Open Tile Picker\nCTRL+v - Place Tile\nSHIFT+v - Grab Tile\nCTRL+b\n  Place Attributes\nSHIFT+b\n  Grab Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip", self._tw, self._th)
+        helptext, _, width, height = textbox.wrap_text("h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSpace - Place\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", self._tw, self._th)
         # this will eventually have a bit more style but for now just fill it
         # with black
         self._sbwidth = width + 2
