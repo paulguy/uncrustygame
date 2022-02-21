@@ -305,6 +305,10 @@ class EditScreen():
         self._hflip = 0
         self._vflip = 0
         self._rotate = cg.TILEMAP_ROTATE_NONE
+        self._drawing = False
+        self._puttile = False
+        self._putcolor = False
+        self._putattrib = False
 
     @property
     def dl(self):
@@ -413,31 +417,48 @@ class EditScreen():
         self._dl.append(lambda: self._sbtext.layer.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
         self._dl.append(self._sbtext.layer)
 
+    def _check_drawing(self):
+        if self._drawing:
+            self._tilemap[self._cury * self._width + self._curx] = self._tile
+            self._colormod[self._cury * self._width + self._curx] = self._color
+            self._flags[self._cury * self._width + self._curx] = self._attrib
+        else:
+            if self._puttile:
+                self._tilemap[self._cury * self._width + self._curx] = self._tile
+            if self._putcolor:
+                self._colormod[self._cury * self._width + self._curx] = self._color
+            if self._putattrib:
+                self._flags[self._cury * self._width + self._curx] = self._attrib
+        if self._drawing or self._puttile or self._putcolor or self._putattrib:
+            self._stm.updateregion(self._curx, self._cury, 1, 1)
+
     def input(self, event):
         if event.type == SDL_KEYDOWN:
             if event.key.keysym.sym == SDLK_UP:
                 if self._cury > 0:
                     self._cury -= 1
                     self._update_cursor()
+                    self._check_drawing()
             elif event.key.keysym.sym == SDLK_DOWN:
                 if self._cury < self._height - 1:
                     self._cury += 1
                     self._update_cursor()
+                    self._check_drawing()
             elif event.key.keysym.sym == SDLK_LEFT:
                 if self._curx > 0:
                     self._curx -= 1
                     self._update_cursor()
                     self._update_sidebar()
+                    self._check_drawing()
             elif event.key.keysym.sym == SDLK_RIGHT:
                 if self._curx < self._width - 1:
                     self._curx += 1
                     self._update_cursor()
                     self._update_sidebar()
+                    self._check_drawing()
             elif event.key.keysym.sym == SDLK_SPACE:
-                    self._tilemap[self._cury * self._width + self._curx] = self._tile
-                    self._colormod[self._cury * self._width + self._curx] = self._color
-                    self._flags[self._cury * self._width + self._curx] = self._attrib
-                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+                self._drawing = True
+                self._check_drawing()
             elif event.key.keysym.sym == SDLK_KP_PLUS:
                 val = self._tilemap[self._cury * self._width + self._curx] + 1
                 if val < self._tiles:
@@ -452,8 +473,8 @@ class EditScreen():
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._tile = self._tilemap[self._cury * self._width + self._curx]
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._tilemap[self._cury * self._width + self._curx] = self._tile
-                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+                    self._puttile = True
+                    self._check_drawing()
                 else:
                     self._state.active_screen(TileSelectScreen)
             elif event.key.keysym.sym == SDLK_c:
@@ -461,8 +482,8 @@ class EditScreen():
                     self._color = self._colormod[self._cury * self._width + self._curx]
                     self._red, self._green, self._blue, self._alpha = display.unmake_color(self._color)
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._colormod[self._cury * self._width + self._curx] = self._color
-                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+                    self._putcolor = True
+                    self._check_drawing()
                 else:
                     colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
                     self._state.active_screen(colorpicker)
@@ -471,8 +492,8 @@ class EditScreen():
                     self._attrib = self._flags[self._cury * self._width + self._curx]
                     self._hflip, self._vflip, self._rotate = display.unmake_attrib(self._attrib)
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._flags[self._cury * self._width + self._curx] = self._attrib
-                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+                    self._putattrib = True
+                    self._check_drawing()
             elif event.key.keysym.sym == SDLK_t:
                 if self._hflip == 0:
                     self._hflip = cg.TILEMAP_HFLIP_MASK
@@ -487,11 +508,17 @@ class EditScreen():
                 self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
             elif event.key.keysym.sym == SDLK_r:
                 if self._rotate == cg.TILEMAP_ROTATE_NONE:
-                    self._rotate = cg.TILEMAP_ROTATE_90
+                    if self._twidth == self._theight:
+                        self._rotate = cg.TILEMAP_ROTATE_90
+                    else:
+                        self._rotate = cg.TILEMAP_ROTATE_180
                 elif self._rotate == cg.TILEMAP_ROTATE_90:
                     self._rotate = cg.TILEMAP_ROTATE_180
                 elif self._rotate == cg.TILEMAP_ROTATE_180:
-                    self._rotate = cg.TILEMAP_ROTATE_270
+                    if self._twidth == self._theight:
+                        self._rotate = cg.TILEMAP_ROTATE_270
+                    else:
+                        self._rotate = cg.TILEMAP_ROTATE_NONE
                 else:
                     self._rotate = cg.TILEMAP_ROTATE_NONE
                 self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
@@ -530,6 +557,15 @@ class EditScreen():
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
                 self._state.active_screen(prompt)
+        elif event.type == SDL_KEYUP:
+            if event.key.keysym.sym == SDLK_SPACE:
+                self._drawing = False
+            elif event.key.keysym.sym == SDLK_c:
+                self._putcolor = False
+            elif event.key.keysym.sym == SDLK_v:
+                self._puttile = False
+            elif event.key.keysym.sym == SDLK_b:
+                self._putattrib = False
 
     def update(self, time):
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
