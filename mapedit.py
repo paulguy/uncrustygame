@@ -36,7 +36,7 @@ TEXT_WIDTH=8
 TEXT_HEIGHT=8
 SCALE=2.0
 ERROR_TIME=10.0
-SIDEBAR_COLOR=display.make_color(0, 0, 0, 192)
+SIDEBAR_COLOR=display.make_color(255, 255, 255, 96)
 
 TEXT_SCALED_WIDTH=TEXT_WIDTH * SCALE
 TEXT_SCALED_HEIGHT=TEXT_HEIGHT * SCALE
@@ -400,9 +400,10 @@ class EditScreen():
         # with black
         self._sbwidth = width + 2
         sbtm = array.array('u', itertools.repeat('█', self._sbwidth * self._th)).tounicode().encode('crusty_text')
-        sbcm = array.array('I', itertools.repeat(SIDEBAR_COLOR, self._sbwidth * self._th))
-        self._sidebar = display.ScrollingTilemap(tstext, sbtm, self._sbwidth, self._th, self._sbwidth, self._th, TEXT_WIDTH, TEXT_HEIGHT, colormod=sbcm)
+        self._sidebar = display.ScrollingTilemap(tstext, sbtm, self._sbwidth, self._th, self._sbwidth, self._th, TEXT_WIDTH, TEXT_HEIGHT)
         self._sidebar.layer.scale(SCALE, SCALE)
+        self._sidebar.layer.colormod(SIDEBAR_COLOR)
+        self._sidebar.layer.blendmode(cg.TILEMAP_BLENDMODE_SUB)
         self._sidebar.layer.pos(int((self._tw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
         self._dl.append(self._sidebar.layer)
         self._sbpos = 1
