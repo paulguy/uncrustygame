@@ -79,7 +79,7 @@ def update_cursor(stm, cursorl, vw, vh, mw, mh, tw, th, x, y):
     halfh = vh // 2
     if mw > vw:
         if x > halfw:
-            if x < mw - halfw:
+            if x <= mw - halfw:
                 xscroll = x - halfw
                 x = halfw
                 xpos = 0
@@ -92,7 +92,7 @@ def update_cursor(stm, cursorl, vw, vh, mw, mh, tw, th, x, y):
             xpos = 1
     if mh > vh:
         if y > halfh:
-            if y < mh - halfh:
+            if y <= mh - halfh:
                 yscroll = y - halfh
                 y = halfh
                 ypos = 0
@@ -169,21 +169,18 @@ class Sidebar():
         self._dl.append(lambda: self._sbtext.layer.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
         self._dl.append(self._sbtext.layer)
 
-    def set_map_width(self, mw):
-        self._mw = mw
-
     @property
     def dl(self):
         return self._dl
 
-    def update(self, curpos, curx):
-        if self._mw * self._tw * SCALE < RES_WIDTH:
-            if self._mw * self._tw * SCALE < RES_WIDTH - (self._sbwidth * TEXT_SCALED_WIDTH):
+    def update(self, curpos, curx, mw):
+        if mw * self._tw * SCALE <= RES_WIDTH:
+            if mw * self._tw * SCALE < RES_WIDTH - (self._sbwidth * TEXT_SCALED_WIDTH):
                 self._sidebar.layer.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
                 self._sbpos = 1
             else:
                 if self._sbpos == 1 and \
-                   curx * self._tw * SCALE > RES_WIDTH - (self._sbwidth * TEXT_SCALED_WIDTH):
+                   curx * self._tw * SCALE >= RES_WIDTH - (self._sbwidth * TEXT_SCALED_WIDTH):
                     self._sidebar.layer.pos(0, 0)
                     self._sbpos = -1
                 elif self._sbpos == -1 and \
@@ -410,7 +407,7 @@ class EditScreen():
                          flags=self._flags, colormod=self._colormod)
 
     def _update_sidebar(self):
-        self._sidebar.update(self._curpos, self._curx)
+        self._sidebar.update(self._curpos, self._curx, self._mw)
 
     def tilemap(self, ts, vw, vh, mw, mh, tw, th):
         self._tileset = self._state.tileset(ts)
@@ -662,7 +659,7 @@ class TileSelectScreen():
         self._update_cursor()
 
     def _update_sidebar(self):
-        self._sidebar.update(self._curpos, self._curx)
+        self._sidebar.update(self._curpos, self._curx, self._mw)
 
     def tileset(self, ts, vw, vh, tw, th):
         self._tileset = self._state.tileset(ts)
