@@ -1604,7 +1604,7 @@ int tilemap_set_layer_window(LayerList *ll,
     }
 
     if(w > l->boundw || h > l->boundh) {
-        LOG_PRINTF(ll, "%s: Layer window out of range.\n", l->name);
+        LOG_PRINTF(ll, "%s: Layer window out of range. (%u > %u) or (%u > %u)\n", l->name, w, l->boundw, h, l->boundh);
         return(-1);
     }
  

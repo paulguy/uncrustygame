@@ -137,18 +137,20 @@ def load_tileset_codec(f, name):
         lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codec))
 
 class TextBox():
-    def __init__(self, w, h, vw, vh, ts, codec, debug=False):
+    def __init__(self, vw, vh, mw, mh, tw, th, ts, codec, debug=False):
         if array.array('u').itemsize != 4:
             raise Exception("Unicode array item size must be 4 bytes wide.")
         self._debug = debug
         self._ts = ts
         self._codec = codec
-        self._w = int(w)
-        self._h = int(h)
         self._vw = int(vw)
         self._vh = int(vh)
-        self._tm = array.array('I', itertools.repeat(ord(' '), self._w * self._h))
-        self._stm = display.ScrollingTilemap(self._ts, self._tm, self._w, self._h, self._vw, self._vh, 8, 8)
+        self._mw = int(mw)
+        self._mh = int(mh)
+        self._tw = int(tw)
+        self._th = int(th)
+        self._tm = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
+        self._stm = display.ScrollingTilemap(self._ts, self._tm, self._vw, self._vh, self._mw, self._mh, self._tw, self._th)
         self._l = self._stm.layer
 
     @property
@@ -163,8 +165,8 @@ class TextBox():
     def put_text(self, lines, x, y):
         x = int(x)
         y = int(y)
-        w = self._w - x
-        h = self._h - y
+        w = self._mw - x
+        h = self._mh - y
         for num, line in enumerate(lines):
             if len(line) > 0:
                 if isinstance(line, str):
@@ -176,18 +178,18 @@ class TextBox():
                 if len(line) > w:
                     if self._debug:
                         print("WARNING: Text box line cut off {} + len(\"{}\") > {}".format(x, line, w))
-                    self._tm[(y+num)*self._w+x:(y+num)*self._w+x+w] = \
+                    self._tm[(y+num)*self._mw+x:(y+num)*self._mw+x+w] = \
                         line[:w]
                     self._stm.updateregion(x, y+num, w, 1)
                 else:
-                    self._tm[(y+num)*self._w+x:(y+num)*self._w+x+len(line)] = \
+                    self._tm[(y+num)*self._mw+x:(y+num)*self._mw+x+len(line)] = \
                         line
                     self._stm.updateregion(x, y+num, len(line), 1)
 
     def put_char(self, char, x, y):
         if isinstance(char, str):
             char = char.encode(self._codec)
-        self._tm[y*self._w+x] = char
+        self._tm[y*self._mw+x] = char
         self._stm.updateregion(x, y, 1, 1)
 
     def scroll(self, x, y):
@@ -207,14 +209,14 @@ class MenuItem():
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ll, ts, codec, tw, th, width, priv, spacing=1):
+    def __init__(self, ll, ts, codec, tw, th, vw, priv, spacing=1):
         self._ll = ll
         self._ts = ts
         self._space = array.array('I', ' '.encode(codec))[0]
         self._codec = codec
         self._tw = int(tw)
         self._th = int(th)
-        self._width = int(width)
+        self._vw = int(vw)
         self._priv = priv
         self._spacing = spacing
         self._entries = []
@@ -241,7 +243,7 @@ class Menu():
 
     @property
     def dimensions(self):
-        return self._width * self._tw, \
+        return self._vw * self._tw, \
                (self._h * (self._th * self._spacing - 1)) + \
                (self._h * self._th)
 
@@ -258,7 +260,7 @@ class Menu():
             raise Exception("Editing the menu while text editing is unsupported.")
         if onEnter != None and onActivate != None:
             raise ValueError("Only one of onEnter and onActivate must be defined")
-        if len(label) > self._width - 1:
+        if len(label) > self._vw - 1:
             raise ValueError("Label length longer than menu width.")
 
         if value is not None:
@@ -313,7 +315,7 @@ class Menu():
             if len(entry.label) > self._longestlabel:
                 self._longestlabel = len(entry.label)
 
-        valuelen = self._width - 1 - 1 - self._longestlabel - 1
+        valuelen = self._vw - 1 - 1 - self._longestlabel - 1
         if valuelen <= 0:
             for entry in self._entries:
                 if entry.value is not None:
@@ -328,6 +330,7 @@ class Menu():
                                ((self._h - 1) * self._spacing) + 1,
                                1 + self._w,
                                ((self._h - 1) * self._spacing) + 1,
+                               self._tw, self._th,
                                self._ts, self._codec, debug=True)
             self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
             self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._codec)))
@@ -358,7 +361,10 @@ class Menu():
                 entry.width = entry.maxlen
                 if entry.width > valuelen:
                     entry.width = valuelen
-                self._valtbs[num] = TextBox(entry.maxlen, 1, entry.width, 1, self._ts, self._codec)
+                self._valtbs[num] = TextBox(entry.width, 1,
+                                            entry.maxlen, 1,
+                                            self._tw, self._th,
+                                            self._ts, self._codec)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
                 self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
