@@ -11,13 +11,15 @@ import math
 import effects
 
 #TODO:
+# finish statusbar
 # Editor view scale option
+# Block copy/fill tool
+# Text tool using tilemap codec
+# Multiple layers
 # plane/project Save/Load
-# Text tool using tilemap codec?
-# Block copy/fill tool?
-# Multiple layers?
 # resizing tilemaps?
 # Preview of multiple layers with independent scale/scroll speed/center?
+# mouse support?
 
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
@@ -439,7 +441,7 @@ class EditScreen():
         self._state.add_screen(TileSelectScreen)
         selectscreen = self._state.get_screen(TileSelectScreen)
         selectscreen.tileset(ts, self._vw, self._vh, self._tw, self._th)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSpace - Place\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", self._vw, self._vh, self._mw, self._tw)
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", self._vw, self._vh, self._mw, self._tw)
         self._sidebarindex = self._dl.append(self._sidebar.dl)
 
     def _check_drawing(self):
@@ -482,8 +484,13 @@ class EditScreen():
                     self._update_sidebar()
                     self._check_drawing()
             elif event.key.keysym.sym == SDLK_SPACE:
-                self._drawing = True
-                self._check_drawing()
+                if event.key.keysym.mod & KMOD_SHIFT != 0:
+                    self._tile = self._tilemap[self._cury * self._mw + self._curx]
+                    self._color = self._colormod[self._cury * self._mw + self._curx]
+                    self._attrib = self._flags[self._cury * self._mw + self._curx]
+                else:
+                    self._drawing = True
+                    self._check_drawing()
             elif event.key.keysym.sym == SDLK_KP_PLUS:
                 val = self._tilemap[self._cury * self._mw + self._curx] + 1
                 if val < self._tiles:
