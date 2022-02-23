@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from sdl2 import *
 import crustygame as cg
 import array
@@ -16,9 +17,9 @@ import effects
 # Block copy/fill tool
 # Text tool using tilemap codec
 # Multiple layers
+# Preview of multiple layers with independent scale/scroll speed/center
 # plane/project Save/Load
 # resizing tilemaps?
-# Preview of multiple layers with independent scale/scroll speed/center?
 # mouse support?
 
 # debugging options

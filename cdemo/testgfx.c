@@ -115,7 +115,7 @@ int load_graphic(LayerList *ll,
     }
     /* create a layer if needed */
     if(*layer < 0) {
-        *layer = tilemap_add_layer(ll, *tilemap, name);
+        *layer = tilemap_add_layer(ll, *tilemap, NULL, name);
         if(*layer < 0) {
             fprintf(stderr, "Failed to create layer.\n");
             return(-1);
@@ -138,7 +138,7 @@ int create_sprite(LayerList *ll,
                   const char *name) {
     int sprite;
 
-    sprite = tilemap_add_layer(ll, spritemap, name);
+    sprite = tilemap_add_layer(ll, spritemap, NULL, name);
     if(sprite < 0) {
         fprintf(stderr, "Failed to add layer for sprite.\n");
         return(-1);

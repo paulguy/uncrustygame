@@ -599,6 +599,10 @@ int process_enemies(GameState *gs) {
            distance(gs->catx, gs->caty,
                     gs->enemy[i].x, gs->enemy[i].y) < CAT_DISTANCE) {
             /* despawn eaten enemy */
+            if(tilemap_free_layer(gs->ll, gs->enemy[i].sprite) < 0) {
+                fprintf(stderr, "Failed to free sprite.\n");
+                return(-1);
+            }
             gs->enemy[i].sprite = -1;
             gs->eating = gs->enemy[i].eatTime;
             gs->score += gs->enemy[i].value;
@@ -681,6 +685,10 @@ int process_enemies(GameState *gs) {
                gs->enemy[i].x > WINDOW_WIDTH + (SCALED_SPRITE_DIM / 2.0) ||
                gs->enemy[i].y < -(SCALED_SPRITE_DIM / 2.0) ||
                gs->enemy[i].y > WINDOW_HEIGHT + (SCALED_SPRITE_DIM / 2.0)) {
+                if(tilemap_free_layer(gs->ll, gs->enemy[i].sprite) < 0) {
+                    fprintf(stderr, "Failed to free sprite.\n");
+                    return(-1);
+                }
                 gs->enemy[i].sprite = -1;
                 continue;
             }
@@ -734,10 +742,30 @@ int draw_enemies(GameState *gs) {
     return(0);
 }
 
-void reset_state(GameState *gs) {
+void init_sprite_list(GameState *gs) {
     unsigned int i;
 
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        gs->enemy[i].sprite = -1;
+    }
+}
+
+void free_sprites(GameState *gs) {
+    unsigned int i;
+
+    for(i = 0; i < MAX_ENEMIES; i++) {
+        if(gs->enemy[i].sprite >= 0) {
+            if(tilemap_free_layer(gs->ll, gs->enemy[i].sprite) < 0) {
+                fprintf(stderr, "Failed to free sprite.\n");
+            }
+            gs->enemy[i].sprite = -1;
+        }
+    }
+}
+
+void reset_state(GameState *gs) {
     stop_sound(gs->as, gs->catSound);
+    free_sprites(gs);
 
     gs->catx = (WINDOW_WIDTH - SCALED_SPRITE_DIM) / 2;
     gs->caty = (WINDOW_HEIGHT - SCALED_SPRITE_DIM) / 2;
@@ -754,9 +782,6 @@ void reset_state(GameState *gs) {
     gs->spawnerx = SPAWNERRAND(WINDOW_WIDTH);
     gs->spawnery = SPAWNERRAND(WINDOW_HEIGHT);
     gs->spawnerCount = 0;
-    for(i = 0; i < MAX_ENEMIES; i++) {
-        gs->enemy[i].sprite = -1;
-    }
     gs->score = 0;
 }
 
@@ -1367,6 +1392,7 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    init_sprite_list(&gs);
     reset_state(&gs);
     cbox = init_color_boxes(gs.ll, MAX_COLOR_BOX,
                             WINDOW_WIDTH, WINDOW_HEIGHT,
@@ -1533,6 +1559,8 @@ int main(int argc, char **argv) {
 
         SDL_RenderPresent(renderer);
     }
+
+    free_sprites(&gs);
 
     /* test cleanup functions */
     synth_free_player(s, gs.meat);
