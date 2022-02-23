@@ -57,7 +57,7 @@ def need_text(state):
 def put_centered_line(tb, line, y, mw):
     tb.put_text((line,), (mw - len(line)) / 2, y)
 
-def make_tilemap(vw, vh, mw, mh, tw, th, curx, cury, ts,
+def make_tilemap(vw, vh, mw, mh, curx, cury, ts,
                  tilemap, flags=None, colormod=None):
     if vw > mw:
         vw = mw
@@ -68,7 +68,7 @@ def make_tilemap(vw, vh, mw, mh, tw, th, curx, cury, ts,
     if cury >= mh:
         cury = mh - 1
     stm = display.ScrollingTilemap(ts, tilemap,
-                                   vw, vh, mw, mh, tw, th,
+                                   vw, vh, mw, mh,
                                    flags=flags,
                                    colormod=colormod)
     return curx, cury, stm
@@ -128,7 +128,7 @@ def make_cursor(state, curwidth, curheight, name):
         tm[((curheight + 1) * (curwidth + 2)) + x + 1] = '-'
     tm[((curheight + 1) * (curwidth + 2)) + curwidth + 1] = '+'
     cursortm.map(0, 0, curwidth + 2, curwidth + 2, curheight + 2, tm.tounicode().encode('crusty_text'))
-    cursortm.update(0, 0, 0, 0)
+    cursortm.update()
     return cursortm
 
 def update_cursor_effect(cursorrad, time, cursorl):
@@ -152,19 +152,21 @@ class Sidebar():
         helptext, _, width, height = textbox.wrap_text(text, self._vw, vh)
         self._sbwidth = width + 2
         sbtm = array.array('u', itertools.repeat('█', self._sbwidth * vh)).tounicode().encode('crusty_text')
-        self._sidebar = display.ScrollingTilemap(tstext, sbtm, self._sbwidth, vh, self._sbwidth, vh, TEXT_WIDTH, TEXT_HEIGHT)
-        self._sidebar.layer.scale(SCALE, SCALE)
-        self._sidebar.layer.colormod(Sidebar.SIDEBAR_COLOR)
-        self._sidebar.layer.blendmode(cg.TILEMAP_BLENDMODE_SUB)
-        self._sidebar.layer.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
-        self._dl.append(self._sidebar.layer)
+        sidebartm = tstext.tilemap(self._sbwidth, vh, "Sidebar")
+        sidebartm.map(0, 0, self._sbwidth, self._sbwidth, vh, sbtm)
+        sidebartm.update()
+        self._sidebarl = sidebartm.layer("Sidebar Layer")
+        self._sidebarl.scale(SCALE, SCALE)
+        self._sidebarl.colormod(Sidebar.SIDEBAR_COLOR)
+        self._sidebarl.blendmode(cg.TILEMAP_BLENDMODE_SUB)
+        self._sidebarl.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
+        self._dl.append(self._sidebarl)
         self._sbpos = 1
         self._sbtext = textbox.TextBox(width, height, width, height,
-                                       TEXT_WIDTH, TEXT_HEIGHT,
                                        tstext, 'crusty_text')
         self._sbtext.put_text(helptext, 0, 0)
         self._sbtext.layer.pos(TEXT_WIDTH, TEXT_HEIGHT)
-        self._sbtext.layer.relative(self._sidebar.layer)
+        self._sbtext.layer.relative(self._sidebarl)
         self._dl.append(lambda: self._sbtext.layer.pos(TEXT_WIDTH + 1, TEXT_HEIGHT + 1))
         self._dl.append(lambda: self._sbtext.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
         self._dl.append(self._sbtext.layer)
@@ -179,29 +181,29 @@ class Sidebar():
     def update(self, curpos, curx, mw):
         if mw * self._tw * SCALE <= RES_WIDTH:
             if mw * self._tw * SCALE < RES_WIDTH - (self._sbwidth * TEXT_SCALED_WIDTH):
-                self._sidebar.layer.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
+                self._sidebarl.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
                 self._sbpos = 1
             else:
                 if self._sbpos == 1 and \
                    curx * self._tw * SCALE >= RES_WIDTH - (self._sbwidth * TEXT_SCALED_WIDTH):
-                    self._sidebar.layer.pos(0, 0)
+                    self._sidebarl.pos(0, 0)
                     self._sbpos = -1
                 elif self._sbpos == -1 and \
                      curx * self._tw * SCALE < self._sbwidth * TEXT_SCALED_WIDTH:
-                    self._sidebar.layer.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
+                    self._sidebarl.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
                     self._sbpos = 1
         elif curpos != self._sbpos:
             if curpos < 0:
-                self._sidebar.layer.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
+                self._sidebarl.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
                 self._sbpos = 1
             elif curpos > 0:
-                self._sidebar.layer.pos(0, 0)
+                self._sidebarl.pos(0, 0)
                 self._sbpos = -1
             else:
                 if self._sbpos < 0:
-                    self._sidebar.layer.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
+                    self._sidebarl.pos(int((self._vw - self._sbwidth) * TEXT_SCALED_WIDTH), 0)
                 elif self._sbpos > 0:
-                    self._sidebar.layer.pos(0, 0)
+                    self._sidebarl.pos(0, 0)
                 self._sbpos = 0
 
 class NewScreen():
@@ -220,13 +222,12 @@ class NewScreen():
         need_text(self._state)
         tstext = self._state.tileset('ts_text')
         self._tb = textbox.TextBox(self._vw, 1, self._vw, 1,
-                                   TEXT_WIDTH, TEXT_HEIGHT,
                                    tstext, 'crusty_text')
         put_centered_line(self._tb, "New Tilemap", 0, self._vw)
         self._tb.layer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT))
         self._tb.layer.scale(SCALE, SCALE)
         self._dl.append(self._tb.layer)
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._vw - 2, None, spacing=2)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', self._vw - 2, None, spacing=2)
         self._menu.add_item("Tileset", value=self._filename, maxlen=255, onEnter=self._setname)
         self._menu.add_item("Tile Width", value=str(self._tw), maxlen=4, onEnter=self._settilewidth)
         self._menu.add_item("Tile Height", value=str(self._th), maxlen=4, onEnter=self._settileheight)
@@ -282,7 +283,6 @@ class NewScreen():
                     error = "Unknown error"
                 lines, _, w, h = textbox.wrap_text(error, TILES_WIDTH - 2, 10)
                 self._errorbox = textbox.TextBox(w, h, w, h,
-                                                 TEXT_WIDTH, TEXT_HEIGHT,
                                                  self._state.tileset('ts_text'), 'crusty_text')
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.pos(int(TEXT_SCALED_WIDTH), int((TILES_HEIGHT - h - 1) * TEXT_SCALED_HEIGHT))
@@ -352,8 +352,7 @@ class NewScreen():
             self._state.add_screen(EditScreen)
             editscreen = self._state.get_screen(EditScreen)
         editscreen.tilemap('ts_tm0', self._vw, self._vh,
-                                     self._mw, self._mh,
-                                     self._tw, self._th)
+                                     self._mw, self._mh)
         self._state.active_screen(EditScreen)
 
 class EditScreen():
@@ -404,7 +403,6 @@ class EditScreen():
         self._curx, self._cury, self._stm = \
             make_tilemap(self._vw, self._vh,
                          self._mw, self._mh,
-                         self._tw, self._th,
                          0, 0,
                          self._tileset, self._tilemap,
                          flags=self._flags, colormod=self._colormod)
@@ -412,15 +410,15 @@ class EditScreen():
     def _update_sidebar(self):
         self._sidebar.update(self._curpos, self._curx, self._mw)
 
-    def tilemap(self, ts, vw, vh, mw, mh, tw, th):
+    def tilemap(self, ts, vw, vh, mw, mh):
         self._tileset = self._state.tileset(ts)
         self._tiles = self._tileset.tiles()
         self._vw = int(vw)
         self._vh = int(vh)
         self._mw = int(mw)
         self._mh = int(mh)
-        self._tw = int(tw)
-        self._th = int(th)
+        self._tw = self._tileset.width()
+        self._th = self._tileset.height()
         need_text(self._state)
         tstext = self._state.tileset('ts_text')
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
@@ -441,8 +439,8 @@ class EditScreen():
         self._dl.append(self._cursorl)
         self._state.add_screen(TileSelectScreen)
         selectscreen = self._state.get_screen(TileSelectScreen)
-        selectscreen.tileset(ts, self._vw, self._vh, self._tw, self._th)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", self._vw, self._vh, self._mw, self._tw)
+        selectscreen.tileset(ts, self._vw, self._vh)
+        self._sidebar = Sidebar(self._state, "Tile:\n\n\nR:    G:    B:\nVF:  HF:  R:\nh - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", self._vw, self._vh, self._mw, self._tw)
         self._sidebarindex = self._dl.append(self._sidebar.dl)
 
     def _check_drawing(self):
@@ -518,7 +516,7 @@ class EditScreen():
                     self._putcolor = True
                     self._check_drawing()
                 else:
-                    colorpicker = ColorPickerScreen(self._state, self, self._red, self._green, self._blue, self._alpha)
+                    colorpicker = ColorPickerScreen(self._state, self, self._vw, self._red, self._green, self._blue, self._alpha)
                     self._state.active_screen(colorpicker)
             elif event.key.keysym.sym == SDLK_b:
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
@@ -655,7 +653,6 @@ class TileSelectScreen():
         self._curx, self._cury, self._stm = \
             make_tilemap(self._vw, self._vh,
                          self._mw, self._mh,
-                         self._tw, self._th,
                          self._curx, self._cury,
                          self._tileset, tilemap,
                          colormod=colormod)
@@ -669,7 +666,7 @@ class TileSelectScreen():
     def _update_sidebar(self):
         self._sidebar.update(self._curpos, self._curx, self._mw)
 
-    def tileset(self, ts, vw, vh, tw, th):
+    def tileset(self, ts, vw, vh):
         self._tileset = self._state.tileset(ts)
         self._tiles = self._tileset.tiles()
         self._scale = 2.0
@@ -682,8 +679,8 @@ class TileSelectScreen():
         self._vh = int(vh)
         self._mw = side
         self._mh = side
-        self._tw = int(tw)
-        self._th = int(th)
+        self._tw = self._tileset.width()
+        self._th = self._tileset.height()
         self._dl = display.DisplayList(self._state.ll)
         curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH)
         curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT)
@@ -763,32 +760,30 @@ class PromptScreen():
         self._state = state
         self._caller = caller
         self._default = default
-        self._tw = TILES_WIDTH
-        self._th = TILES_HEIGHT
+        self._vw = TILES_WIDTH
+        self._vh = TILES_HEIGHT
         self._dl = display.DisplayList(self._state.ll)
         pos = 1
         need_text(self._state)
         tstext = self._state.tileset('ts_text')
-        text, _, w, h = textbox.wrap_text(title, self._tw - 2, 2)
-        self._title = textbox.TextBox(self._tw, h, self._tw, h,
-                                      TEXT_WIDTH, TEXT_HEIGHT,
+        text, _, w, h = textbox.wrap_text(title, self._vw - 2, 2)
+        self._title = textbox.TextBox(self._vw, h, self._vw, h,
                                       tstext, 'crusty_text')
         self._title.layer.scale(SCALE, SCALE)
         self._title.layer.pos(int(TEXT_SCALED_WIDTH), int(pos * TEXT_SCALED_HEIGHT))
         for num, line in enumerate(text):
-            put_centered_line(self._title, line, num, self._tw - 2)
+            put_centered_line(self._title, line, num, self._vw - 2)
         self._dl.append(self._title.layer)
         pos += h + 1
-        text, _, w, h = textbox.wrap_text(message, self._tw - 2, 5)
+        text, _, w, h = textbox.wrap_text(message, self._vw - 2, 5)
         self._message = textbox.TextBox(w, h, w, h,
-                                        TEXT_WIDTH, TEXT_HEIGHT,
                                         tstext, 'crusty_text')
         self._message.put_text(text, 0, 0)
         self._message.layer.scale(SCALE, SCALE)
         self._message.layer.pos(int(TEXT_SCALED_WIDTH), int(pos * TEXT_SCALED_HEIGHT))
         self._dl.append(self._message.layer)
         pos += h + 1
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, None)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', self._vw - 2, None)
         for opt in options:
             self._menu.add_item(opt, onActivate=self._activate)
         self._menu.update()
@@ -830,26 +825,23 @@ class PromptScreen():
 class ColorPickerScreen():
     NAME='colorpicker'
 
-    def __init__(self, state, caller, red=0, green=0, blue=0, alpha=SDL_ALPHA_OPAQUE):
+    def __init__(self, state, caller, vw, red=0, green=0, blue=0, alpha=SDL_ALPHA_OPAQUE):
         self._state = state
         self._caller = caller
         self._red = red
         self._green = green
         self._blue = blue
         self._alpha = alpha
-        self._tw = TILES_WIDTH
-        self._th = TILES_HEIGHT
         self._dl = display.DisplayList(self._state.ll)
         need_text(self._state)
         tstext = self._state.tileset('ts_text')
-        self._title = textbox.TextBox(self._tw, 1, self._tw, 1,
-                                      TEXT_WIDTH, TEXT_HEIGHT,
+        self._title = textbox.TextBox(vw, 1, vw, 1,
                                       tstext, 'crusty_text')
         self._title.layer.scale(SCALE, SCALE)
         self._title.layer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT))
-        put_centered_line(self._title, "Pick Color", 0, self._tw - 2)
+        put_centered_line(self._title, "Pick Color", 0, vw - 2)
         self._dl.append(self._title.layer)
-        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', TEXT_WIDTH, TEXT_HEIGHT, self._tw - 2, None, spacing=2)
+        self._menu = textbox.Menu(self._state.ll, tstext, 'crusty_text', vw - 2, None, spacing=2)
         self._menu.add_item("Red", value=str(self._red), maxlen=3, onEnter=self.setred, onChange=self.changered)
         self._menu.add_item("Green", value=str(self._green), maxlen=3, onEnter=self.setgreen, onChange=self.changegreen)
         self._menu.add_item("Blue", value=str(self._blue), maxlen=3, onEnter=self.setblue, onChange=self.changeblue)
@@ -860,16 +852,23 @@ class ColorPickerScreen():
         mlayer.scale(SCALE, SCALE)
         mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * 3))
         self._dl.append(self._menu.displaylist)
-        cbtm = array.array('u', itertools.repeat('█', 56)).tounicode().encode('crusty_text')
-        bgcm = array.array('I', itertools.repeat(display.make_color(85, 85, 85, SDL_ALPHA_OPAQUE), 56))
-        bgcm[1::2] = array.array('I', itertools.repeat(display.make_color(170, 170, 170, SDL_ALPHA_OPAQUE), 28))
-        self._colorbg = display.ScrollingTilemap(tstext, cbtm, 7, 8, 7, 8, TEXT_WIDTH, TEXT_HEIGHT, colormod=bgcm)
-        self._colorbg.layer.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
-        self._dl.append(self._colorbg.layer)
-        self._colorblock = display.ScrollingTilemap(tstext, cbtm, 7, 8, 7, 8, TEXT_WIDTH, TEXT_HEIGHT)
-        self._colorblock.layer.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
+        cbtm = array.array('u', itertools.repeat('█', 64)).tounicode().encode('crusty_text')
+        bgcm = array.array('I', itertools.repeat(display.make_color(85, 85, 85, SDL_ALPHA_OPAQUE), 72))
+        bgcm[1::2] = array.array('I', itertools.repeat(display.make_color(170, 170, 170, SDL_ALPHA_OPAQUE), 36))
+        colorbgtm = tstext.tilemap(8, 8, "Color Picker Checker BG")
+        colorbgtm.map(0, 0, 8, 8, 8, cbtm)
+        colorbgtm.attr_colormod(0, 0, 9, 8, 8, bgcm)
+        colorbgtm.update()
+        colorbgl = colorbgtm.layer("Color Picker Checker BG Layer")
+        colorbgl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
+        self._dl.append(colorbgl)
+        colortm = tstext.tilemap(8, 8, "Color Picker Color")
+        colortm.map(0, 0, 8, 8, 8, cbtm)
+        colortm.update()
+        self._colorl = colortm.layer("Color Picker Color Layer")
+        self._colorl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
         self._update_color()
-        self._dl.append(self._colorblock.layer)
+        self._dl.append(self._colorl)
         self._cursorrad = 0.0
  
     @property
@@ -904,7 +903,7 @@ class ColorPickerScreen():
         self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
 
     def _update_color(self):
-        self._colorblock.layer.colormod(display.make_color(self._red, self._green, self._blue, self._alpha))
+        self._colorl.colormod(display.make_color(self._red, self._green, self._blue, self._alpha))
 
     def setred(self, priv, sel, val):
         try:

@@ -243,7 +243,7 @@ class ScrollingTilemap():
     NOSCROLL_X = 1 << 0
     NOSCROLL_Y = 1 << 1
 
-    def __init__(self, tileset, tilemap, vw, vh, mw, mh, tw, th, startx = 0, starty = 0, flags=None, colormod=None, optimize=False, debug=False):
+    def __init__(self, tileset, tilemap, vw, vh, mw, mh, startx = 0, starty = 0, flags=None, colormod=None, optimize=False, debug=False):
         noscroll = 0
         if vw == mw:
             noscroll |= ScrollingTilemap.NOSCROLL_X
@@ -256,13 +256,13 @@ class ScrollingTilemap():
             ScrollingTilemap.NOSCROLL_Y):
             print("WARNING: No scroll in either direction, suggest using a normal tilemap.")
         self._tilemap = tilemap
+        self._tw = tileset.width()
+        self._th = tileset.height()
         self._flags = flags
         self._colormod = colormod
         self._optimize = optimize
         self._mw = int(mw)
         self._mh = int(mh)
-        self._tw = int(tw)
-        self._th = int(th)
         self._vw = int(vw)
         self._vh = int(vh)
         self._vmw = self._vw

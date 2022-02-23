@@ -651,6 +651,24 @@ int tilemap_tileset_tiles(LayerList *ll, unsigned int index) {
     return(ts->max);
 }
 
+int tilemap_tileset_tile_width(LayerList *ll, unsigned int index) {
+    Tileset *ts = get_tileset(ll, index);
+    if(ts == NULL) {
+        return(-1);
+    }
+
+    return(ts->tw);
+}
+
+int tilemap_tileset_tile_height(LayerList *ll, unsigned int index) {
+    Tileset *ts = get_tileset(ll, index);
+    if(ts == NULL) {
+        return(-1);
+    }
+
+    return(ts->th);
+}
+
 static int init_tilemap(LayerList *ll, Tilemap *t,
                         unsigned int tileset,
                         unsigned int w, unsigned int h,

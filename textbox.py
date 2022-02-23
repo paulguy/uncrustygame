@@ -137,7 +137,7 @@ def load_tileset_codec(f, name):
         lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codec))
 
 class TextBox():
-    def __init__(self, vw, vh, mw, mh, tw, th, ts, codec, debug=False):
+    def __init__(self, vw, vh, mw, mh, ts, codec, debug=False):
         if array.array('u').itemsize != 4:
             raise Exception("Unicode array item size must be 4 bytes wide.")
         self._debug = debug
@@ -147,10 +147,10 @@ class TextBox():
         self._vh = int(vh)
         self._mw = int(mw)
         self._mh = int(mh)
-        self._tw = int(tw)
-        self._th = int(th)
+        self._tw = ts.width()
+        self._th = ts.height()
         self._tm = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
-        self._stm = display.ScrollingTilemap(self._ts, self._tm, self._vw, self._vh, self._mw, self._mh, self._tw, self._th)
+        self._stm = display.ScrollingTilemap(self._ts, self._tm, self._vw, self._vh, self._mw, self._mh)
         self._l = self._stm.layer
 
     @property
@@ -209,13 +209,13 @@ class MenuItem():
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ll, ts, codec, tw, th, vw, priv, spacing=1):
+    def __init__(self, ll, ts, codec, vw, priv, spacing=1):
         self._ll = ll
         self._ts = ts
         self._space = array.array('I', ' '.encode(codec))[0]
         self._codec = codec
-        self._tw = int(tw)
-        self._th = int(th)
+        self._tw = ts.width()
+        self._th = ts.height()
         self._vw = int(vw)
         self._priv = priv
         self._spacing = spacing
@@ -330,7 +330,6 @@ class Menu():
                                ((self._h - 1) * self._spacing) + 1,
                                1 + self._w,
                                ((self._h - 1) * self._spacing) + 1,
-                               self._tw, self._th,
                                self._ts, self._codec, debug=True)
             self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
             self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._codec)))
@@ -363,7 +362,6 @@ class Menu():
                     entry.width = valuelen
                 self._valtbs[num] = TextBox(entry.width, 1,
                                             entry.maxlen, 1,
-                                            self._tw, self._th,
                                             self._ts, self._codec)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)

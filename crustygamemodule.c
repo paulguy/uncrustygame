@@ -737,6 +737,52 @@ static PyObject *Tilemap_tileset_tiles(TilesetObject *self,
     return(PyLong_FromLong(ret));
 }
 
+static PyObject *Tilemap_tileset_tile_width(TilesetObject *self,
+                                            PyTypeObject *defining_class,
+                                            PyObject *const *args,
+                                            Py_ssize_t nargs,
+                                            PyObject *kwnames) {
+    int ret;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = tilemap_tileset_tile_width(self->ll->ll, self->tileset);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_tileset_tile_width failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
+static PyObject *Tilemap_tileset_tile_height(TilesetObject *self,
+                                             PyTypeObject *defining_class,
+                                             PyObject *const *args,
+                                             Py_ssize_t nargs,
+                                             PyObject *kwnames) {
+    int ret;
+
+    if(self->ll == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "this Tileset is not initialized");
+        return(NULL);
+    }
+
+    crustygame_state *state = PyType_GetModuleState(defining_class);
+
+    ret = tilemap_tileset_tile_height(self->ll->ll, self->tileset);
+    if(ret < 0) {
+        PyErr_SetString(state->CrustyException, "tilemap_tileset_tile_height failed");
+        return(NULL);
+    }
+
+    return(PyLong_FromLong(ret));
+}
+
 static PyObject *LayerList_TS_tilemap(TilesetObject *self,
                                       PyTypeObject *defining_class,
                                       PyObject *const *args,
@@ -776,15 +822,29 @@ static PyMethodDef Tileset_methods[] = {
         (PyCMethod) Tilemap_tileset_name,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Get the tileset name.\n\n"
-        "name(...) -> name\n"
+        "name() -> name\n"
         "name  The tileset's name."},
     {
         "tiles",
         (PyCMethod) Tilemap_tileset_tiles,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Get the number of tiles.\n\n"
-        "tiles(...) -> tiles\n"
+        "tiles() -> tiles\n"
         "tiles  The number of tiles."},
+    {
+        "width",
+        (PyCMethod) Tilemap_tileset_tile_width,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the width of a tile\n\n"
+        "width() -> width\n"
+        "width  The width of a tile."},
+    {
+        "height",
+        (PyCMethod) Tilemap_tileset_tile_height,
+        METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
+        "Get the height of a tile.\n\n"
+        "height() -> height\n"
+        "height  The height of a tile."},
     {
         "tilemap",
         (PyCMethod) LayerList_TS_tilemap,
@@ -1158,25 +1218,28 @@ static PyObject *Tilemap_update(TilemapObject *self,
 
     crustygame_state *state = PyType_GetModuleState(defining_class);
 
-    if(nargs < 4) {
-        PyErr_SetString(PyExc_TypeError, "function needs at least 4 argument");
+    if(nargs == 0) {
+        x = 0; y = 0; w = 0; h = 0;
+    } else if(nargs < 4) {
+        PyErr_SetString(PyExc_TypeError, "function needs 0 or at least 4 argument");
         return(NULL);
-    }
-    x = PyLong_AsUnsignedLong(args[0]);
-    if(PyErr_Occurred() != NULL) {
-        return(NULL);
-    }
-    y = PyLong_AsUnsignedLong(args[1]);
-    if(PyErr_Occurred() != NULL) {
-        return(NULL);
-    }
-    w = PyLong_AsUnsignedLong(args[2]);
-    if(PyErr_Occurred() != NULL) {
-        return(NULL);
-    }
-    h = PyLong_AsUnsignedLong(args[3]);
-    if(PyErr_Occurred() != NULL) {
-        return(NULL);
+    } else {
+        x = PyLong_AsUnsignedLong(args[0]);
+        if(PyErr_Occurred() != NULL) {
+            return(NULL);
+        }
+        y = PyLong_AsUnsignedLong(args[1]);
+        if(PyErr_Occurred() != NULL) {
+            return(NULL);
+        }
+        w = PyLong_AsUnsignedLong(args[2]);
+        if(PyErr_Occurred() != NULL) {
+            return(NULL);
+        }
+        h = PyLong_AsUnsignedLong(args[3]);
+        if(PyErr_Occurred() != NULL) {
+            return(NULL);
+        }
     }
 
     if(tilemap_update_tilemap(self->ll->ll, self->tilemap, x, y, w, h) < 0) {
@@ -1338,6 +1401,8 @@ static PyMethodDef Tilemap_methods[] = {
         (PyCMethod) Tilemap_update,
         METH_METHOD | METH_FASTCALL | METH_KEYWORDS,
         "Redraw a region of the tilemap.\n\n"
+        "update()\n"
+        "    Update the whole thing.\n"
         "update(x, y, width, height)\n"
         "x       Where to start updating from the left.\n"
         "y       Where to start updating from the top.\n"

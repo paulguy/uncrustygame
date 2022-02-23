@@ -228,6 +228,22 @@ const char *tilemap_tileset_name(LayerList *ll, unsigned int index);
  * return   the number of tiles, -1 on failure
  */
 int tilemap_tileset_tiles(LayerList *ll, unsigned int index);
+/*
+ * Get the width of a tile.
+ *
+ * ll       the LayerList
+ * index    the tileset handle index
+ * return   the width of a tile
+ */
+int tilemap_tileset_tile_width(LayerList *ll, unsigned int index);
+/*
+ * Get the height of a tile.
+ *
+ * ll       the LayerList
+ * index    the tileset handle index
+ * return   the height of a tile
+ */
+int tilemap_tileset_tile_height(LayerList *ll, unsigned int index);
 
 /*
  * Add a tilemap.
