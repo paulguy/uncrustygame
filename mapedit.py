@@ -12,7 +12,6 @@ import math
 import effects
 
 #TODO:
-# finish statusbar
 # Editor view scale option
 # Block copy/fill tool
 # Text tool using tilemap codec
@@ -138,22 +137,37 @@ def update_cursor_effect(cursorrad, time, cursorl):
     cursorl.colormod(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
     return(cursorrad)
 
+def make_checkerboard(tstext, width, height):
+    awidth = width
+    if awidth % 2 == 0:
+        awidth += 1
+    tm = array.array('u', itertools.repeat('█', width * height)).tounicode().encode('crusty_text')
+    cm = array.array('I', itertools.repeat(display.make_color(85, 85, 85, SDL_ALPHA_OPAQUE), awidth * height))
+    cm[1::2] = array.array('I', itertools.repeat(display.make_color(170, 170, 170, SDL_ALPHA_OPAQUE), (awidth * height) // 2))
+    cbtm = tstext.tilemap(width, height, "{}x{} Checkerboard".format(width, height))
+    cbtm.map(0, 0, width, width, height, tm)
+    cbtm.attr_colormod(0, 0, awidth, width, height, cm)
+    cbtm.update()
+    cbl = cbtm.layer("{}x{} Checkerboard Layer".format(width, height))
+    return cbl
+ 
 class Sidebar():
     SIDEBAR_COLOR=display.make_color(255, 255, 255, 96)
 
-    def __init__(self, state, text, vw, vh, mw, tw):
+    def __init__(self, state, text, vw, vh, mw, tw, hpos=0):
         self._state = state
-        self._vw = vw
-        self._mw = mw
-        self._tw = tw
+        self._vw = int(vw)
+        self._vh = int(vh)
+        self._mw = int(mw)
+        self._tw = int(tw)
         need_text(self._state)
         tstext = self._state.tileset('ts_text')
         self._dl = display.DisplayList(self._state.ll)
         helptext, _, width, height = textbox.wrap_text(text, self._vw, vh)
         self._sbwidth = width + 2
         sbtm = array.array('u', itertools.repeat('█', self._sbwidth * vh)).tounicode().encode('crusty_text')
-        sidebartm = tstext.tilemap(self._sbwidth, vh, "Sidebar")
-        sidebartm.map(0, 0, self._sbwidth, self._sbwidth, vh, sbtm)
+        sidebartm = tstext.tilemap(self._sbwidth, self._vh, "Sidebar")
+        sidebartm.map(0, 0, self._sbwidth, self._sbwidth, self._vh, sbtm)
         sidebartm.update()
         self._sidebarl = sidebartm.layer("Sidebar Layer")
         self._sidebarl.scale(SCALE, SCALE)
@@ -165,18 +179,40 @@ class Sidebar():
         self._sbtext = textbox.TextBox(width, height, width, height,
                                        tstext, 'crusty_text')
         self._sbtext.put_text(helptext, 0, 0)
-        self._sbtext.layer.pos(TEXT_WIDTH, TEXT_HEIGHT)
+        self._hpos = int(TEXT_HEIGHT * (1 + hpos))
+        self._sbtext.layer.pos(TEXT_WIDTH, int(TEXT_HEIGHT * 5))
         self._sbtext.layer.relative(self._sidebarl)
-        self._dl.append(lambda: self._sbtext.layer.pos(TEXT_WIDTH + 1, TEXT_HEIGHT + 1))
-        self._dl.append(lambda: self._sbtext.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
-        self._dl.append(self._sbtext.layer)
-        self._dl.append(lambda: self._sbtext.layer.pos(TEXT_WIDTH, TEXT_HEIGHT))
-        self._dl.append(lambda: self._sbtext.layer.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
-        self._dl.append(self._sbtext.layer)
+        self._textdl = display.DisplayList(self._state.ll)
+        self._textdl.append(lambda: self._sbtext.layer.pos(TEXT_WIDTH + 1, self._hpos + 1))
+        self._textdl.append(lambda: self._sbtext.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
+        self._textdl.append(self._sbtext.layer)
+        self._textdl.append(lambda: self._sbtext.layer.pos(TEXT_WIDTH, self._hpos))
+        self._textdl.append(lambda: self._sbtext.layer.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
+        self._textdl.append(self._sbtext.layer)
+        self._textindex = self._dl.append(self._textdl)
 
     @property
     def dl(self):
         return self._dl
+
+    @property
+    def layer(self):
+        return self._sidebarl
+
+    @property
+    def width(self):
+        return self._sbwidth
+
+    def set_hpos(self, hpos):
+        self._hpos = int(TEXT_HEIGHT * (1 + hpos))
+
+    def show_text(self, show):
+        if show:
+            self._dl.replace(self._textindex, self._textdl)
+            self._sidebarl.window(self._sbwidth * TEXT_WIDTH, self._vh * TEXT_HEIGHT)
+        else:
+            self._dl.replace(self._textindex, None)
+            self._sidebarl.window(self._sbwidth * TEXT_WIDTH, self._hpos + TEXT_HEIGHT)
 
     def update(self, curpos, curx, mw):
         if mw * self._tw * SCALE <= RES_WIDTH:
@@ -214,8 +250,8 @@ class NewScreen():
         self._dl = display.DisplayList(self._state.ll)
         self._vw = TILES_WIDTH
         self._vh = TILES_HEIGHT
-        self._mw = 32
-        self._mh = 32
+        self._mw = 64
+        self._mh = 64
         self._tw = TEXT_WIDTH
         self._th = TEXT_HEIGHT
         self._filename = TEXT_FILENAME
@@ -351,7 +387,7 @@ class NewScreen():
         except KeyError:
             self._state.add_screen(EditScreen)
             editscreen = self._state.get_screen(EditScreen)
-        editscreen.tilemap('ts_tm0', self._vw, self._vh,
+        editscreen.tilemap('ts_tm0', RES_WIDTH, RES_HEIGHT,
                                      self._mw, self._mh)
         self._state.active_screen(EditScreen)
 
@@ -377,14 +413,69 @@ class EditScreen():
         self._puttile = False
         self._putcolor = False
         self._putattrib = False
-        self._showsidebar = True
+        self._showsidebar = 2
 
     @property
     def dl(self):
         return self._dl
 
+    def _update_tile(self):
+        self._statustext.put_text(("    ",), 6, 0)
+        self._statustext.put_text((str(self._tile),), 6, 0)
+        self._tiletm.map(0, 0, 0, 1, 1, array.array('I', (self._tile,)))
+        self._tiletm.update()
+
+    def _update_red(self):
+        self._statustext.put_text(("   ",), 14, 0)
+        self._statustext.put_text((str(self._red),), 14, 0)
+        self._tilel.colormod(self._color)
+
+    def _update_green(self):
+        self._statustext.put_text(("   ",), 14, 1)
+        self._statustext.put_text((str(self._green),), 14, 1)
+        self._tilel.colormod(self._color)
+
+    def _update_blue(self):
+        self._statustext.put_text(("   ",), 14, 2)
+        self._statustext.put_text((str(self._blue),), 14, 2)
+        self._tilel.colormod(self._color)
+
+    def _update_alpha(self):
+        self._statustext.put_text(("   ",), 14, 3)
+        self._statustext.put_text((str(self._alpha),), 14, 3)
+        self._tilel.colormod(self._color)
+
+    def _update_vflip(self):
+        if self._vflip:
+            self._statustext.put_text("Y", 4, 4)
+        else:
+            self._statustext.put_text("N", 4, 4)
+        self._tiletm.attr_flags(0, 0, 0, 1, 1, array.array('I', (self._attrib,)))
+        self._tiletm.update()
+
+    def _update_hflip(self):
+        if self._hflip:
+            self._statustext.put_text("Y", 10, 4)
+        else:
+            self._statustext.put_text("N", 10, 4)
+        self._tiletm.attr_flags(0, 0, 0, 1, 1, array.array('I', (self._attrib,)))
+        self._tiletm.update()
+
+    def _update_rotation(self):
+        if self._rotate == cg.TILEMAP_ROTATE_NONE:
+            self._statustext.put_text(("0°  ",), 3, 3)
+        elif self._rotate == cg.TILEMAP_ROTATE_90:
+            self._statustext.put_text(("90° ",), 3, 3)
+        elif self._rotate == cg.TILEMAP_ROTATE_180:
+            self._statustext.put_text(("180°",), 3, 3)
+        else:
+            self._statustext.put_text(("270°",), 3, 3)
+        self._tiletm.attr_flags(0, 0, 0, 1, 1, array.array('I', (self._attrib,)))
+        self._tiletm.update()
+
     def set_tile(self, tile):
         self._tile = tile
+        self._update_tile()
 
     def active(self):
         if self._tilemap is None:
@@ -398,6 +489,8 @@ class EditScreen():
                                         self._mw, self._mh,
                                         self._tw, self._th,
                                         self._curx, self._cury)
+        self._statustext.put_text(("    ", "    "), 3, 1)
+        self._statustext.put_text((str(self._curx), str(self._cury)), 3, 1)
 
     def _make_tilemap(self):
         self._curx, self._cury, self._stm = \
@@ -413,12 +506,12 @@ class EditScreen():
     def tilemap(self, ts, vw, vh, mw, mh):
         self._tileset = self._state.tileset(ts)
         self._tiles = self._tileset.tiles()
-        self._vw = int(vw)
-        self._vh = int(vh)
         self._mw = int(mw)
         self._mh = int(mh)
         self._tw = self._tileset.width()
         self._th = self._tileset.height()
+        self._vw = int(vw / SCALE / self._tw)
+        self._vh = int(vh / SCALE / self._th)
         need_text(self._state)
         tstext = self._state.tileset('ts_text')
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
@@ -430,6 +523,50 @@ class EditScreen():
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
         self._dl.append(self._stm.layer)
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
+        pwidth = self._tw * SCALE / tstext.width()
+        if pwidth.is_integer():
+            pwidth = int(pwidth)
+        else:
+            pwidth = int(pwidth) + 1
+        pheight = self._th * SCALE / tstext.height()
+        if pheight.is_integer():
+            pheight = int(pheight)
+        else:
+            pheight = int(pheight) + 1
+        tstart = pheight / SCALE
+        if tstart.is_integer():
+            tstart = int(tstart)
+        else:
+            tstart = int(tstart) + 1
+        tstart += 1
+        tilebgl = make_checkerboard(tstext, pwidth, pheight)
+        tilebgl.pos(TEXT_WIDTH, TEXT_HEIGHT)
+        tilebgl.scale(1 / SCALE, 1 / SCALE)
+        tilebgl.relative(self._sidebar.layer)
+        self._sidebar.dl.append(tilebgl)
+        self._tiletm = self._tileset.tilemap(1, 1, "Preview")
+        self._tiletm.update()
+        self._tilel = self._tiletm.layer("Preview Layer")
+        self._tilel.scale(SCALE, SCALE)
+        self._tilel.relative(tilebgl)
+        self._sidebar.dl.append(self._tilel)
+        lines, _, _, h = textbox.wrap_text("Tile:      R:    \nX:         G:    \nY:         B:    \nR:         A:\nVF:   HF:  ", self._sidebar.width - 2, self._vh)
+        self._sidebar.set_hpos(tstart + h)
+        self._statustext = textbox.TextBox(self._sidebar.width - 2, h, self._sidebar.width - 2, h, tstext, 'crusty_text')
+        self._statustext.put_text(lines, 0, 0)
+        self._statustext.layer.pos(TEXT_WIDTH, TEXT_HEIGHT * (1 + tstart))
+        self._statustext.layer.relative(self._sidebar.layer)
+        self._update_tile()
+        self._update_red()
+        self._update_green()
+        self._update_blue()
+        self._update_alpha()
+        self._update_hflip()
+        self._update_vflip()
+        self._update_rotation()
+        self._sidebar.dl.append(self._statustext.layer)
+        self._sidebarindex = self._dl.append(self._sidebar.dl)
         curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH)
         curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT)
         self._cursortm = make_cursor(self._state, curwidth, curheight, "MapEditor Cursor Tilemap")
@@ -440,8 +577,6 @@ class EditScreen():
         self._state.add_screen(TileSelectScreen)
         selectscreen = self._state.get_screen(TileSelectScreen)
         selectscreen.tileset(ts, self._vw, self._vh)
-        self._sidebar = Sidebar(self._state, "Tile:\n\n\nR:    G:    B:\nVF:  HF:  R:\nh - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", self._vw, self._vh, self._mw, self._tw)
-        self._sidebarindex = self._dl.append(self._sidebar.dl)
 
     def _check_drawing(self):
         if self._drawing:
@@ -487,22 +622,29 @@ class EditScreen():
                     self._tile = self._tilemap[self._cury * self._mw + self._curx]
                     self._color = self._colormod[self._cury * self._mw + self._curx]
                     self._attrib = self._flags[self._cury * self._mw + self._curx]
+                    self._update_tile()
+                    self._update_red()
+                    self._update_green()
+                    self._update_blue()
+                    self._update_alpha()
+                    self._update_hflip()
+                    self._update_vflip()
+                    self._update_rotation()
                 else:
                     self._drawing = True
                     self._check_drawing()
             elif event.key.keysym.sym == SDLK_KP_PLUS:
-                val = self._tilemap[self._cury * self._mw + self._curx] + 1
-                if val < self._tiles:
-                    self._tilemap[self._cury * self._mw + self._curx] = val
-                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+                if self._tile + 1 < self._tiles:
+                    self._tile += 1
+                    self._update_tile()
             elif event.key.keysym.sym == SDLK_KP_MINUS:
-                val = self._tilemap[self._cury * self._mw + self._curx] - 1
-                if val >= 0:
-                    self._tilemap[self._cury * self._mw + self._curx] = val
-                    self._stm.updateregion(self._curx, self._cury, 1, 1)
+                if self._tile > 0:
+                    self._tile -= 1
+                    self._update_tile()
             elif event.key.keysym.sym == SDLK_v:
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._tile = self._tilemap[self._cury * self._mw + self._curx]
+                    self._update_tile()
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
                     self._puttile = True
                     self._check_drawing()
@@ -512,6 +654,10 @@ class EditScreen():
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._color = self._colormod[self._cury * self._mw + self._curx]
                     self._red, self._green, self._blue, self._alpha = display.unmake_color(self._color)
+                    self._update_red()
+                    self._update_green()
+                    self._update_blue()
+                    self._update_alpha()
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
                     self._putcolor = True
                     self._check_drawing()
@@ -522,6 +668,9 @@ class EditScreen():
                 if event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._attrib = self._flags[self._cury * self._mw + self._curx]
                     self._hflip, self._vflip, self._rotate = display.unmake_attrib(self._attrib)
+                    self._update_hflip()
+                    self._update_vflip()
+                    self._update_rotation()
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
                     self._putattrib = True
                     self._check_drawing()
@@ -531,12 +680,14 @@ class EditScreen():
                 else:
                     self._hflip = 0
                 self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                self._update_hflip()
             elif event.key.keysym.sym == SDLK_y:
                 if self._vflip == 0:
                     self._vflip = cg.TILEMAP_VFLIP_MASK
                 else:
                     self._vflip = 0
                 self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                self._update_vflip()
             elif event.key.keysym.sym == SDLK_r:
                 if self._rotate == cg.TILEMAP_ROTATE_NONE:
                     if self._tw == self._th:
@@ -553,48 +704,61 @@ class EditScreen():
                 else:
                     self._rotate = cg.TILEMAP_ROTATE_NONE
                 self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                self._update_rotation()
             elif event.key.keysym.sym == SDLK_q:
                 if self._red < 255:
                     self._red += 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_red()
             elif event.key.keysym.sym == SDLK_a:
                 if self._red > 0:
                     self._red -= 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_red()
             elif event.key.keysym.sym == SDLK_w:
                 if self._green < 255:
                     self._green += 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_green()
             elif event.key.keysym.sym == SDLK_s:
                 if self._green > 0:
                     self._green -= 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_green()
             elif event.key.keysym.sym == SDLK_e:
                 if self._blue < 255:
                     self._blue += 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_blue()
             elif event.key.keysym.sym == SDLK_d:
                 if self._blue > 0:
                     self._blue -= 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_blue()
             elif event.key.keysym.sym == SDLK_x:
                 if self._alpha < 255:
                     self._alpha += 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_alpha()
             elif event.key.keysym.sym == SDLK_z:
                 if self._alpha > 0:
                     self._alpha -= 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                    self._update_alpha()
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
                 self._state.active_screen(prompt)
             elif event.key.keysym.sym == SDLK_h:
-                if self._showsidebar:
-                    self._dl.replace(self._sidebarindex, None)
-                    self._showsidebar = False
-                else:
+                if self._showsidebar == 0:
                     self._dl.replace(self._sidebarindex, self._sidebar.dl)
-                    self._showsidebar = True
+                    self._sidebar.show_text(False)
+                    self._showsidebar = 1
+                elif self._showsidebar == 1:
+                    self._sidebar.show_text(True)
+                    self._showsidebar = 2
+                else:
+                    self._dl.replace(self._sidebarindex, None)
+                    self._showsidebar = 0
         elif event.type == SDL_KEYUP:
             if event.key.keysym.sym == SDLK_SPACE:
                 self._drawing = False
@@ -618,6 +782,10 @@ class EditScreen():
         self._blue = blue
         self._alpha = alpha
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+        self._update_red()
+        self._update_green()
+        self._update_blue()
+        self._update_alpha()
 
 class TileSelectScreen():
     NAME='tileselect'
@@ -691,7 +859,7 @@ class TileSelectScreen():
         self._curx = 0
         self._cury = 0
         self._make_tilemap()
-        self._sidebar = Sidebar(self._state, "ESC - Cancel Selection\nArrows - Move\nEnter - Select\nq/w - Adjust Width\na/z - Adjust Height", self._vw, self._vh, self._mw, self._tw)
+        self._sidebar = Sidebar(self._state, "ESC - Cancel Selection\nArrows - Move\nEnter - Select\nq/w - Adjust Width\na/z - Adjust Height", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
         self._dl.append(self._sidebar.dl)
 
     def input(self, event):
@@ -852,21 +1020,15 @@ class ColorPickerScreen():
         mlayer.scale(SCALE, SCALE)
         mlayer.pos(int(TEXT_SCALED_WIDTH), int(TEXT_SCALED_HEIGHT * 3))
         self._dl.append(self._menu.displaylist)
-        cbtm = array.array('u', itertools.repeat('█', 64)).tounicode().encode('crusty_text')
-        bgcm = array.array('I', itertools.repeat(display.make_color(85, 85, 85, SDL_ALPHA_OPAQUE), 72))
-        bgcm[1::2] = array.array('I', itertools.repeat(display.make_color(170, 170, 170, SDL_ALPHA_OPAQUE), 36))
-        colorbgtm = tstext.tilemap(8, 8, "Color Picker Checker BG")
-        colorbgtm.map(0, 0, 8, 8, 8, cbtm)
-        colorbgtm.attr_colormod(0, 0, 9, 8, 8, bgcm)
-        colorbgtm.update()
-        colorbgl = colorbgtm.layer("Color Picker Checker BG Layer")
-        colorbgl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
+        colorbgl = make_checkerboard(tstext, 8, 8)
+        colorbgl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_HEIGHT * 3))
         self._dl.append(colorbgl)
+        cbtm = array.array('u', itertools.repeat('█', 64)).tounicode().encode('crusty_text')
         colortm = tstext.tilemap(8, 8, "Color Picker Color")
         colortm.map(0, 0, 8, 8, 8, cbtm)
         colortm.update()
         self._colorl = colortm.layer("Color Picker Color Layer")
-        self._colorl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_WIDTH * 3))
+        self._colorl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_HEIGHT * 3))
         self._update_color()
         self._dl.append(self._colorl)
         self._cursorrad = 0.0
