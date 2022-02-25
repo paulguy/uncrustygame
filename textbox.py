@@ -1,5 +1,5 @@
 from sdl2 import *
-import crustygame
+import crustygame as cg
 import array
 import itertools
 import display
@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from typing import Callable
 
 MENU_DEFAULT_CURSOR = '▶'
+
+@dataclass
+class Font():
+    ts : cg.Tileset
+    codec : str
 
 def wrap_text(text, w, h):
     w = int(w)
@@ -129,28 +134,30 @@ def load_tileset_codec(f, name):
                 enctable[chr(codepoint + num)] = tilenum + num
                 dectable[tilenum + num] = chr(codepoint + num)
 
+    codecname = 'crusty_{}'.format(name)
     # EUGH!
     codec = codecs.CodecInfo(
         encode=lambda o, e='strict': tileset_encoder(enctable, o, e),
         decode=lambda o, e='strict': tileset_decoder(dectable, o, e))
     codecs.register(
-        lambda s: tileset_codec_search(s, 'crusty_{}'.format(name), codec))
+        lambda s: tileset_codec_search(s, codecname, codec))
+
+    return codecname
 
 class TextBox():
-    def __init__(self, vw, vh, mw, mh, ts, codec, debug=False):
+    def __init__(self, vw, vh, mw, mh, font, debug=False):
         if array.array('u').itemsize != 4:
             raise Exception("Unicode array item size must be 4 bytes wide.")
         self._debug = debug
-        self._ts = ts
-        self._codec = codec
+        self._font = font
         self._vw = int(vw)
         self._vh = int(vh)
         self._mw = int(mw)
         self._mh = int(mh)
-        self._tw = ts.width()
-        self._th = ts.height()
+        self._tw = self._font.ts.width()
+        self._th = self._font.ts.height()
         self._tm = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
-        self._stm = display.ScrollingTilemap(self._ts, self._tm, self._vw, self._vh, self._mw, self._mh)
+        self._stm = display.ScrollingTilemap(self._font.ts, self._tm, self._vw, self._vh, self._mw, self._mh)
         self._l = self._stm.layer
 
     @property
@@ -170,7 +177,7 @@ class TextBox():
         for num, line in enumerate(lines):
             if len(line) > 0:
                 if isinstance(line, str):
-                    line = array.array('I', line.encode(self._codec))
+                    line = array.array('I', line.encode(self._font.codec))
                 if num > h:
                     if self._debug:
                         print("WARNING: Text box rows cut off {} + {} > {}".format(y, num, h))
@@ -188,7 +195,7 @@ class TextBox():
 
     def put_char(self, char, x, y):
         if isinstance(char, str):
-            char = char.encode(self._codec)
+            char = char.encode(self._font.codec)
         self._tm[y*self._mw+x] = char
         self._stm.updateregion(x, y, 1, 1)
 
@@ -209,13 +216,12 @@ class MenuItem():
 class Menu():
     _INITIAL_DL_ITEMS = 2
 
-    def __init__(self, ll, ts, codec, vw, priv, spacing=1):
+    def __init__(self, ll, font, vw, priv, spacing=1):
         self._ll = ll
-        self._ts = ts
-        self._space = array.array('I', ' '.encode(codec))[0]
-        self._codec = codec
-        self._tw = ts.width()
-        self._th = ts.height()
+        self._font = font
+        self._space = array.array('I', ' '.encode(self._font.codec))[0]
+        self._tw = self._font.ts.width()
+        self._th = self._font.ts.height()
         self._vw = int(vw)
         self._priv = priv
         self._spacing = spacing
@@ -269,10 +275,10 @@ class Menu():
             else:
                 if maxlen < len(value):
                     raise ValueError("Maximum value length is less than initial value length.")
-            value = array.array('I', value.encode(self._codec))
+            value = array.array('I', value.encode(self._font.codec))
             self._pad_value(value, maxlen)
 
-        label = array.array('I', label.encode(self._codec))
+        label = array.array('I', label.encode(self._font.codec))
         self._entries.append(MenuItem(label, value, maxlen, onEnter, onActivate, onChange))
         self._valtbs.append(None)
         self._updated = False
@@ -330,9 +336,9 @@ class Menu():
                                ((self._h - 1) * self._spacing) + 1,
                                1 + self._w,
                                ((self._h - 1) * self._spacing) + 1,
-                               self._ts, self._codec, debug=True)
-            self._cursortm = self._ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
-            self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._codec)))
+                               self._font, debug=True)
+            self._cursortm = self._font.ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
+            self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._font.codec)))
             self._cursortm.update(0, 0, 0, 0)
             self._cursorl = self._cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
             self._cursorl.relative(self._tb.layer)
@@ -362,7 +368,7 @@ class Menu():
                     entry.width = valuelen
                 self._valtbs[num] = TextBox(entry.width, 1,
                                             entry.maxlen, 1,
-                                            self._ts, self._codec)
+                                            self._font)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
                 self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
@@ -403,7 +409,7 @@ class Menu():
             if self._entries[self._selection].value is None:
                 self._entries[self._selection].onChange(self._priv, self._selection, -1)
             else:
-                val = self._entries[self._selection].onChange(self._priv, self._selection, -1, self._entries[self._selection].value.tobytes().decode(self._codec))
+                val = self._entries[self._selection].onChange(self._priv, self._selection, -1, self._entries[self._selection].value.tobytes().decode(self._font.codec))
                 self._accept_value(val)
 
     def right(self):
@@ -415,7 +421,7 @@ class Menu():
             if self._entries[self._selection].value is None:
                 self._entries[self._selection].onChange(self._priv, self._selection, 1)
             else:
-                val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value.tobytes().decode(self._codec))
+                val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value.tobytes().decode(self._font.codec))
                 self._accept_value(val)
 
     def _update_value(self):
@@ -443,7 +449,7 @@ class Menu():
             return
         if len(val) > self._entries[self._selection].maxlen:
             raise ValueError("Returned value longer than max value length")
-        self._curvalue = array.array('I', val.encode(self._codec))
+        self._curvalue = array.array('I', val.encode(self._font.codec))
         self._pad_value(self._curvalue, self._entries[self._selection].maxlen)
         self._curpos = 0
         self._update_value()
@@ -457,13 +463,13 @@ class Menu():
             raise Exception("Menu must be updated to process movement.")
 
         if self._curvalue is not None:
-            val = self._entries[self._selection].onEnter(self._priv, self._selection, self._curvalue.tobytes().decode(self._codec))
+            val = self._entries[self._selection].onEnter(self._priv, self._selection, self._curvalue.tobytes().decode(self._font.codec))
             self._accept_value(val)
         elif self._entries[self._selection].onActivate is not None:
             if self._entries[self._selection].value is None:
                 self._entries[self._selection].onActivate(self._priv, self._selection)
             else:
-                val = self._entries[self._selection].onActivate(self._priv, self._selection, self._entries[self._selection].value.tobytes().decode(self._codec))
+                val = self._entries[self._selection].onActivate(self._priv, self._selection, self._entries[self._selection].value.tobytes().decode(self._font.codec))
                 self._accept_value(val)
         elif self._entries[self._selection].onEnter is not None:
             self._curvalue = copy.copy(self._entries[self._selection].value)
@@ -489,7 +495,7 @@ class Menu():
             if self._curpos < len(self._curvalue):
                 char = event.text.text.decode('utf-8')
                 self._curvalue[self._curpos+1:] = self._curvalue[self._curpos:-1]
-                self._curvalue[self._curpos:self._curpos+1] = array.array('I', char.encode(self._codec))
+                self._curvalue[self._curpos:self._curpos+1] = array.array('I', char.encode(self._font.codec))
                 self._update_value()
                 self._curpos += 1
                 self._update_cursor()
