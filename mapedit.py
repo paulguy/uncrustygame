@@ -64,7 +64,7 @@ def make_tilemap(vw, vh, mw, mh, curx, cury, ts,
                                    colormod=colormod)
     return curx, cury, stm
 
-def update_cursor(stm, cursorl, vw, vh, mw, mh, tw, th, x, y):
+def update_cursor(vw, vh, mw, mh, x, y):
     xpos = -1
     ypos = -1
     xscroll = 0
@@ -97,41 +97,41 @@ def update_cursor(stm, cursorl, vw, vh, mw, mh, tw, th, x, y):
     else:
         if y > halfh:
             xpos = 1
-    stm.scroll(xscroll * tw, yscroll * th)
-    stm.update()
-    cursorl.pos(x * tw - TEXT_WIDTH, y * th - TEXT_HEIGHT)
-    return xpos, ypos
+    return xpos, ypos, xscroll, yscroll, x, y
 
-def make_cursor(state, curwidth, curheight, name):
-    cursortm = state.font.ts.tilemap(curwidth + 2, curheight + 2, name)
-    tm = array.array('u', itertools.repeat(' ', (curwidth + 2) * (curheight + 2)))
-    tm[0] = '+'
-    for x in range(curwidth):
-        tm[1 + x] = '-'
-    tm[curwidth + 1] = '+'
-    for y in range(curheight):
-        tm[(y + 1) * (curwidth + 2)] = '|'
-        tm[((y + 1) * (curwidth + 2)) + (curwidth + 1)] = '|'
-    tm[(curheight + 1) * (curwidth + 2)] = '+'
-    for x in range(curwidth):
-        tm[((curheight + 1) * (curwidth + 2)) + x + 1] = '-'
-    tm[((curheight + 1) * (curwidth + 2)) + curwidth + 1] = '+'
-    cursortm.map(0, 0, curwidth + 2, curwidth + 2, curheight + 2, tm.tounicode().encode('crusty_text'))
-    cursortm.update()
-    return cursortm
+def make_box(codec, width, height, mw=None, tm=None, offset=0, corner='+', hedge='-', vedge='|'):
+    corner = array.array('I', corner.encode(codec))[0]
+    hedge = array.array('I', hedge.encode(codec))[0]
+    vedge = array.array('I', vedge.encode(codec))[0]
+    if tm is None:
+        tm = array.array('I', itertools.repeat(array.array('I', ' '.encode(codec))[0], width * height))
+    if mw is None:
+        mw = width
+    tm[offset] = corner
+    for x in range(width - 2):
+        tm[offset + 1 + x] = hedge
+    tm[offset + width - 1] = corner
+    for y in range(height - 2):
+        tm[offset + ((y + 1) * mw)] = vedge
+        tm[offset + (((y + 1) * mw) + width - 1)] = vedge
+    tm[offset + ((height - 1) * mw)] = corner
+    for x in range(width - 2):
+        tm[offset + (((height - 1) * mw) + x + 1)] = hedge
+    tm[offset + (((height - 1) * mw) + width - 1)] = corner
+    return tm
 
-def update_cursor_effect(cursorrad, time, cursorl):
+def update_cursor_effect(cursorrad, time):
     cursorrad += math.pi * time
     cursorrad %= math.tau
     r, g, b = effects.color_from_rad(cursorrad, 0, 255)
-    cursorl.colormod(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
-    return(cursorrad)
+    color = display.make_color(r, g, b, SDL_ALPHA_OPAQUE)
+    return(cursorrad, color)
 
 def make_checkerboard(font, width, height):
     awidth = width
     if awidth % 2 == 0:
         awidth += 1
-    tm = array.array('u', itertools.repeat('█', width * height)).tounicode().encode('crusty_text')
+    tm = array.array('u', itertools.repeat('█', width * height)).tounicode().encode(font.codec)
     cm = array.array('I', itertools.repeat(display.make_color(85, 85, 85, SDL_ALPHA_OPAQUE), awidth * height))
     cm[1::2] = array.array('I', itertools.repeat(display.make_color(170, 170, 170, SDL_ALPHA_OPAQUE), (awidth * height) // 2))
     cbtm = font.ts.tilemap(width, height, "{}x{} Checkerboard".format(width, height))
@@ -230,6 +230,121 @@ class Sidebar():
                     self._sidebarl.pos(0, 0)
                 self._sbpos = 0
 
+class BorderSelector():
+    def __init__(self, state, vw, vh, mw, mh, tw, th, tlx, tly, brx, bry):
+        self._vw = int(vw)
+        self._vh = int(vh)
+        self._tlx = int(tlx)
+        self._tly = int(tly)
+        self._brx = int(brx)
+        self._bry = int(bry)
+        if self._tlx < 0 or self._tlx >= self._vw or \
+           self._tly < 0 or self._tly >= self._vh or \
+           self._brx < 0 or self._brx >= self._vw or \
+           self._bry < 0 or self._bry >= self._vh:
+            raise ValueError("Coordinate out of range.")
+        self._state = state
+        self._mw = int(mw)
+        self._mh = int(mh)
+        self._tw = int(tw)
+        self._th = int(th)
+        self._fw = self._state.font.ts.width()
+        self._fh = self._state.font.ts.height()
+        self._fvw = self._vw * self._tw // self._fw
+        if self._vw * self._tw % self._fw > 0:
+            self._fvw += 1
+        self._fvh = self._vh * self._th // self._fh
+        if self._vh * self._th % self._fh > 0:
+            self._fvh += 1
+        self._fmw = self._mw * self._tw // self._fw
+        if self._mw * self._mw % self._mw > 0:
+            self._fmw += 1
+        self._fmh = self._mh * self._th // self._fh
+        if self._mh * self._mh % self._mh > 0:
+            self._fmh += 1
+        space = array.array('I', ' '.encode(self._state.font.codec))[0]
+        self._tilemap = array.array('I', itertools.repeat(space, self._fmw * self._fmh))
+        self._stm = display.ScrollingTilemap(self._state.font.ts,
+                                             self._tilemap,
+                                             self._fvw, self._fvh,
+                                             self._fmw, self._fmh)
+        x, y, w, h = self._get_dims()
+        make_box(self._state.font.codec, w, h, mw=self._fmw, tm=self._tilemap, offset=(self._fmw * y) + x)
+        self._stm.updateregion(0, 0, self._fmw, self._fmh)
+        self._apply_box(x, y, w, h)
+        self._newtlx = self._tlx
+        self._newtly = self._tly
+        self._newbrx = self._brx
+        self._newbry = self._bry
+
+    @property
+    def layer(self):
+        return self._stm.layer
+
+    def scroll(self, x, y):
+        self._stm.scroll(x * self._tw, y * self._th)
+        self._stm.update()
+
+    def _get_dims(self):
+        return self._tlx * self._tw // self._fw, \
+               self._tly * self._th // self._fh, \
+               (self._brx - self._tlx + 1) * self._tw // self._fw, \
+               (self._bry - self._tly + 1) * self._th // self._fh
+
+    def _apply_box(self, x, y, w, h):
+        self._stm.updateregion(x, y, w, 1)
+        self._stm.updateregion(x, y + h - 1, w, 1)
+        self._stm.updateregion(x, y, 1, h)
+        self._stm.updateregion(x + w - 1, y, 1, h)
+
+    def _update_box(self):
+        x, y, w, h = self._get_dims()
+        make_box(self._state.font.codec, w, h, mw=self._fmw, tm=self._tilemap, offset=(self._fmw * y) + x, corner=' ', vedge=' ', hedge=' ')
+        self._apply_box(x, y, w, h)
+        self._tlx = self._newtlx
+        self._tly = self._newtly
+        self._brx = self._newbrx
+        self._bry = self._newbry
+        x, y, w, h = self._get_dims()
+        make_box(self._state.font.codec, w, h, mw=self._fmw, tm=self._tilemap, offset=(self._fmw * y) + x)
+        self._apply_box(x, y, w, h)
+
+    def set_top_left(self, x, y):
+        x = int(x)
+        y = int(y)
+        if x < 0 or x >= self._mw or \
+           y < 0 or y >= self._mh:
+            raise ValueError("Top-left coordinate out of range.")
+        if x > self._brx:
+            self._newtlx = self._brx
+            self._newbrx = x
+        else:
+            self._newtlx = x
+        if y > self._bry:
+            self._newtly = self._bry
+            self._newbry = y
+        else:
+            self._newtly = y
+        self._update_box()
+        
+    def set_bottom_right(self, x, y):
+        x = int(x)
+        y = int(y)
+        if x < 0 or x >= self._mw or \
+           y < 0 or y >= self._mh:
+            raise ValueError("Bottom-right coordinate out of range.")
+        if x < self._tlx:
+            self._newbrx = self._tlx
+            self._newtlx = x
+        else:
+            self._newbrx = x
+        if y < self._tly:
+            self._newbry = self._tly
+            self._newtly = y
+        else:
+            self._newbry = y
+        self._update_box()
+
 class NewScreen():
     NAME='new'
 
@@ -315,7 +430,8 @@ class NewScreen():
             self._dl.replace(self._errorpos, None)
             self._errorbox = None
 
-        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
 
     def _setname(self, priv, sel, val):
         self._filename = val.lstrip().rstrip()
@@ -400,6 +516,7 @@ class EditScreen():
         self._putcolor = False
         self._putattrib = False
         self._showsidebar = 2
+        self._border = None
 
     @property
     def dl(self):
@@ -470,13 +587,17 @@ class EditScreen():
             self._state.stop()
 
     def _update_cursor(self):
-        self._curpos, _ = update_cursor(self._stm, self._cursorl,
-                                        self._vw, self._vh,
-                                        self._mw, self._mh,
-                                        self._tw, self._th,
-                                        self._curx, self._cury)
+        self._curpos, _, xscroll, yscroll, x, y = \
+            update_cursor(self._vw, self._vh,
+                          self._mw, self._mh,
+                          self._curx, self._cury)
+        self._stm.scroll(xscroll * self._tw, yscroll * self._th)
+        self._stm.update()
+        self._cursorl.pos(x * self._tw - self._fw, y * self._th - self._fw)
         self._statustext.put_text(("    ", "    "), 3, 1)
         self._statustext.put_text((str(self._curx), str(self._cury)), 3, 1)
+        if self._border is not None:
+            self._border.scroll(xscroll, yscroll)
 
     def _make_tilemap(self):
         self._curx, self._cury, self._stm = \
@@ -498,6 +619,8 @@ class EditScreen():
         self._th = self._tileset.height()
         self._vw = int(vw / SCALE / self._tw)
         self._vh = int(vh / SCALE / self._th)
+        self._fw = self._state.font.ts.width()
+        self._fh = self._state.font.ts.height()
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
         self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
         self._dl = display.DisplayList(self._state.ll)
@@ -507,13 +630,13 @@ class EditScreen():
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
         self._dl.append(self._stm.layer)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
-        pwidth = self._tw * SCALE / self._state.font.ts.width()
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
+        pwidth = self._tw * SCALE / self._fw
         if pwidth.is_integer():
             pwidth = int(pwidth)
         else:
             pwidth = int(pwidth) + 1
-        pheight = self._th * SCALE / self._state.font.ts.height()
+        pheight = self._th * SCALE / self._fh
         if pheight.is_integer():
             pheight = int(pheight)
         else:
@@ -525,7 +648,7 @@ class EditScreen():
             tstart = int(tstart) + 1
         tstart += 1
         tilebgl = make_checkerboard(self._state.font, pwidth, pheight)
-        tilebgl.pos(TEXT_WIDTH, TEXT_HEIGHT)
+        tilebgl.pos(self._fw, self._fh)
         tilebgl.scale(1 / SCALE, 1 / SCALE)
         tilebgl.relative(self._sidebar.layer)
         self._sidebar.dl.append(tilebgl)
@@ -539,7 +662,7 @@ class EditScreen():
         self._sidebar.set_hpos(tstart + h)
         self._statustext = textbox.TextBox(self._sidebar.width - 2, h, self._sidebar.width - 2, h, self._state.font)
         self._statustext.put_text(lines, 0, 0)
-        self._statustext.layer.pos(TEXT_WIDTH, TEXT_HEIGHT * (1 + tstart))
+        self._statustext.layer.pos(self._fw, self._fh * (1 + tstart))
         self._statustext.layer.relative(self._sidebar.layer)
         self._update_tile()
         self._update_red()
@@ -551,9 +674,12 @@ class EditScreen():
         self._update_rotation()
         self._sidebar.dl.append(self._statustext.layer)
         self._sidebarindex = self._dl.append(self._sidebar.dl)
-        curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH)
-        curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT)
-        self._cursortm = make_cursor(self._state, curwidth, curheight, "MapEditor Cursor Tilemap")
+        curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH) + 2
+        curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT) + 2
+        self._cursortm = self._state.font.ts.tilemap(curwidth, curheight, "MapEditor Cursor Tilemap")
+        ctm = make_box(self._state.font.codec, curwidth, curheight)
+        self._cursortm.map(0, 0, curwidth, curwidth, curheight, ctm)
+        self._cursortm.update()
         self._cursorl = self._cursortm.layer("Map Editor Cursor Layer")
         self._cursorl.relative(self._stm.layer)
         self._update_cursor()
@@ -561,6 +687,7 @@ class EditScreen():
         self._state.add_screen(TileSelectScreen)
         selectscreen = self._state.get_screen(TileSelectScreen)
         selectscreen.tileset(ts, self._vw, self._vh)
+        self._borderindex = self._dl.append(None)
 
     def _check_drawing(self):
         if self._drawing:
@@ -576,6 +703,18 @@ class EditScreen():
                 self._flags[self._cury * self._mw + self._curx] = self._attrib
         if self._drawing or self._puttile or self._putcolor or self._putattrib:
             self._stm.updateregion(self._curx, self._cury, 1, 1)
+
+    def _make_border(self):
+        self._border = BorderSelector(self._state,
+            self._vw, self._vh,
+            self._mw, self._mh, self._tw, self._th,
+            self._curx, self._cury, self._curx, self._cury)
+        _, _, x, y, _, _ = update_cursor(self._vw, self._vh,
+                                         self._mw, self._mh,
+                                         self._curx, self._cury)
+        self._border.scroll(x, y)
+        self._border.layer.relative(self._stm.layer)
+        self._dl.replace(self._borderindex, self._border.layer)
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
@@ -729,9 +868,6 @@ class EditScreen():
                     self._alpha -= 1
                     self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
                     self._update_alpha()
-            elif event.key.keysym.sym == SDLK_ESCAPE:
-                prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
-                self._state.active_screen(prompt)
             elif event.key.keysym.sym == SDLK_h:
                 if self._showsidebar == 0:
                     self._dl.replace(self._sidebarindex, self._sidebar.dl)
@@ -743,6 +879,23 @@ class EditScreen():
                 else:
                     self._dl.replace(self._sidebarindex, None)
                     self._showsidebar = 0
+            elif event.key.keysym.sym == SDLK_f:
+                if self._border is None:
+                    self._make_border()
+                else:
+                    self._border.set_top_left(self._curx, self._cury)
+            elif event.key.keysym.sym == SDLK_g:
+                if self._border is None:
+                    self._make_border()
+                else:
+                    self._border.set_bottom_right(self._curx, self._cury)
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                if self._border is None:
+                    prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                    self._state.active_screen(prompt)
+                else:
+                    self._dl.replace(self._borderindex, None)
+                    self._border = None
         elif event.type == SDL_KEYUP:
             if event.key.keysym.sym == SDLK_SPACE:
                 self._drawing = False
@@ -754,7 +907,10 @@ class EditScreen():
                 self._putattrib = False
 
     def update(self, time):
-        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
+        if self._border is not None:
+            self._border.layer.colormod(color)
 
     def set_option(self, sel):
         if sel == 0:
@@ -778,6 +934,7 @@ class TileSelectScreen():
         self._state = state
         self._stm = None
         self._cursorrad = 0.0
+        self._scale = 2.0
 
     @property
     def dl(self):
@@ -788,11 +945,13 @@ class TileSelectScreen():
             raise Exception("Edit screen not fully set up.")
 
     def _update_cursor(self):
-        self._curpos, _ = update_cursor(self._stm, self._cursorl,
-                                        self._vw, self._vh,
-                                        self._mw, self._mh,
-                                        self._tw, self._th,
-                                        self._curx, self._cury)
+        self._curpos, _, xscroll, yscroll, x, y = \
+            update_cursor(self._vw, self._vh,
+                          self._mw, self._mh,
+                          self._curx, self._cury)
+        self._stm.scroll(xscroll * self._tw, yscroll * self._th)
+        self._stm.update()
+        self._cursorl.pos(x * self._tw - self._fw, y * self._th - self._fw)
 
     def _make_tilemap(self):
         self._cursorl.relative(None)
@@ -821,7 +980,6 @@ class TileSelectScreen():
     def tileset(self, ts, vw, vh):
         self._tileset = self._state.tileset(ts)
         self._tiles = self._tileset.tiles()
-        self._scale = 2.0
         side = math.sqrt(self._tiles)
         if side.is_integer():
             side = int(side)
@@ -833,10 +991,15 @@ class TileSelectScreen():
         self._mh = side
         self._tw = self._tileset.width()
         self._th = self._tileset.height()
+        self._fw = self._state.font.ts.width()
+        self._fh = self._state.font.ts.height()
         self._dl = display.DisplayList(self._state.ll)
-        curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH)
-        curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT)
-        self._cursortm = make_cursor(self._state, curwidth, curheight, "Tile Select Cursor Tilemap")
+        curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH) + 2
+        curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT) + 2
+        self._cursortm = self._state.font.ts.tilemap(curwidth, curheight, "Tile Select Cursor Tilemap")
+        ctm = make_box(self._state.font.codec, curwidth, curheight)
+        self._cursortm.map(0, 0, curwidth, curwidth, curheight, ctm)
+        self._cursortm.update()
         self._cursorl = self._cursortm.layer("Tile Select Cursor Layer")
         self._tmindex = self._dl.append(None)
         self._dl.append(self._cursorl)
@@ -903,7 +1066,8 @@ class TileSelectScreen():
                 self._state.active_screen(EditScreen)
 
     def update(self, time):
-        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
 
 class PromptScreen():
     NAME='prompt'
@@ -962,7 +1126,8 @@ class PromptScreen():
                 self._return(None)
 
     def update(self, time):
-        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
 
     def _activate(self, priv, sel):
         self._return(sel)
@@ -1040,7 +1205,8 @@ class ColorPickerScreen():
                 self._state.active_screen(self._caller)
 
     def update(self, time):
-        self._cursorrad = update_cursor_effect(self._cursorrad, time, self._cursorl)
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
 
     def _update_color(self):
         self._colorl.colormod(display.make_color(self._red, self._green, self._blue, self._alpha))
