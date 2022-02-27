@@ -285,11 +285,25 @@ class BorderSelector():
         self._stm.scroll(x * self._tw, y * self._th)
         self._stm.update()
 
+    def get_selection(self):
+        return self._tlx, self._tly, \
+               self._brx - self._tlx, \
+               self._bry - self._tly
+
     def _get_dims(self):
+        w = (self._brx - self._tlx + 1) * self._tw / self._fw
+        if w.is_integer():
+            w = int(w)
+        else:
+            w = int(w) + 1
+        h = (self._bry - self._tly + 1) * self._th / self._fh
+        if h.is_integer():
+            h = int(h)
+        else:
+            h = int(h) + 1
         return self._tlx * self._tw // self._fw, \
                self._tly * self._th // self._fh, \
-               (self._brx - self._tlx + 1) * self._tw // self._fw, \
-               (self._bry - self._tly + 1) * self._th // self._fh
+               w, h
 
     def _apply_box(self, x, y, w, h):
         self._stm.updateregion(x, y, w, 1)
@@ -630,7 +644,7 @@ class EditScreen():
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
         self._dl.append(self._stm.layer)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE - Grab\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c - Grab Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nSHIFT+v - Grab Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b\n  Grab Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
         pwidth = self._tw * SCALE / self._fw
         if pwidth.is_integer():
             pwidth = int(pwidth)
@@ -741,7 +755,14 @@ class EditScreen():
                     self._update_sidebar()
                     self._check_drawing()
             elif event.key.keysym.sym == SDLK_SPACE:
-                if event.key.keysym.mod & KMOD_SHIFT != 0:
+                if self._border is not None:
+                    x, y, w, h = self._border.get_selection()
+                    for num in range(h + 1):
+                        self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w + 1))
+                        self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w + 1))
+                        self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w + 1))
+                        self._stm.updateregion(x, y, w + 1, h + 1)
+                elif event.key.keysym.mod & KMOD_SHIFT != 0:
                     self._tile = self._tilemap[self._cury * self._mw + self._curx]
                     self._color = self._colormod[self._cury * self._mw + self._curx]
                     self._attrib = self._flags[self._cury * self._mw + self._curx]
@@ -769,8 +790,14 @@ class EditScreen():
                     self._tile = self._tilemap[self._cury * self._mw + self._curx]
                     self._update_tile()
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._puttile = True
-                    self._check_drawing()
+                    if self._border is not None:
+                        x, y, w, h = self._border.get_selection()
+                        for num in range(h + 1):
+                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w + 1))
+                            self._stm.updateregion(x, y, w + 1, h + 1)
+                    else:
+                        self._puttile = True
+                        self._check_drawing()
                 else:
                     self._state.active_screen(TileSelectScreen)
             elif event.key.keysym.sym == SDLK_c:
@@ -782,8 +809,14 @@ class EditScreen():
                     self._update_blue()
                     self._update_alpha()
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._putcolor = True
-                    self._check_drawing()
+                    if self._border is not None:
+                        x, y, w, h = self._border.get_selection()
+                        for num in range(h + 1):
+                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w + 1))
+                            self._stm.updateregion(x, y, w + 1, h + 1)
+                    else:
+                        self._putcolor = True
+                        self._check_drawing()
                 else:
                     colorpicker = ColorPickerScreen(self._state, self, self._vw, self._red, self._green, self._blue, self._alpha)
                     self._state.active_screen(colorpicker)
@@ -795,8 +828,14 @@ class EditScreen():
                     self._update_vflip()
                     self._update_rotation()
                 elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    self._putattrib = True
-                    self._check_drawing()
+                    if self._border is not None:
+                        x, y, w, h = self._border.get_selection()
+                        for num in range(h + 1):
+                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w + 1))
+                            self._stm.updateregion(x, y, w + 1, h + 1)
+                    else:
+                        self._putattrib = True
+                        self._check_drawing()
             elif event.key.keysym.sym == SDLK_t:
                 if self._hflip == 0:
                     self._hflip = cg.TILEMAP_HFLIP_MASK
