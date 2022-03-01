@@ -288,8 +288,8 @@ class BorderSelector():
 
     def get_selection(self):
         return self._tlx, self._tly, \
-               self._brx - self._tlx, \
-               self._bry - self._tly
+               self._brx - self._tlx + 1, \
+               self._bry - self._tly + 1
 
     def _get_dims(self):
         w = (self._brx - self._tlx + 1) * self._tw / self._fw
@@ -721,20 +721,20 @@ class EditScreen():
 
     def _get_tilemap_rect(self, x, y, w, h):
         rect = array.array('I')
-        for num in range(h+1):
-            rect.extend(self._tilemap[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
+        for num in range(h):
+            rect.extend(self._tilemap[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w])
         return rect
 
     def _get_colormod_rect(self, x, y, w, h):
         rect = array.array('I')
-        for num in range(h+1):
-            rect.extend(self._colormod[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
+        for num in range(h):
+            rect.extend(self._colormod[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w])
         return rect
 
     def _get_flags_rect(self, x, y, w, h):
         rect = array.array('I')
-        for num in range(h+1):
-            rect.extend(self._flags[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
+        for num in range(h):
+            rect.extend(self._flags[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w])
         return rect
 
     def _get_region(self, x, y, w, h):
@@ -757,14 +757,14 @@ class EditScreen():
         if save:
             self._save_region(change.x, change.y, change.w, change.h)
         if change.tilemap is not None:
-            for num in range(change.h+1):
-                self._tilemap[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.tilemap[change.w*num:(change.w*num)+change.w+1]
+            for num in range(change.h):
+                self._tilemap[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w] = change.tilemap[change.w*num:(change.w*num)+change.w]
         if change.colormod is not None:
-            for num in range(change.h+1):
-                self._colormod[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.colormod[change.w*num:(change.w*num)+change.w+1]
+            for num in range(change.h):
+                self._colormod[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w] = change.colormod[change.w*num:(change.w*num)+change.w]
         if change.flags is not None:
-            for num in range(change.h+1):
-                self._flags[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.flags[change.w*num:(change.w*num)+change.w+1]
+            for num in range(change.h):
+                self._flags[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w] = change.flags[change.w*num:(change.w*num)+change.w]
         self._stm.updateregion(change.x, change.y, change.w+1, change.h+1)
 
     def _do_undo(self):
@@ -864,11 +864,11 @@ class EditScreen():
                     if self._border is not None:
                         x, y, w, h = self._border.get_selection()
                         self._save_region(x, y, w, h)
-                        for num in range(h + 1):
-                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w + 1))
-                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w + 1))
-                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w + 1))
-                            self._stm.updateregion(x, y, w + 1, h + 1)
+                        for num in range(h):
+                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w))
+                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w))
+                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w))
+                            self._stm.updateregion(x, y, w, h)
                     else:
                         self._drawing = True
                         self._check_drawing()
@@ -899,9 +899,9 @@ class EditScreen():
                     if self._border is not None:
                         x, y, w, h = self._border.get_selection()
                         self._save_region(x, y, w, h)
-                        for num in range(h + 1):
-                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w + 1))
-                            self._stm.updateregion(x, y, w + 1, h + 1)
+                        for num in range(h):
+                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w))
+                            self._stm.updateregion(x, y, w, h)
                     else:
                         self._puttile = True
                         self._check_drawing()
@@ -930,9 +930,9 @@ class EditScreen():
                     if self._border is not None:
                         x, y, w, h = self._border.get_selection()
                         self._save_region(x, y, w, h)
-                        for num in range(h + 1):
-                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w + 1))
-                            self._stm.updateregion(x, y, w + 1, h + 1)
+                        for num in range(h):
+                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w))
+                            self._stm.updateregion(x, y, w, h)
                     else:
                         self._putcolor = True
                         self._check_drawing()
@@ -962,8 +962,8 @@ class EditScreen():
                         x, y, w, h = self._border.get_selection()
                         self._save_region(x, y, w, h)
                         for num in range(h + 1):
-                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w + 1))
-                            self._stm.updateregion(x, y, w + 1, h + 1)
+                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w))
+                            self._stm.updateregion(x, y, w, h)
                     else:
                         self._putattrib = True
                         self._check_drawing()
