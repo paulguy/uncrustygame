@@ -521,6 +521,8 @@ class NewScreen():
 class EditScreen():
     NAME='edit'
 
+    MAX_UNDO=20
+
     def __init__(self, state):
         self._state = state
         self._tilemap = None
@@ -543,7 +545,8 @@ class EditScreen():
         self._showsidebar = 2
         self._border = None
         self._clipboard = None
-        self._undo = None
+        self._undo = list()
+        self._undopos = -1
 
     @property
     def dl(self):
@@ -657,7 +660,7 @@ class EditScreen():
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
         self._dl.append(self._stm.layer)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nSHIFT+c\n  Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nSHIFT+v\n  Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nSHIFT+b - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu - Undo/Redo", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nC - Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nV - Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nB - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu/U - Undo/Redo", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
         pwidth = self._tw * SCALE / self._fw
         if pwidth.is_integer():
             pwidth = int(pwidth)
@@ -716,8 +719,77 @@ class EditScreen():
         selectscreen.tileset(ts, self._vw, self._vh)
         self._borderindex = self._dl.append(None)
 
+    def _get_tilemap_rect(self, x, y, w, h):
+        rect = array.array('I')
+        for num in range(h+1):
+            rect.extend(self._tilemap[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
+        return rect
+
+    def _get_colormod_rect(self, x, y, w, h):
+        rect = array.array('I')
+        for num in range(h+1):
+            rect.extend(self._colormod[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
+        return rect
+
+    def _get_flags_rect(self, x, y, w, h):
+        rect = array.array('I')
+        for num in range(h+1):
+            rect.extend(self._flags[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
+        return rect
+
+    def _get_region(self, x, y, w, h):
+        tilemap = self._get_tilemap_rect(x, y, w, h)
+        colormod = self._get_colormod_rect(x, y, w, h)
+        flags = self._get_flags_rect(x, y, w, h)
+        return MapChange(x, y, w, h, tilemap, colormod, flags)
+
+    def _save_region(self, x, y, w, h):
+        orig = self._get_region(x, y, w, h)
+        if self._undopos + 1 < len(self._undo):
+            self._undo = self._undo[:self._undopos + 1]
+        self._undo.append(orig)
+        self._undopos += 1
+        if self._undopos > EditScreen.MAX_UNDO:
+            del self._undo[0]
+            self._undopos = EditScreen.MAX_UNDO
+
+    def _apply_change(self, change, save=True):
+        if save:
+            self._save_region(change.x, change.y, change.w, change.h)
+        if change.tilemap is not None:
+            for num in range(change.h+1):
+                self._tilemap[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.tilemap[change.w*num:(change.w*num)+change.w+1]
+        if change.colormod is not None:
+            for num in range(change.h+1):
+                self._colormod[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.colormod[change.w*num:(change.w*num)+change.w+1]
+        if change.flags is not None:
+            for num in range(change.h+1):
+                self._flags[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.flags[change.w*num:(change.w*num)+change.w+1]
+        self._stm.updateregion(change.x, change.y, change.w+1, change.h+1)
+
+    def _do_undo(self):
+        if self._undopos >= 0:
+            orig = self._get_region(self._undo[self._undopos].x,
+                                    self._undo[self._undopos].y,
+                                    self._undo[self._undopos].w,
+                                    self._undo[self._undopos].h)
+            self._apply_change(self._undo[self._undopos], save=False)
+            self._undo[self._undopos] = orig
+            self._undopos -= 1
+
+    def _do_redo(self):
+        if self._undopos + 1 < len(self._undo):
+            orig = self._get_region(self._undo[self._undopos + 1].x,
+                                    self._undo[self._undopos + 1].y,
+                                    self._undo[self._undopos + 1].w,
+                                    self._undo[self._undopos + 1].h)
+            self._apply_change(self._undo[self._undopos + 1], save=False)
+            self._undo[self._undopos + 1] = orig
+            self._undopos += 1
+
     def _check_drawing(self):
-        self._save_region(self._curx, self._cury, 1, 1)
+        if self._drawing or self._puttile or self._putcolor or self._putattrib:
+            self._save_region(self._curx, self._cury, 1, 1)
         if self._drawing:
             self._tilemap[self._cury * self._mw + self._curx] = self._tile
             self._colormod[self._cury * self._mw + self._curx] = self._color
@@ -743,43 +815,6 @@ class EditScreen():
         self._border.scroll(x, y)
         self._border.layer.relative(self._stm.layer)
         self._dl.replace(self._borderindex, self._border.layer)
-
-    def _get_tilemap_rect(self, x, y, w, h):
-        rect = array.array('I')
-        for num in range(h+1):
-            rect.extend(self._tilemap[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
-        return rect
-
-    def _get_colormod_rect(self, x, y, w, h):
-        rect = array.array('I')
-        for num in range(h+1):
-            rect.extend(self._colormod[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
-        return rect
-
-    def _get_flags_rect(self, x, y, w, h):
-        rect = array.array('I')
-        for num in range(h+1):
-            rect.extend(self._flags[(self._mw*(y+num))+x:(self._mw*(y+num))+x+w+1])
-        return rect
-
-    def _save_region(self, x, y, w, h):
-        tilemap = self._get_tilemap_rect(x, y, w, h)
-        colormod = self._get_colormod_rect(x, y, w, h)
-        flags = self._get_flags_rect(x, y, w, h)
-        self._undo = MapChange(x, y, w, h, tilemap, colormod, flags)
-
-    def _apply_change(self, change):
-        self._save_region(change.x, change.y, change.w, change.h)
-        if change.tilemap is not None:
-            for num in range(change.h+1):
-                self._tilemap[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.tilemap[change.w*num:(change.w*num)+change.w+1]
-        if change.colormod is not None:
-            for num in range(change.h+1):
-                self._colormod[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.colormod[change.w*num:(change.w*num)+change.w+1]
-        if change.flags is not None:
-            for num in range(change.h+1):
-                self._flags[(self._mw*(change.y+num))+change.x:(self._mw*(change.y+num))+change.x+change.w+1] = change.flags[change.w*num:(change.w*num)+change.w+1]
-        self._stm.updateregion(change.x, change.y, change.w+1, change.h+1)
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
@@ -1040,8 +1075,10 @@ class EditScreen():
                 self._clipboard.x = x
                 self._clipboard.y = y
             elif event.key.keysym.sym == SDLK_u:
-                if self._undo is not None:
-                    self._apply_change(self._undo)
+                if event.key.keysym.mod & KMOD_SHIFT != 0:
+                    self._do_redo()
+                else:
+                    self._do_undo()
         elif event.type == SDL_KEYUP:
             if event.key.keysym.sym == SDLK_SPACE:
                 self._drawing = False
