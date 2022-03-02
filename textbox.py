@@ -10,6 +10,8 @@ from typing import Callable
 
 MENU_DEFAULT_CURSOR = '▶'
 
+_codecs = set()
+
 @dataclass
 class Font():
     ts : cg.Tileset
@@ -102,45 +104,58 @@ def tileset_codec_search(sname, name, func):
         return func
     return None
 
-def load_tileset_codec(f, name):
+def load_tileset_codec(filename):
     enctable = {}
     dectable = {}
 
-    for line in f:
-        codepoint, tilenum = line.split(' ', maxsplit=1)
-        try:
-            tilenum, _ = tilenum.split(' ', maxsplit=1)
-        except ValueError:
-            pass
-        endcodepoint = '0'
-        try:
-            codepoint, endcodepoint = codepoint.split('-', maxsplit=1)
-        except ValueError:
-            pass
-        endcodepoint = int(endcodepoint, base=16)
-        codepoint = int(codepoint, base=16)
-        tilenum = int(tilenum)
-        if endcodepoint == 0:
-            if chr(codepoint) in enctable:
-                raise ValueError("Duplicate char definition for {}.".format(hex(codepoint)))
-            enctable[chr(codepoint)] = tilenum
-            dectable[tilenum] = chr(codepoint)
-        else:
-            if endcodepoint <= codepoint:
-                raise ValueError("End point before start point.")
-            for num in range(endcodepoint - codepoint + 1):
-                if chr(codepoint + num) in enctable:
-                    raise ValueError("Duplicate char definition for {}.".format(hex(codepoint + num)))
-                enctable[chr(codepoint + num)] = tilenum + num
-                dectable[tilenum + num] = chr(codepoint + num)
+    codecname = array.array('u', filename)
+    for num, char in enumerate(codecname):
+        if not char.isalnum():
+            codecname[num] = '_'
 
-    codecname = 'crusty_{}'.format(name)
+    codecname = codecname.tounicode()
+    codecname = 'crusty_{}'.format(codecname)
+
+    if codecname in _codecs:
+        return codecname
+
+    with open(filename) as f:
+        for line in f:
+            codepoint, tilenum = line.split(' ', maxsplit=1)
+            try:
+                tilenum, _ = tilenum.split(' ', maxsplit=1)
+            except ValueError:
+                pass
+            endcodepoint = '0'
+            try:
+                codepoint, endcodepoint = codepoint.split('-', maxsplit=1)
+            except ValueError:
+                pass
+            endcodepoint = int(endcodepoint, base=16)
+            codepoint = int(codepoint, base=16)
+            tilenum = int(tilenum)
+            if endcodepoint == 0:
+                if chr(codepoint) in enctable:
+                    raise ValueError("Duplicate char definition for {}.".format(hex(codepoint)))
+                enctable[chr(codepoint)] = tilenum
+                dectable[tilenum] = chr(codepoint)
+            else:
+                if endcodepoint <= codepoint:
+                    raise ValueError("End point before start point.")
+                for num in range(endcodepoint - codepoint + 1):
+                    if chr(codepoint + num) in enctable:
+                        raise ValueError("Duplicate char definition for {}.".format(hex(codepoint + num)))
+                    enctable[chr(codepoint + num)] = tilenum + num
+                    dectable[tilenum + num] = chr(codepoint + num)
+
     # EUGH!
     codec = codecs.CodecInfo(
         encode=lambda o, e='strict': tileset_encoder(enctable, o, e),
         decode=lambda o, e='strict': tileset_decoder(dectable, o, e))
     codecs.register(
         lambda s: tileset_codec_search(s, codecname, codec))
+
+    _codecs.add(codecname)
 
     return codecname
 

@@ -154,7 +154,7 @@ class Sidebar():
         self._dl = display.DisplayList(self._state.ll)
         helptext, _, width, height = textbox.wrap_text(text, self._vw, vh)
         self._sbwidth = width + 2
-        sbtm = array.array('u', itertools.repeat('█', self._sbwidth * vh)).tounicode().encode('crusty_text')
+        sbtm = array.array('u', itertools.repeat('█', self._sbwidth * vh)).tounicode().encode(self._state.font.codec)
         sidebartm = self._state.font.ts.tilemap(self._sbwidth, self._vh, "Sidebar")
         sidebartm.map(0, 0, self._sbwidth, self._sbwidth, self._vh, sbtm)
         sidebartm.update()
@@ -383,6 +383,7 @@ class NewScreen():
         self._tw = TEXT_WIDTH
         self._th = TEXT_HEIGHT
         self._filename = TEXT_FILENAME
+        self._unimap = TEXT_MAP_FILENAME
         self._tb = textbox.TextBox(self._vw, 1, self._vw, 1,
                                    self._state.font)
         put_centered_line(self._tb, "New Tilemap", 0, self._vw)
@@ -395,6 +396,7 @@ class NewScreen():
         self._menu.add_item("Tile Height", value=str(self._th), maxlen=4, onEnter=self._settileheight)
         self._menu.add_item("Map Width", value=str(self._mw), maxlen=4, onEnter=self._setmapwidth)
         self._menu.add_item("Map Height", value=str(self._mh), maxlen=4, onEnter=self._setmapheight)
+        self._menu.add_item("Unicode Map", value=self._unimap, maxlen=255, onEnter=self._setunimap)
         self._menu.add_item("Proceed", onActivate=self._proceed)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
@@ -403,6 +405,7 @@ class NewScreen():
         self._dl.append(self._menu.displaylist)
         self._tileset = None
         self._error = 0.0
+        self._errortext = ''
         self._errorbox = None
         self._errorpos = self._dl.append(None)
         self._cursorrad = 0.0
@@ -440,10 +443,9 @@ class NewScreen():
     def update(self, time):
         if self._error > 0.0:
             if self._errorbox is None:
-                error = get_error()
-                if len(error) == 0:
-                    error = "Unknown error"
-                lines, _, w, h = textbox.wrap_text(error, TILES_WIDTH - 2, 10)
+                if len(self._errortext) == 0:
+                    self._errortext = "Unknown error"
+                lines, _, w, h = textbox.wrap_text(self._errortext, TILES_WIDTH - 2, 10)
                 self._errorbox = textbox.TextBox(w, h, w, h,
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
@@ -454,6 +456,7 @@ class NewScreen():
         if self._error <= 0.0 and self._errorbox is not None:
             self._dl.replace(self._errorpos, None)
             self._errorbox = None
+            self._errortext = ''
 
         self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
         self._cursorl.colormod(color)
@@ -502,13 +505,27 @@ class NewScreen():
         self._mh = val
         return str(self._mh)
 
+    def _setunimap(self, priv, sel, val):
+        self._unimap = val.lstrip().rstrip()
+        if len(self._unimap) == 0:
+            self._unimap = None
+        return val
+
+    def _set_error(self, text):
+        self._errortext = text
+        self._error = ERROR_TIME
+
     def _proceed(self, priv, sel):
         try:
             tileset = self._state.ll.tileset(self._filename, self._tw, self._th, None)
         except cg.CrustyException:
-            self._error = ERROR_TIME
+            self._set_error(get_error())
             return
-        self._state.add_tileset(tileset, 'ts_tm0')
+        try:
+            self._state.add_tileset(tileset, 'ts_tm0', mapfile=self._unimap)
+        except Exception as e:
+            self._set_error("Failed to load unicode map: {}".format(e))
+            return
         try:
             editscreen = self._state.get_screen(EditScreen)
         except KeyError:
@@ -547,6 +564,7 @@ class EditScreen():
         self._clipboard = None
         self._undo = list()
         self._undopos = -1
+        self._typing = False
 
     @property
     def dl(self):
@@ -634,7 +652,7 @@ class EditScreen():
             make_tilemap(self._vw, self._vh,
                          self._mw, self._mh,
                          0, 0,
-                         self._tileset, self._tilemap,
+                         self._tileset.ts, self._tilemap,
                          flags=self._flags, colormod=self._colormod)
 
     def _update_sidebar(self):
@@ -642,25 +660,23 @@ class EditScreen():
 
     def tilemap(self, ts, vw, vh, mw, mh):
         self._tileset = self._state.tileset(ts)
-        self._tiles = self._tileset.tiles()
+        self._tiles = self._tileset.ts.tiles()
         self._mw = int(mw)
         self._mh = int(mh)
-        self._tw = self._tileset.width()
-        self._th = self._tileset.height()
+        self._tw = self._tileset.ts.width()
+        self._th = self._tileset.ts.height()
         self._vw = int(vw / SCALE / self._tw)
         self._vh = int(vh / SCALE / self._th)
         self._fw = self._state.font.ts.width()
         self._fh = self._state.font.ts.height()
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
         self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
-        self._dl = display.DisplayList(self._state.ll)
         self._tilemap = array.array('I', itertools.repeat(0, self._mw * self._mh))
         self._flags = array.array('I', itertools.repeat(self._attrib, self._mw * self._mh))
         self._colormod = array.array('I', itertools.repeat(self._color, self._mw * self._mh))
         self._make_tilemap()
         self._stm.layer.scale(SCALE, SCALE)
-        self._dl.append(self._stm.layer)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nC - Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nV - Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nB - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu/U - Undo/Redo\np - Put Copy", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nC - Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nV - Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nB - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu/U - Undo/Redo\np - Put Copy\ni - Insert Text", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
         pwidth = self._tw * SCALE / self._fw
         if pwidth.is_integer():
             pwidth = int(pwidth)
@@ -682,7 +698,7 @@ class EditScreen():
         tilebgl.scale(1 / SCALE, 1 / SCALE)
         tilebgl.relative(self._sidebar.layer)
         self._sidebar.dl.append(tilebgl)
-        self._tiletm = self._tileset.tilemap(1, 1, "Preview")
+        self._tiletm = self._tileset.ts.tilemap(1, 1, "Preview")
         self._tiletm.update()
         self._tilel = self._tiletm.layer("Preview Layer")
         self._tilel.scale(SCALE, SCALE)
@@ -703,7 +719,6 @@ class EditScreen():
         self._update_vflip()
         self._update_rotation()
         self._sidebar.dl.append(self._statustext.layer)
-        self._sidebarindex = self._dl.append(self._sidebar.dl)
         curwidth = int(self._tw * SCALE / TEXT_SCALED_WIDTH) + 2
         curheight = int(self._th * SCALE / TEXT_SCALED_HEIGHT) + 2
         self._cursortm = self._state.font.ts.tilemap(curwidth, curheight, "MapEditor Cursor Tilemap")
@@ -713,11 +728,14 @@ class EditScreen():
         self._cursorl = self._cursortm.layer("Map Editor Cursor Layer")
         self._cursorl.relative(self._stm.layer)
         self._update_cursor()
-        self._dl.append(self._cursorl)
         self._state.add_screen(TileSelectScreen)
         selectscreen = self._state.get_screen(TileSelectScreen)
         selectscreen.tileset(ts, self._vw, self._vh)
+        self._dl = display.DisplayList(self._state.ll)
+        self._dl.append(self._stm.layer)
+        self._dl.append(self._cursorl)
         self._borderindex = self._dl.append(None)
+        self._sidebarindex = self._dl.append(self._sidebar.dl)
 
     def _get_tilemap_rect(self, x, y, w, h):
         rect = array.array('I')
@@ -816,278 +834,363 @@ class EditScreen():
         self._border.layer.relative(self._stm.layer)
         self._dl.replace(self._borderindex, self._border.layer)
 
+    def _up(self):
+        miny = 0
+        if self._typing and self._border is not None:
+            _, miny, _, _ = self._border.get_selection()
+        self._cury -= 1
+        if self._cury < miny:
+            self._cury = miny
+        self._update_cursor()
+        self._check_drawing()
+
+    def _down(self):
+        maxy = self._mh
+        if self._typing and self._border is not None:
+            _, y, _, h = self._border.get_selection()
+            maxy = y + h
+        self._cury += 1
+        if self._cury > maxy - 1:
+            self._cury = maxy - 1
+        self._update_cursor()
+        self._check_drawing()
+
+    def _left(self):
+        minx = 0
+        if self._typing and self._border is not None:
+            minx, _, _, _ = self._border.get_selection()
+        self._curx -= 1
+        if self._curx < minx:
+            self._curx = minx
+        self._update_cursor()
+        self._update_sidebar()
+        self._check_drawing()
+
+    def _right(self):
+        if self._typing:
+            x = 0
+            y = 0
+            w = self._mw
+            h = self._mh
+            if self._border is not None:
+                x, y, w, h = self._border.get_selection()
+            maxx = x + w
+            self._curx += 1
+            if self._curx > maxx - 1:
+                maxy = y + h
+                self._cury += 1
+                if self._cury > maxy - 1:
+                    self._curx = maxx - 1
+                    self._cury = maxy - 1
+                else:
+                    self._curx = x
+        else:
+            self._curx += 1
+            if self._curx > self._mh - 1:
+                self._curx = self._mh - 1
+        self._update_cursor()
+        self._update_sidebar()
+        self._check_drawing()
+
+    def _return(self):
+        maxy = self._mh
+        x = 0
+        if self._border is not None:
+            x, y, _, h = self._border.get_selection()
+            maxy = y + h
+        self._cury += 1
+        if self._cury > maxy - 1:
+            self._cury = maxy - 1
+        self._curx = x
+        self._update_cursor()
+        self._check_drawing()
+
     def input(self, event):
-        if event.type == SDL_KEYDOWN:
-            if event.key.keysym.sym == SDLK_UP:
-                if self._cury > 0:
-                    self._cury -= 1
-                    self._update_cursor()
-                    self._check_drawing()
-            elif event.key.keysym.sym == SDLK_DOWN:
-                if self._cury < self._mh - 1:
-                    self._cury += 1
-                    self._update_cursor()
-                    self._check_drawing()
-            elif event.key.keysym.sym == SDLK_LEFT:
-                if self._curx > 0:
-                    self._curx -= 1
-                    self._update_cursor()
-                    self._update_sidebar()
-                    self._check_drawing()
-            elif event.key.keysym.sym == SDLK_RIGHT:
-                if self._curx < self._mw - 1:
-                    self._curx += 1
-                    self._update_cursor()
-                    self._update_sidebar()
-                    self._check_drawing()
-            elif event.key.keysym.sym == SDLK_SPACE:
-                if event.key.keysym.mod & KMOD_SHIFT != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        self._clipboard = MapChange(x, y, w, h,
-                            tilemap=self._get_tilemap_rect(x, y, w, h),
-                            colormod=self._get_colormod_rect(x, y, w, h),
-                            flags=self._get_flags_rect(x, y, w, h))
+        if self._typing:
+            if event.type == SDL_TEXTINPUT:
+                # bytes to unicode
+                val = event.text.text.decode('utf-8')
+                # unicode to bytes
+                val = val.encode(self._tileset.codec)
+                # bytes to int
+                val = array.array('I', val)[0]
+                self._tilemap[self._cury * self._mw + self._curx] = val
+                self._right()
+            elif event.type == SDL_KEYDOWN:
+                if event.key.keysym.sym == SDLK_UP:
+                    self._up()
+                elif event.key.keysym.sym == SDLK_DOWN:
+                    self._down()
+                elif event.key.keysym.sym == SDLK_LEFT or \
+                     event.key.keysym.sym == SDLK_BACKSPACE:
+                    self._left()
+                elif event.key.keysym.sym == SDLK_RIGHT:
+                    self._right()
+                elif event.key.keysym.sym == SDLK_RETURN:
+                    self._return()
+                elif event.key.keysym.sym == SDLK_ESCAPE:
+                    self._typing = False
+        else:
+            if event.type == SDL_KEYDOWN:
+                if event.key.keysym.sym == SDLK_UP:
+                    self._up()
+                elif event.key.keysym.sym == SDLK_DOWN:
+                    self._down()
+                elif event.key.keysym.sym == SDLK_LEFT:
+                    self._left()
+                elif event.key.keysym.sym == SDLK_RIGHT:
+                    self._right()
+                elif event.key.keysym.sym == SDLK_SPACE:
+                    if event.key.keysym.mod & KMOD_SHIFT != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            self._clipboard = MapChange(x, y, w, h,
+                                tilemap=self._get_tilemap_rect(x, y, w, h),
+                                colormod=self._get_colormod_rect(x, y, w, h),
+                                flags=self._get_flags_rect(x, y, w, h))
+                        else:
+                            self._tile = self._tilemap[self._cury * self._mw + self._curx]
+                            self._color = self._colormod[self._cury * self._mw + self._curx]
+                            self._attrib = self._flags[self._cury * self._mw + self._curx]
+                            self._update_tile()
+                            self._update_red()
+                            self._update_green()
+                            self._update_blue()
+                            self._update_alpha()
+                            self._update_hflip()
+                            self._update_vflip()
+                            self._update_rotation()
                     else:
-                        self._tile = self._tilemap[self._cury * self._mw + self._curx]
-                        self._color = self._colormod[self._cury * self._mw + self._curx]
-                        self._attrib = self._flags[self._cury * self._mw + self._curx]
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            self._save_region(x, y, w, h)
+                            for num in range(h):
+                                self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w] = array.array('I', itertools.repeat(self._tile, w))
+                                self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w] = array.array('I', itertools.repeat(self._color, w))
+                                self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w] = array.array('I', itertools.repeat(self._attrib, w))
+                            self._stm.updateregion(x, y, w, h)
+                        else:
+                            self._drawing = True
+                            self._check_drawing()
+                elif event.key.keysym.sym == SDLK_KP_PLUS:
+                    if self._tile + 1 < self._tiles:
+                        self._tile += 1
                         self._update_tile()
-                        self._update_red()
-                        self._update_green()
-                        self._update_blue()
-                        self._update_alpha()
-                        self._update_hflip()
-                        self._update_vflip()
-                        self._update_rotation()
-                else:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        self._save_region(x, y, w, h)
-                        for num in range(h):
-                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w))
-                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w))
-                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w))
-                            self._stm.updateregion(x, y, w, h)
-                    else:
-                        self._drawing = True
-                        self._check_drawing()
-            elif event.key.keysym.sym == SDLK_KP_PLUS:
-                if self._tile + 1 < self._tiles:
-                    self._tile += 1
-                    self._update_tile()
-            elif event.key.keysym.sym == SDLK_KP_MINUS:
-                if self._tile > 0:
-                    self._tile -= 1
-                    self._update_tile()
-            elif event.key.keysym.sym == SDLK_v:
-                if event.key.keysym.mod & KMOD_SHIFT != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        if self._clipboard is not None and \
-                           x == self._clipboard.x and \
-                           y == self._clipboard.y and \
-                           w == self._clipboard.w and \
-                           h == self._clipboard.h:
-                            self._clipboard.tilemap = self._get_tilemap_rect(x, y, w, h)
-                        else:
-                            self._clipboard = MapChange(x, y, w, h, tilemap=self._get_tilemap_rect(x, y, w, h))
-                    else:
-                        self._tile = self._tilemap[self._cury * self._mw + self._curx]
+                elif event.key.keysym.sym == SDLK_KP_MINUS:
+                    if self._tile > 0:
+                        self._tile -= 1
                         self._update_tile()
-                elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        self._save_region(x, y, w, h)
-                        for num in range(h):
-                            self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._tile, w))
-                            self._stm.updateregion(x, y, w, h)
-                    else:
-                        self._puttile = True
-                        self._check_drawing()
-                else:
-                    self._state.active_screen(TileSelectScreen)
-            elif event.key.keysym.sym == SDLK_c:
-                if event.key.keysym.mod & KMOD_SHIFT != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        if self._clipboard is not None and \
-                           x == self._clipboard.x and \
-                           y == self._clipboard.y and \
-                           w == self._clipboard.w and \
-                           h == self._clipboard.h:
-                            self._clipboard.colormod = self._get_colormod_rect(x, y, w, h)
+                elif event.key.keysym.sym == SDLK_v:
+                    if event.key.keysym.mod & KMOD_SHIFT != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            if self._clipboard is not None and \
+                               x == self._clipboard.x and \
+                               y == self._clipboard.y and \
+                               w == self._clipboard.w and \
+                               h == self._clipboard.h:
+                                self._clipboard.tilemap = self._get_tilemap_rect(x, y, w, h)
+                            else:
+                                self._clipboard = MapChange(x, y, w, h, tilemap=self._get_tilemap_rect(x, y, w, h))
                         else:
-                            self._clipboard = MapChange(x, y, w, h, colormod=self._get_colormod_rect(x, y, w, h))
-                    else:
-                        self._color = self._colormod[self._cury * self._mw + self._curx]
-                        self._red, self._green, self._blue, self._alpha = display.unmake_color(self._color)
-                        self._update_red()
-                        self._update_green()
-                        self._update_blue()
-                        self._update_alpha()
-                elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        self._save_region(x, y, w, h)
-                        for num in range(h):
-                            self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._color, w))
+                            self._tile = self._tilemap[self._cury * self._mw + self._curx]
+                            self._update_tile()
+                    elif event.key.keysym.mod & KMOD_CTRL != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            self._save_region(x, y, w, h)
+                            for num in range(h):
+                                self._tilemap[self._mw*(y+num)+x:self._mw*(y+num)+x+w] = array.array('I', itertools.repeat(self._tile, w))
                             self._stm.updateregion(x, y, w, h)
-                    else:
-                        self._putcolor = True
-                        self._check_drawing()
-                else:
-                    colorpicker = ColorPickerScreen(self._state, self, self._vw, self._red, self._green, self._blue, self._alpha)
-                    self._state.active_screen(colorpicker)
-            elif event.key.keysym.sym == SDLK_b:
-                if event.key.keysym.mod & KMOD_SHIFT != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        if self._clipboard is not None and \
-                           x == self._clipboard.x and \
-                           y == self._clipboard.y and \
-                           w == self._clipboard.w and \
-                           h == self._clipboard.h:
-                            self._clipboard.flags = self._get_flags_rect(x, y, w, h)
                         else:
-                            self._clipboard = MapChange(x, y, w, h, flags=self._get_flags_rect(x, y, w, h))
+                            self._puttile = True
+                            self._check_drawing()
                     else:
-                        self._attrib = self._flags[self._cury * self._mw + self._curx]
-                        self._hflip, self._vflip, self._rotate = display.unmake_attrib(self._attrib)
-                        self._update_hflip()
-                        self._update_vflip()
-                        self._update_rotation()
-                elif event.key.keysym.mod & KMOD_CTRL != 0:
-                    if self._border is not None:
-                        x, y, w, h = self._border.get_selection()
-                        self._save_region(x, y, w, h)
-                        for num in range(h + 1):
-                            self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w+1] = array.array('I', itertools.repeat(self._attrib, w))
+                        self._state.active_screen(TileSelectScreen)
+                elif event.key.keysym.sym == SDLK_c:
+                    if event.key.keysym.mod & KMOD_SHIFT != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            if self._clipboard is not None and \
+                               x == self._clipboard.x and \
+                               y == self._clipboard.y and \
+                               w == self._clipboard.w and \
+                               h == self._clipboard.h:
+                                self._clipboard.colormod = self._get_colormod_rect(x, y, w, h)
+                            else:
+                                self._clipboard = MapChange(x, y, w, h, colormod=self._get_colormod_rect(x, y, w, h))
+                        else:
+                            self._color = self._colormod[self._cury * self._mw + self._curx]
+                            self._red, self._green, self._blue, self._alpha = display.unmake_color(self._color)
+                            self._update_red()
+                            self._update_green()
+                            self._update_blue()
+                            self._update_alpha()
+                    elif event.key.keysym.mod & KMOD_CTRL != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            self._save_region(x, y, w, h)
+                            for num in range(h):
+                                self._colormod[self._mw*(y+num)+x:self._mw*(y+num)+x+w] = array.array('I', itertools.repeat(self._color, w))
                             self._stm.updateregion(x, y, w, h)
+                        else:
+                            self._putcolor = True
+                            self._check_drawing()
                     else:
-                        self._putattrib = True
-                        self._check_drawing()
-            elif event.key.keysym.sym == SDLK_t:
-                if self._hflip == 0:
-                    self._hflip = cg.TILEMAP_HFLIP_MASK
-                else:
-                    self._hflip = 0
-                self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
-                self._update_hflip()
-            elif event.key.keysym.sym == SDLK_y:
-                if self._vflip == 0:
-                    self._vflip = cg.TILEMAP_VFLIP_MASK
-                else:
-                    self._vflip = 0
-                self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
-                self._update_vflip()
-            elif event.key.keysym.sym == SDLK_r:
-                if self._rotate == cg.TILEMAP_ROTATE_NONE:
-                    if self._tw == self._th:
-                        self._rotate = cg.TILEMAP_ROTATE_90
+                        colorpicker = ColorPickerScreen(self._state, self, self._vw, self._red, self._green, self._blue, self._alpha)
+                        self._state.active_screen(colorpicker)
+                elif event.key.keysym.sym == SDLK_b:
+                    if event.key.keysym.mod & KMOD_SHIFT != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            if self._clipboard is not None and \
+                               x == self._clipboard.x and \
+                               y == self._clipboard.y and \
+                               w == self._clipboard.w and \
+                               h == self._clipboard.h:
+                                self._clipboard.flags = self._get_flags_rect(x, y, w, h)
+                            else:
+                                self._clipboard = MapChange(x, y, w, h, flags=self._get_flags_rect(x, y, w, h))
+                        else:
+                            self._attrib = self._flags[self._cury * self._mw + self._curx]
+                            self._hflip, self._vflip, self._rotate = display.unmake_attrib(self._attrib)
+                            self._update_hflip()
+                            self._update_vflip()
+                            self._update_rotation()
+                    elif event.key.keysym.mod & KMOD_CTRL != 0:
+                        if self._border is not None:
+                            x, y, w, h = self._border.get_selection()
+                            self._save_region(x, y, w, h)
+                            for num in range(h + 1):
+                                self._flags[self._mw*(y+num)+x:self._mw*(y+num)+x+w] = array.array('I', itertools.repeat(self._attrib, w))
+                            self._stm.updateregion(x, y, w, h)
+                        else:
+                            self._putattrib = True
+                            self._check_drawing()
+                elif event.key.keysym.sym == SDLK_t:
+                    if self._hflip == 0:
+                        self._hflip = cg.TILEMAP_HFLIP_MASK
                     else:
+                        self._hflip = 0
+                    self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                    self._update_hflip()
+                elif event.key.keysym.sym == SDLK_y:
+                    if self._vflip == 0:
+                        self._vflip = cg.TILEMAP_VFLIP_MASK
+                    else:
+                        self._vflip = 0
+                    self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                    self._update_vflip()
+                elif event.key.keysym.sym == SDLK_r:
+                    if self._rotate == cg.TILEMAP_ROTATE_NONE:
+                        if self._tw == self._th:
+                            self._rotate = cg.TILEMAP_ROTATE_90
+                        else:
+                            self._rotate = cg.TILEMAP_ROTATE_180
+                    elif self._rotate == cg.TILEMAP_ROTATE_90:
                         self._rotate = cg.TILEMAP_ROTATE_180
-                elif self._rotate == cg.TILEMAP_ROTATE_90:
-                    self._rotate = cg.TILEMAP_ROTATE_180
-                elif self._rotate == cg.TILEMAP_ROTATE_180:
-                    if self._tw == self._th:
-                        self._rotate = cg.TILEMAP_ROTATE_270
+                    elif self._rotate == cg.TILEMAP_ROTATE_180:
+                        if self._tw == self._th:
+                            self._rotate = cg.TILEMAP_ROTATE_270
+                        else:
+                            self._rotate = cg.TILEMAP_ROTATE_NONE
                     else:
                         self._rotate = cg.TILEMAP_ROTATE_NONE
-                else:
-                    self._rotate = cg.TILEMAP_ROTATE_NONE
-                self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
-                self._update_rotation()
-            elif event.key.keysym.sym == SDLK_q:
-                if self._red < 255:
-                    self._red += 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_red()
-            elif event.key.keysym.sym == SDLK_a:
-                if self._red > 0:
-                    self._red -= 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_red()
-            elif event.key.keysym.sym == SDLK_w:
-                if self._green < 255:
-                    self._green += 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_green()
-            elif event.key.keysym.sym == SDLK_s:
-                if self._green > 0:
-                    self._green -= 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_green()
-            elif event.key.keysym.sym == SDLK_e:
-                if self._blue < 255:
-                    self._blue += 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_blue()
-            elif event.key.keysym.sym == SDLK_d:
-                if self._blue > 0:
-                    self._blue -= 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_blue()
-            elif event.key.keysym.sym == SDLK_x:
-                if self._alpha < 255:
-                    self._alpha += 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_alpha()
-            elif event.key.keysym.sym == SDLK_z:
-                if self._alpha > 0:
-                    self._alpha -= 1
-                    self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
-                    self._update_alpha()
-            elif event.key.keysym.sym == SDLK_h:
-                if self._showsidebar == 0:
-                    self._dl.replace(self._sidebarindex, self._sidebar.dl)
-                    self._sidebar.show_text(False)
-                    self._showsidebar = 1
-                elif self._showsidebar == 1:
-                    self._sidebar.show_text(True)
-                    self._showsidebar = 2
-                else:
-                    self._dl.replace(self._sidebarindex, None)
-                    self._showsidebar = 0
-            elif event.key.keysym.sym == SDLK_f:
-                if self._border is None:
-                    self._make_border()
-                else:
-                    self._border.set_top_left(self._curx, self._cury)
-            elif event.key.keysym.sym == SDLK_g:
-                if self._border is None:
-                    self._make_border()
-                else:
-                    self._border.set_bottom_right(self._curx, self._cury)
-            elif event.key.keysym.sym == SDLK_ESCAPE:
-                if self._border is None:
-                    prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
-                    self._state.active_screen(prompt)
-                else:
-                    self._dl.replace(self._borderindex, None)
-                    self._border = None
-            elif event.key.keysym.sym == SDLK_p:
-                x = self._clipboard.x
-                y = self._clipboard.y
-                self._clipboard.x = self._curx
-                self._clipboard.y = self._cury
-                self._apply_change(self._clipboard)
-                self._clipboard.x = x
-                self._clipboard.y = y
-            elif event.key.keysym.sym == SDLK_u:
-                if event.key.keysym.mod & KMOD_SHIFT != 0:
-                    self._do_redo()
-                else:
-                    self._do_undo()
-        elif event.type == SDL_KEYUP:
-            if event.key.keysym.sym == SDLK_SPACE:
-                self._drawing = False
-            elif event.key.keysym.sym == SDLK_c:
-                self._putcolor = False
-            elif event.key.keysym.sym == SDLK_v:
-                self._puttile = False
-            elif event.key.keysym.sym == SDLK_b:
-                self._putattrib = False
+                    self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                    self._update_rotation()
+                elif event.key.keysym.sym == SDLK_q:
+                    if self._red < 255:
+                        self._red += 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_red()
+                elif event.key.keysym.sym == SDLK_a:
+                    if self._red > 0:
+                        self._red -= 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_red()
+                elif event.key.keysym.sym == SDLK_w:
+                    if self._green < 255:
+                        self._green += 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_green()
+                elif event.key.keysym.sym == SDLK_s:
+                    if self._green > 0:
+                        self._green -= 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_green()
+                elif event.key.keysym.sym == SDLK_e:
+                    if self._blue < 255:
+                        self._blue += 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_blue()
+                elif event.key.keysym.sym == SDLK_d:
+                    if self._blue > 0:
+                        self._blue -= 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_blue()
+                elif event.key.keysym.sym == SDLK_x:
+                    if self._alpha < 255:
+                        self._alpha += 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_alpha()
+                elif event.key.keysym.sym == SDLK_z:
+                    if self._alpha > 0:
+                        self._alpha -= 1
+                        self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
+                        self._update_alpha()
+                elif event.key.keysym.sym == SDLK_h:
+                    if self._showsidebar == 0:
+                        self._dl.replace(self._sidebarindex, self._sidebar.dl)
+                        self._sidebar.show_text(False)
+                        self._showsidebar = 1
+                    elif self._showsidebar == 1:
+                        self._sidebar.show_text(True)
+                        self._showsidebar = 2
+                    else:
+                        self._dl.replace(self._sidebarindex, None)
+                        self._showsidebar = 0
+                elif event.key.keysym.sym == SDLK_f:
+                    if self._border is None:
+                        self._make_border()
+                    else:
+                        self._border.set_top_left(self._curx, self._cury)
+                elif event.key.keysym.sym == SDLK_g:
+                    if self._border is None:
+                        self._make_border()
+                    else:
+                        self._border.set_bottom_right(self._curx, self._cury)
+                elif event.key.keysym.sym == SDLK_ESCAPE:
+                    if self._border is None:
+                        prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                        self._state.active_screen(prompt)
+                    else:
+                        self._dl.replace(self._borderindex, None)
+                        self._border = None
+                elif event.key.keysym.sym == SDLK_p:
+                    x = self._clipboard.x
+                    y = self._clipboard.y
+                    self._clipboard.x = self._curx
+                    self._clipboard.y = self._cury
+                    self._apply_change(self._clipboard)
+                    self._clipboard.x = x
+                    self._clipboard.y = y
+                elif event.key.keysym.sym == SDLK_u:
+                    if event.key.keysym.mod & KMOD_SHIFT != 0:
+                        self._do_redo()
+                    else:
+                        self._do_undo()
+                elif event.key.keysym.sym == SDLK_i:
+                    if self._tileset.codec is not None:
+                        self._typing = True
+            elif event.type == SDL_KEYUP:
+                if event.key.keysym.sym == SDLK_SPACE:
+                    self._drawing = False
+                elif event.key.keysym.sym == SDLK_c:
+                    self._putcolor = False
+                elif event.key.keysym.sym == SDLK_v:
+                    self._puttile = False
+                elif event.key.keysym.sym == SDLK_b:
+                    self._putattrib = False
 
     def update(self, time):
         self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
@@ -1148,7 +1251,7 @@ class TileSelectScreen():
             make_tilemap(self._vw, self._vh,
                          self._mw, self._mh,
                          self._curx, self._cury,
-                         self._tileset, tilemap,
+                         self._tileset.ts, tilemap,
                          colormod=colormod)
         if self._cury * self._mw + self._curx >= self._tiles:
             self._cury = self._tiles // self._mw - 1
@@ -1162,7 +1265,7 @@ class TileSelectScreen():
 
     def tileset(self, ts, vw, vh):
         self._tileset = self._state.tileset(ts)
-        self._tiles = self._tileset.tiles()
+        self._tiles = self._tileset.ts.tiles()
         side = math.sqrt(self._tiles)
         if side.is_integer():
             side = int(side)
@@ -1172,8 +1275,8 @@ class TileSelectScreen():
         self._vh = int(vh)
         self._mw = side
         self._mh = side
-        self._tw = self._tileset.width()
-        self._th = self._tileset.height()
+        self._tw = self._tileset.ts.width()
+        self._th = self._tileset.ts.height()
         self._fw = self._state.font.ts.width()
         self._fh = self._state.font.ts.height()
         self._dl = display.DisplayList(self._state.ll)
@@ -1349,7 +1452,7 @@ class ColorPickerScreen():
         colorbgl = make_checkerboard(self._state.font, 8, 8)
         colorbgl.pos(int(TEXT_SCALED_WIDTH * 15), int(TEXT_SCALED_HEIGHT * 3))
         self._dl.append(colorbgl)
-        cbtm = array.array('u', itertools.repeat('█', 64)).tounicode().encode('crusty_text')
+        cbtm = array.array('u', itertools.repeat('█', 64)).tounicode().encode(self._state.font.codec)
         colortm = self._state.font.ts.tilemap(8, 8, "Color Picker Color")
         colortm.map(0, 0, 8, 8, 8, cbtm)
         colortm.update()
@@ -1493,8 +1596,7 @@ class MapeditState():
         self._tilemaps = {}
         self._running = True
         self._newscreen = False
-        with open(TEXT_MAP_FILENAME, 'r') as f:
-            codec = textbox.load_tileset_codec(f, 'text')
+        codec = textbox.load_tileset_codec(TEXT_MAP_FILENAME)
         self._font = textbox.Font(
             self._ll.tileset(TEXT_FILENAME, TEXT_WIDTH, TEXT_HEIGHT, None),
             codec)
@@ -1561,8 +1663,11 @@ class MapeditState():
             SDL_RenderPresent(self._renderer)
         self._newscreen = False
 
-    def add_tileset(self, ts, name):
-        self._tilesets[name] = ts
+    def add_tileset(self, ts, name, mapfile=None):
+        codec = None
+        if mapfile is not None:
+            codec = textbox.load_tileset_codec(mapfile)
+        self._tilesets[name] = textbox.Font(ts, codec)
 
     def tileset(self, name):
         return self._tilesets[name]
