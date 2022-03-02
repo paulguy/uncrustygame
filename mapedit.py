@@ -1596,10 +1596,9 @@ class MapeditState():
         self._tilemaps = {}
         self._running = True
         self._newscreen = False
-        codec = textbox.load_tileset_codec(TEXT_MAP_FILENAME)
-        self._font = textbox.Font(
-            self._ll.tileset(TEXT_FILENAME, TEXT_WIDTH, TEXT_HEIGHT, None),
-            codec)
+        ts = self._ll.tileset(TEXT_FILENAME, TEXT_WIDTH, TEXT_HEIGHT, None)
+        codec = textbox.load_tileset_codec(TEXT_MAP_FILENAME, ts.tiles())
+        self._font = textbox.Font(ts, codec)
 
     @property
     def running(self):
@@ -1666,7 +1665,7 @@ class MapeditState():
     def add_tileset(self, ts, name, mapfile=None):
         codec = None
         if mapfile is not None:
-            codec = textbox.load_tileset_codec(mapfile)
+            codec = textbox.load_tileset_codec(mapfile, maxval=ts.tiles())
         self._tilesets[name] = textbox.Font(ts, codec)
 
     def tileset(self, name):

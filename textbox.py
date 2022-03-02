@@ -10,7 +10,12 @@ from typing import Callable
 
 MENU_DEFAULT_CURSOR = '▶'
 
-_codecs = set()
+@dataclass
+class TilesetCodec():
+    maxval : int
+    ref : int = 0 # maybe useful at some point but probably not at the moment
+
+_codecs = dict()
 
 @dataclass
 class Font():
@@ -104,7 +109,7 @@ def tileset_codec_search(sname, name, func):
         return func
     return None
 
-def load_tileset_codec(filename):
+def load_tileset_codec(filename, maxval=0):
     enctable = {}
     dectable = {}
 
@@ -117,7 +122,11 @@ def load_tileset_codec(filename):
     codecname = 'crusty_{}'.format(codecname)
 
     if codecname in _codecs:
+        if maxval > 0 and _codecs[codecname].maxval > maxval - 1:
+            raise ValueError("Map file defines tile num out of range of max value {} > {}.  Maybe unmatched map file and tilemap?".format(_codecs[codecname].maxval, maxval - 1))
         return codecname
+
+    mapmax = 0
 
     with open(filename) as f:
         for line in f:
@@ -135,13 +144,22 @@ def load_tileset_codec(filename):
             codepoint = int(codepoint, base=16)
             tilenum = int(tilenum)
             if endcodepoint == 0:
+                if maxval > 0 and tilenum > maxval - 1:
+                    raise ValueError("Map file defines tile num out of range of max value {} > {}.  Maybe unmatched map file and tilemap?".format(tilenum, maxval - 1))
                 if chr(codepoint) in enctable:
                     raise ValueError("Duplicate char definition for {}.".format(hex(codepoint)))
+                if tilenum > mapmax:
+                    mapmax = tilenum
                 enctable[chr(codepoint)] = tilenum
                 dectable[tilenum] = chr(codepoint)
             else:
                 if endcodepoint <= codepoint:
                     raise ValueError("End point before start point.")
+
+                if maxval > 0 and tilenum + (endcodepoint - codepoint) > maxval - 1:
+                    raise ValueError("Map file defines tile num out of range of max value {} + {} > {}.  Maybe unmatched map file and tilemap?".format(tilenum, endcodepoint, maxval - 1))
+                if tilenum + (endcodepoint - codepoint) > mapmax:
+                    mapmax = tilenum + (endcodepoint - codepoint)
                 for num in range(endcodepoint - codepoint + 1):
                     if chr(codepoint + num) in enctable:
                         raise ValueError("Duplicate char definition for {}.".format(hex(codepoint + num)))
@@ -155,7 +173,7 @@ def load_tileset_codec(filename):
     codecs.register(
         lambda s: tileset_codec_search(s, codecname, codec))
 
-    _codecs.add(codecname)
+    _codecs[codecname] = TilesetCodec(mapmax)
 
     return codecname
 
