@@ -233,8 +233,8 @@ class Sidebar():
 
 class BorderSelector():
     def __init__(self, state, vw, vh, mw, mh, tw, th, tlx, tly, brx, bry):
-        self._vw = int(vw)
-        self._vh = int(vh)
+        self._mw = int(mw)
+        self._mh = int(mh)
         self._tlx = int(tlx)
         self._tly = int(tly)
         self._brx = int(brx)
@@ -245,8 +245,8 @@ class BorderSelector():
            self._bry < 0 or self._bry >= self._mh:
             raise ValueError("Coordinate out of range.")
         self._state = state
-        self._mw = int(mw)
-        self._mh = int(mh)
+        self._vw = int(vw)
+        self._vh = int(vh)
         self._tw = int(tw)
         self._th = int(th)
         self._fw = self._state.font.ts.width()
