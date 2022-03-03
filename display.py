@@ -276,12 +276,11 @@ class ScrollingTilemap():
         startx = int(startx)
         starty = int(starty)
         self.scroll(startx, starty)
-        # set to some values that could never intersect to force update
-        self._vmx = -self._vmw
-        self._vmy = -self._vmh
+        self._vmx = startx
+        self._vmy = starty
         # don't bother sanity checking the buffer, just try to update it which
         # should do all the sanity checking. :p
-        self.update()
+        self.update(force=True)
         self._l.window(self._vw * self._tw, self._vh * self._th)
 
     @property
@@ -310,7 +309,7 @@ class ScrollingTilemap():
         self._newx = x
         self._newy = y
 
-    def update(self):
+    def update(self, force=False):
         ox = self._vmx
         oy = self._vmy
         nx = self._newx // self._tw
@@ -321,7 +320,7 @@ class ScrollingTilemap():
             ny = self._mh - self._vmh
         if nx + self._vmw < ox or nx >= ox + self._vmw or \
            ny + self._vmh < oy or ny >= oy + self._vmh or \
-           not self._optimize:
+           not self._optimize or force:
             # no overlap or optimization disabled, redraw the whole thing
             self._setmap(nx, ny)
             self._vmx = nx

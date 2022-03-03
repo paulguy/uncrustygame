@@ -5,6 +5,7 @@ import array
 from sys import argv
 import time
 from dataclasses import dataclass
+from traceback import print_tb
 import display
 import textbox
 import copy
@@ -13,9 +14,9 @@ import math
 import effects
 
 #TODO:
+# reload tileset
+# command line/config file options for overall scale/resolution
 # Editor view scale option
-# Block copy/fill tool
-# Text tool using tilemap codec
 # Multiple layers
 # Preview of multiple layers with independent scale/scroll speed/center
 # plane/project Save/Load
@@ -45,6 +46,22 @@ TILES_WIDTH=int(RES_WIDTH / TEXT_SCALED_WIDTH)
 TILES_HEIGHT=int(RES_HEIGHT / TEXT_SCALED_HEIGHT)
 
 crustyerror = ''
+
+@dataclass(frozen=True)
+class TilesetDesc():
+    filename : str
+    width : int
+    height : int
+
+@dataclass
+class MapChange():
+    x : int
+    y : int
+    w : int
+    h : int
+    tilemap : array.array = None
+    colormod : array.array = None
+    flags : array.array = None
 
 def put_centered_line(tb, line, y, mw):
     tb.put_text((line,), (mw - len(line)) / 2, y)
@@ -360,16 +377,6 @@ class BorderSelector():
             self._newbry = y
         self._update_box()
 
-@dataclass
-class MapChange():
-    x : int
-    y : int
-    w : int
-    h : int
-    tilemap : array.array = None
-    colormod : array.array = None
-    flags : array.array = None
-
 class NewScreen():
     NAME='new'
 
@@ -516,23 +523,22 @@ class NewScreen():
         self._error = ERROR_TIME
 
     def _proceed(self, priv, sel):
+        unimap = None
+        if len(self._unimap) > 0:
+            unimap = self._unimap
+        codec = None
+        self._state.add_screen(EditScreen)
+        editscreen = self._state.get_screen(EditScreen)
         try:
-            tileset = self._state.ll.tileset(self._filename, self._tw, self._th, None)
-        except cg.CrustyException:
-            self._set_error(get_error())
-            return
-        try:
-            self._state.add_tileset(tileset, 'ts_tm0', mapfile=self._unimap)
+            editscreen.tilemap(self._filename, unimap,
+                               RES_WIDTH, RES_HEIGHT,
+                               self._mw, self._mh,
+                               self._tw, self._th)
         except Exception as e:
-            self._set_error("Failed to load unicode map: {}".format(e))
+            self._set_error(str(e))
+            print(e)
+            print_tb(e.__traceback__)
             return
-        try:
-            editscreen = self._state.get_screen(EditScreen)
-        except KeyError:
-            self._state.add_screen(EditScreen)
-            editscreen = self._state.get_screen(EditScreen)
-        editscreen.tilemap('ts_tm0', RES_WIDTH, RES_HEIGHT,
-                                     self._mw, self._mh)
         self._state.active_screen(EditScreen)
 
 class EditScreen():
@@ -647,24 +653,32 @@ class EditScreen():
         if self._border is not None:
             self._border.scroll(xscroll, yscroll)
 
-    def _make_tilemap(self):
+    def _update_sidebar(self):
+        self._sidebar.update(self._curpos, self._curx, self._mw)
+
+    def _make_stm(self, tileset):
         self._curx, self._cury, self._stm = \
             make_tilemap(self._vw, self._vh,
                          self._mw, self._mh,
                          0, 0,
-                         self._tileset.ts, self._tilemap,
+                         tileset, self._tilemap,
                          flags=self._flags, colormod=self._colormod)
+        self._stm.layer.scale(SCALE, SCALE)
 
-    def _update_sidebar(self):
-        self._sidebar.update(self._curpos, self._curx, self._mw)
+    def _make_selectscreen(self):
+        self._selectscreen = TileSelectScreen(self._state, self, self._tsdesc, self._vw, self._vh)
 
-    def tilemap(self, ts, vw, vh, mw, mh):
-        self._tileset = self._state.tileset(ts)
-        self._tiles = self._tileset.ts.tiles()
+    def tilemap(self, filename, unimap, vw, vh, mw, mh, tw, th):
+        self._tw = int(tw)
+        self._th = int(th)
+        self._tsdesc = self._state.add_tileset(filename, self._tw, self._th)
+        tileset = self._state.tileset(self._tsdesc)
+        self._tiles = tileset.tiles()
+        self._codec = None
+        if unimap is None:
+            self._codec = textbox.load_tileset_codec(unimap, maxval=self._tiles)
         self._mw = int(mw)
         self._mh = int(mh)
-        self._tw = self._tileset.ts.width()
-        self._th = self._tileset.ts.height()
         self._vw = int(vw / SCALE / self._tw)
         self._vh = int(vh / SCALE / self._th)
         self._fw = self._state.font.ts.width()
@@ -674,8 +688,7 @@ class EditScreen():
         self._tilemap = array.array('I', itertools.repeat(0, self._mw * self._mh))
         self._flags = array.array('I', itertools.repeat(self._attrib, self._mw * self._mh))
         self._colormod = array.array('I', itertools.repeat(self._color, self._mw * self._mh))
-        self._make_tilemap()
-        self._stm.layer.scale(SCALE, SCALE)
+        self._make_stm(tileset)
         self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nC - Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nV - Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nB - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu/U - Undo/Redo\np - Put Copy\ni - Insert Text", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
         pwidth = self._tw * SCALE / self._fw
         if pwidth.is_integer():
@@ -698,7 +711,7 @@ class EditScreen():
         tilebgl.scale(1 / SCALE, 1 / SCALE)
         tilebgl.relative(self._sidebar.layer)
         self._sidebar.dl.append(tilebgl)
-        self._tiletm = self._tileset.ts.tilemap(1, 1, "Preview")
+        self._tiletm = tileset.tilemap(1, 1, "Preview")
         self._tiletm.update()
         self._tilel = self._tiletm.layer("Preview Layer")
         self._tilel.scale(SCALE, SCALE)
@@ -728,11 +741,9 @@ class EditScreen():
         self._cursorl = self._cursortm.layer("Map Editor Cursor Layer")
         self._cursorl.relative(self._stm.layer)
         self._update_cursor()
-        self._state.add_screen(TileSelectScreen)
-        selectscreen = self._state.get_screen(TileSelectScreen)
-        selectscreen.tileset(ts, self._vw, self._vh)
+        self._make_selectscreen()
         self._dl = display.DisplayList(self._state.ll)
-        self._dl.append(self._stm.layer)
+        self._stmindex = self._dl.append(self._stm.layer)
         self._dl.append(self._cursorl)
         self._borderindex = self._dl.append(None)
         self._sidebarindex = self._dl.append(self._sidebar.dl)
@@ -911,7 +922,7 @@ class EditScreen():
                 # bytes to unicode
                 val = event.text.text.decode('utf-8')
                 # unicode to bytes
-                val = val.encode(self._tileset.codec)
+                val = val.encode(self._codec)
                 # bytes to int
                 val = array.array('I', val)[0]
                 self._tilemap[self._cury * self._mw + self._curx] = val
@@ -1006,7 +1017,7 @@ class EditScreen():
                             self._puttile = True
                             self._check_drawing()
                     else:
-                        self._state.active_screen(TileSelectScreen)
+                        self._state.active_screen(self._selectscreen)
                 elif event.key.keysym.sym == SDLK_c:
                     if event.key.keysym.mod & KMOD_SHIFT != 0:
                         if self._border is not None:
@@ -1082,22 +1093,30 @@ class EditScreen():
                     self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
                     self._update_vflip()
                 elif event.key.keysym.sym == SDLK_r:
-                    if self._rotate == cg.TILEMAP_ROTATE_NONE:
-                        if self._tw == self._th:
-                            self._rotate = cg.TILEMAP_ROTATE_90
-                        else:
+                    if event.key.keysym.mod & KMOD_CTRL != 0:
+                        tileset = self._state.reload_tileset(self._tsdesc)
+                        self._make_stm(tileset)
+                        self._cursorl.relative(self._stm.layer)
+                        self._dl.replace(self._stmindex, self._stm.layer)
+                        self._update_cursor()
+                        self._make_selectscreen()
+                    else:
+                        if self._rotate == cg.TILEMAP_ROTATE_NONE:
+                            if self._tw == self._th:
+                                self._rotate = cg.TILEMAP_ROTATE_90
+                            else:
+                                self._rotate = cg.TILEMAP_ROTATE_180
+                        elif self._rotate == cg.TILEMAP_ROTATE_90:
                             self._rotate = cg.TILEMAP_ROTATE_180
-                    elif self._rotate == cg.TILEMAP_ROTATE_90:
-                        self._rotate = cg.TILEMAP_ROTATE_180
-                    elif self._rotate == cg.TILEMAP_ROTATE_180:
-                        if self._tw == self._th:
-                            self._rotate = cg.TILEMAP_ROTATE_270
+                        elif self._rotate == cg.TILEMAP_ROTATE_180:
+                            if self._tw == self._th:
+                                self._rotate = cg.TILEMAP_ROTATE_270
+                            else:
+                                self._rotate = cg.TILEMAP_ROTATE_NONE
                         else:
                             self._rotate = cg.TILEMAP_ROTATE_NONE
-                    else:
-                        self._rotate = cg.TILEMAP_ROTATE_NONE
-                    self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
-                    self._update_rotation()
+                        self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+                        self._update_rotation()
                 elif event.key.keysym.sym == SDLK_q:
                     if self._red < 255:
                         self._red += 1
@@ -1180,7 +1199,7 @@ class EditScreen():
                     else:
                         self._do_undo()
                 elif event.key.keysym.sym == SDLK_i:
-                    if self._tileset.codec is not None:
+                    if self._codec is not None:
                         self._typing = True
             elif event.type == SDL_KEYUP:
                 if event.key.keysym.sym == SDLK_SPACE:
@@ -1214,22 +1233,6 @@ class EditScreen():
         self._update_alpha()
 
 class TileSelectScreen():
-    NAME='tileselect'
-
-    def __init__(self, state):
-        self._state = state
-        self._stm = None
-        self._cursorrad = 0.0
-        self._scale = 2.0
-
-    @property
-    def dl(self):
-        return self._dl
-
-    def active(self):
-        if self._stm is None:
-            raise Exception("Edit screen not fully set up.")
-
     def _update_cursor(self):
         self._curpos, _, xscroll, yscroll, x, y = \
             update_cursor(self._vw, self._vh,
@@ -1251,7 +1254,7 @@ class TileSelectScreen():
             make_tilemap(self._vw, self._vh,
                          self._mw, self._mh,
                          self._curx, self._cury,
-                         self._tileset.ts, tilemap,
+                         self._tileset, tilemap,
                          colormod=colormod)
         if self._cury * self._mw + self._curx >= self._tiles:
             self._cury = self._tiles // self._mw - 1
@@ -1263,9 +1266,14 @@ class TileSelectScreen():
     def _update_sidebar(self):
         self._sidebar.update(self._curpos, self._curx, self._mw)
 
-    def tileset(self, ts, vw, vh):
+    def __init__(self, state, editscreen, ts, vw, vh):
+        self._state = state
+        self._stm = None
+        self._cursorrad = 0.0
+        self._scale = 2.0
+        self._editscreen = editscreen
         self._tileset = self._state.tileset(ts)
-        self._tiles = self._tileset.ts.tiles()
+        self._tiles = self._tileset.tiles()
         side = math.sqrt(self._tiles)
         if side.is_integer():
             side = int(side)
@@ -1275,8 +1283,8 @@ class TileSelectScreen():
         self._vh = int(vh)
         self._mw = side
         self._mh = side
-        self._tw = self._tileset.ts.width()
-        self._th = self._tileset.ts.height()
+        self._tw = self._tileset.width()
+        self._th = self._tileset.height()
         self._fw = self._state.font.ts.width()
         self._fh = self._state.font.ts.height()
         self._dl = display.DisplayList(self._state.ll)
@@ -1294,6 +1302,14 @@ class TileSelectScreen():
         self._make_tilemap()
         self._sidebar = Sidebar(self._state, "ESC - Cancel Selection\nArrows - Move\nEnter - Select\nq/w - Adjust Width\na/z - Adjust Height", TILES_WIDTH, TILES_HEIGHT, self._mw, self._tw)
         self._dl.append(self._sidebar.dl)
+
+    @property
+    def dl(self):
+        return self._dl
+
+    def active(self):
+        if self._stm is None:
+            raise Exception("Edit screen not fully set up.")
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
@@ -1349,7 +1365,7 @@ class TileSelectScreen():
                 editscreen.set_tile(self._cury * self._mw + self._curx)
                 self._state.active_screen(EditScreen)
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                self._state.active_screen(EditScreen)
+                self._state.active_screen(self._editscreen)
 
     def update(self, time):
         self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
@@ -1662,11 +1678,19 @@ class MapeditState():
             SDL_RenderPresent(self._renderer)
         self._newscreen = False
 
-    def add_tileset(self, ts, name, mapfile=None):
-        codec = None
-        if mapfile is not None:
-            codec = textbox.load_tileset_codec(mapfile, maxval=ts.tiles())
-        self._tilesets[name] = textbox.Font(ts, codec)
+    def add_tileset(self, filename, width, height):
+        desc = TilesetDesc(filename, width, height)
+        try:
+            tileset = self._tilesets[desc]
+        except KeyError:
+            tileset = self._ll.tileset(filename, width, height, None)
+            self._tilesets[desc] = tileset
+        return desc
+
+    def reload_tileset(self, desc):
+        tileset = self._ll.tileset(desc.filename, desc.width, desc.height, None)
+        self._tilesets[desc] = tileset
+        return tileset
 
     def tileset(self, name):
         return self._tilesets[name]
