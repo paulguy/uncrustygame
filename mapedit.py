@@ -378,8 +378,6 @@ class BorderSelector():
         self._update_box()
 
 class NewScreen():
-    NAME='new'
-
     def __init__(self, state):
         self._state = state
         self._dl = display.DisplayList(self._state.ll)
@@ -527,50 +525,21 @@ class NewScreen():
         if len(self._unimap) > 0:
             unimap = self._unimap
         codec = None
-        self._state.add_screen(EditScreen)
-        editscreen = self._state.get_screen(EditScreen)
         try:
-            editscreen.tilemap(self._filename, unimap,
-                               RES_WIDTH, RES_HEIGHT,
-                               self._mw, self._mh,
-                               self._tw, self._th)
+            self._editscreen = EditScreen(self._state,
+                                          self._filename, unimap,
+                                          RES_WIDTH, RES_HEIGHT,
+                                          self._mw, self._mh,
+                                          self._tw, self._th)
         except Exception as e:
             self._set_error(str(e))
             print(e)
             print_tb(e.__traceback__)
             return
-        self._state.active_screen(EditScreen)
+        self._state.active_screen(self._editscreen)
 
 class EditScreen():
-    NAME='edit'
-
     MAX_UNDO=100
-
-    def __init__(self, state):
-        self._state = state
-        self._tilemap = None
-        self._cursorrad = 0.0
-        self._curx = 0
-        self._cury = 0
-        self._tile = 0
-        self._quitting = False
-        self._red = 255
-        self._green = 255
-        self._blue = 255
-        self._alpha = SDL_ALPHA_OPAQUE
-        self._hflip = 0
-        self._vflip = 0
-        self._rotate = cg.TILEMAP_ROTATE_NONE
-        self._drawing = False
-        self._puttile = False
-        self._putcolor = False
-        self._putattrib = False
-        self._showsidebar = 2
-        self._border = None
-        self._clipboard = None
-        self._undo = list()
-        self._undopos = -1
-        self._typing = False
 
     @property
     def dl(self):
@@ -635,8 +604,6 @@ class EditScreen():
         self._update_tile()
 
     def active(self):
-        if self._tilemap is None:
-            raise Exception("Edit screen not fully set up.")
         if self._quitting:
             self._state.stop()
 
@@ -668,7 +635,31 @@ class EditScreen():
     def _make_selectscreen(self):
         self._selectscreen = TileSelectScreen(self._state, self, self._tsdesc, self._vw, self._vh)
 
-    def tilemap(self, filename, unimap, vw, vh, mw, mh, tw, th):
+    def __init__(self, state, filename, unimap, vw, vh, mw, mh, tw, th):
+        self._state = state
+        self._tilemap = None
+        self._cursorrad = 0.0
+        self._curx = 0
+        self._cury = 0
+        self._tile = 0
+        self._quitting = False
+        self._red = 255
+        self._green = 255
+        self._blue = 255
+        self._alpha = SDL_ALPHA_OPAQUE
+        self._hflip = 0
+        self._vflip = 0
+        self._rotate = cg.TILEMAP_ROTATE_NONE
+        self._drawing = False
+        self._puttile = False
+        self._putcolor = False
+        self._putattrib = False
+        self._showsidebar = 2
+        self._border = None
+        self._clipboard = None
+        self._undo = list()
+        self._undopos = -1
+        self._typing = False
         self._tw = int(tw)
         self._th = int(th)
         self._tsdesc = self._state.add_tileset(filename, self._tw, self._th)
@@ -1308,8 +1299,7 @@ class TileSelectScreen():
         return self._dl
 
     def active(self):
-        if self._stm is None:
-            raise Exception("Edit screen not fully set up.")
+        pass
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
@@ -1372,8 +1362,6 @@ class TileSelectScreen():
         self._cursorl.colormod(color)
 
 class PromptScreen():
-    NAME='prompt'
-
     def __init__(self, state, caller, title, message, options, default=0):
         self._state = state
         self._caller = caller
@@ -1439,8 +1427,6 @@ class PromptScreen():
         self._state.active_screen(self._caller)
 
 class ColorPickerScreen():
-    NAME='colorpicker'
-
     def __init__(self, state, caller, vw, red=0, green=0, blue=0, alpha=SDL_ALPHA_OPAQUE):
         self._state = state
         self._caller = caller
@@ -1606,8 +1592,7 @@ class MapeditState():
         self._dl = display.DisplayList(self._ll)
         self._dl.append(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE))
         self._screen = None
-        self._screendl = None
-        self._screens = {}
+        self._screenindex = None
         self._tilesets = {}
         self._tilemaps = {}
         self._running = True
@@ -1631,36 +1616,14 @@ class MapeditState():
     def font(self):
         return self._font
 
-    def add_screen(self, screen, name=None):
-        if name is None:
-            name = screen.NAME
-        self._screens[name] = screen(self)
-
     def active_screen(self, screen):
-        try:
-            if isinstance(screen, type):
-                # lookup by type
-                self._screen = self._screens[screen.NAME]
-            else:
-                # assign a screen object directly
-                self._screen = screen
-        except AttributeError:
-            # lookup by name/key
-            self._screen = self._screens[screen]
+        self._screen = screen
         self._screen.active()
-        if self._screendl == None:
-            self._screendl = self._dl.append(self._screen.dl)
+        if self._screenindex == None:
+            self._screenindex = self._dl.append(self._screen.dl)
         else:
-            self._dl.replace(self._screendl, self._screen.dl)
+            self._dl.replace(self._screenindex, self._screen.dl)
         self._newscreen = True
-
-    def get_screen(self, screen):
-        name = screen
-        try:
-            name = screen.NAME
-        except AttributeError:
-            pass
-        return self._screens[name]
 
     def _common_input(self, event):
         if event.type == SDL_QUIT:
@@ -1713,8 +1676,8 @@ def do_main(window, renderer, pixfmt):
     event = SDL_Event()
 
     state = MapeditState(renderer, pixfmt)
-    state.add_screen(NewScreen)
-    state.active_screen(NewScreen)
+    newscreen = NewScreen(state)
+    state.active_screen(newscreen)
     lastTime = time.monotonic()
     while state.running:
         thisTime = time.monotonic()
