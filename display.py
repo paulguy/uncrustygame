@@ -276,8 +276,8 @@ class ScrollingTilemap():
         startx = int(startx)
         starty = int(starty)
         self.scroll(startx, starty)
-        self._vmx = startx
-        self._vmy = starty
+        self._vmx = self._newx
+        self._vmy = self._newy
         # don't bother sanity checking the buffer, just try to update it which
         # should do all the sanity checking. :p
         self.update(force=True)
