@@ -239,10 +239,10 @@ class BorderSelector():
         self._tly = int(tly)
         self._brx = int(brx)
         self._bry = int(bry)
-        if self._tlx < 0 or self._tlx >= self._vw or \
-           self._tly < 0 or self._tly >= self._vh or \
-           self._brx < 0 or self._brx >= self._vw or \
-           self._bry < 0 or self._bry >= self._vh:
+        if self._tlx < 0 or self._tlx >= self._mw or \
+           self._tly < 0 or self._tly >= self._mh or \
+           self._brx < 0 or self._brx >= self._mw or \
+           self._bry < 0 or self._bry >= self._mh:
             raise ValueError("Coordinate out of range.")
         self._state = state
         self._mw = int(mw)
