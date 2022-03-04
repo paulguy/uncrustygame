@@ -247,17 +247,16 @@ class MenuItem():
     width: int = 0
 
 class Menu():
-    _INITIAL_DL_ITEMS = 2
-
-    def __init__(self, ll, font, vw, priv, spacing=1):
+    def __init__(self, ll, font, vw, vh, priv, spacing=1):
         self._ll = ll
         self._font = font
         self._space = array.array('I', ' '.encode(self._font.codec))[0]
         self._tw = self._font.ts.width()
         self._th = self._font.ts.height()
         self._vw = int(vw)
+        self._vh = int(vh)
         self._priv = priv
-        self._spacing = spacing
+        self._spacing = int(spacing)
         self._entries = []
         self._selection = 0
         self._tb = None
@@ -265,8 +264,6 @@ class Menu():
         self._cursortm = None
         self._cursorl = None
         self._dl = None
-        self._w = None
-        self._h = None
         self._updated = False
         self._longestlabel = 0
         self._curvalue = None
@@ -279,12 +276,6 @@ class Menu():
     @property
     def displaylist(self):
         return self._dl
-
-    @property
-    def dimensions(self):
-        return self._vw * self._tw, \
-               (self._h * (self._th * self._spacing - 1)) + \
-               (self._h * self._th)
 
     @property
     def selection(self):
@@ -343,8 +334,27 @@ class Menu():
             self._cursorl.pos((1 + self._longestlabel + 1 + pos) * self._tw,
                               (self._selection * self._spacing + 2) * self._th)
         else:
+            yscroll = 0
+            y = self._selection
+            if len(self._entries) > self._visibleitems:
+                halfh = self._visibleitems // 2
+                if y > halfh:
+                    if y < len(self._entries) - halfh:
+                        yscroll = y - halfh
+                        y = halfh
+                    else:
+                        yscroll = len(self._entries) - self._visibleitems
+                        y = y - (len(self._entries) - self._visibleitems)
+            for num in range(self._visibleitems):
+                tb = self._valtbs[yscroll + num]
+                if tb is not None:
+                    self._dl.replace(self._valueindex + num, tb.layer)
+                    tb.layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
+                else:
+                    self._dl.replace(self._valueindex + num, None)
+            self._tb.scroll(0, yscroll * self._spacing * self._th)
             self._cursorl.rotation(0)
-            self._cursorl.pos(0, self._selection * self._spacing * self._th)
+            self._cursorl.pos(0, y * self._spacing * self._th)
 
     def update(self):
         if self._curvalue is not None:
@@ -362,35 +372,29 @@ class Menu():
 
         w = self._longestlabel
         h = len(self._entries)
-        if w != self._w or h != self._h:
-            self._w = w
-            self._h = h
-            self._tb = TextBox(1 + self._w,
-                               ((self._h - 1) * self._spacing) + 1,
-                               1 + self._w,
-                               ((self._h - 1) * self._spacing) + 1,
-                               self._font, debug=True)
-            self._cursortm = self._font.ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
-            self._cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._font.codec)))
-            self._cursortm.update(0, 0, 0, 0)
-            self._cursorl = self._cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
-            self._cursorl.relative(self._tb.layer)
-            self._dl = display.DisplayList(self._ll, None)
-            self._dl.append(self._tb.layer)
-            self._dl.append(self._cursorl)
+        vh = ((h - 1) * self._spacing) + 1
+        if vh > self._vh:
+            self._visibleitems = self._vh // self._spacing
+            vh = self._visibleitems * self._spacing - 1
+            if self._vh - vh >= 2:
+                self._visibleitems += 1
+                vh += 2
         else:
-            self._tb.clear()
-
-        if self._selection >= len(self._entries):
-            self._selection = len(self._entries) - 1
-
-        self._update_cursor()
-
-        try:
-            while True:
-                self._dl.remove(Menu._INITIAL_DL_ITEMS)
-        except IndexError:
-            pass
+            self._visibleitems = len(self._entries)
+        self._tb = TextBox(1 + w, vh,
+                           1 + w, ((h - 1) * self._spacing) + 1,
+                           self._font, debug=True)
+        cursortm = self._font.ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
+        cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._font.codec)))
+        cursortm.update(0, 0, 0, 0)
+        self._cursorl = cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
+        self._cursorl.relative(self._tb.layer)
+        self._dl = display.DisplayList(self._ll, None)
+        self._dl.append(self._tb.layer)
+        self._dl.append(self._cursorl)
+        self._valueindex = self._dl.append(None)
+        for num in range(self._visibleitems - 1):
+            self._dl.append(None)
 
         for num, entry in enumerate(self._entries):
             self._tb.put_text((entry.label,), 1, num * self._spacing)
@@ -404,10 +408,11 @@ class Menu():
                                             self._font)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
-                self._valtbs[num].layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
-                self._dl.append(self._valtbs[num].layer)
-            else:
-                self._dl.append(None)
+
+        if self._selection >= len(self._entries):
+            self._selection = len(self._entries) - 1
+
+        self._update_cursor()
         self._updated = True
 
     def move_selection(self, movement):

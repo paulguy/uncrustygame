@@ -305,7 +305,7 @@ class ScrollingTilemap():
            (x // self._tw) + self._vw > self._mw or \
             y < 0 or \
            (y // self._th) + self._vh > self._mh:
-            raise ValueError("position ({}+{}={}, {}+{}={}) would go beyond tilemap bounds (0, 0)-({}, {})".format(x // self._tw, self._mw, (x // self._tw) + self._mw, y // self._th, self._mh, (y // self._th) + self._mh, self._tm, self._mh))
+            raise ValueError("position ({}+{}={}, {}+{}={}) would go beyond tilemap bounds (0, 0)-({}, {})".format(x // self._tw, self._vw, (x // self._tw) + self._vw, y // self._th, self._vh, (y // self._th) + self._vh, self._mw, self._mh))
         self._newx = x
         self._newy = y
 
