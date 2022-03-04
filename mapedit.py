@@ -85,9 +85,9 @@ def update_cursor(vw, vh, mw, mh, x, y):
     halfh = vh // 2
     if mw > vw:
         if x > halfw:
-            if x <= mw - halfw:
-                xscroll = x - halfw
-                x = halfw
+            if x < mw - halfw:
+                xscroll = x - halfw - (vw % 2)
+                x = halfw + (vw % 2)
                 xpos = 0
             else:
                 xscroll = mw - vw
@@ -98,9 +98,9 @@ def update_cursor(vw, vh, mw, mh, x, y):
             xpos = 1
     if mh > vh:
         if y > halfh:
-            if y <= mh - halfh:
-                yscroll = y - halfh
-                y = halfh
+            if y < mh - halfh:
+                yscroll = y - halfh - (vh % 2)
+                y = halfh + (vh % 2)
                 ypos = 0
             else:
                 yscroll = mh - vh
@@ -1406,9 +1406,8 @@ class TileSelectScreen():
                     self._make_tilemap()
                     self._update_sidebar()
             elif event.key.keysym.sym == SDLK_RETURN:
-                editscreen = self._state.get_screen(EditScreen)
-                editscreen.set_tile(self._cury * self._mw + self._curx)
-                self._state.active_screen(EditScreen)
+                self._editscreen.set_tile(self._cury * self._mw + self._curx)
+                self._state.active_screen(self._editscreen)
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 self._state.active_screen(self._editscreen)
 
