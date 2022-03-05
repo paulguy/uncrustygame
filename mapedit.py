@@ -867,11 +867,18 @@ class EditScreen():
         if self._drawing or self._puttile or self._putcolor or self._putattrib:
             self._stm.updateregion(self._curx, self._cury, 1, 1)
 
-    def _make_border(self):
-        self._border = BorderSelector(self._state,
-            self._vw, self._vh,
-            self._mw, self._mh, self._tw, self._th,
-            self._curx, self._cury, self._curx, self._cury)
+    def _make_border(self, x, y, w, h):
+        vw = self._vw
+        if vw > self._mw:
+            vw = self._mw
+        vh = self._vh
+        if vh > self._mh:
+            vh = self._mh
+        self._border = BorderSelector(self._state, vw, vh,
+                                      self._mw, self._mh,
+                                      self._tw, self._th,
+                                      x, y,
+                                      x + w - 1, y + h - 1)
         _, _, x, y, _, _ = update_cursor(self._vw, self._vh,
                                          self._mw, self._mh,
                                          self._curx, self._cury)
@@ -1201,12 +1208,12 @@ class EditScreen():
                         self._showsidebar = 0
                 elif event.key.keysym.sym == SDLK_f:
                     if self._border is None:
-                        self._make_border()
+                        self._make_border(self._curx, self._cury, 1, 1)
                     else:
                         self._border.set_top_left(self._curx, self._cury)
                 elif event.key.keysym.sym == SDLK_g:
                     if self._border is None:
-                        self._make_border()
+                        self._make_border(self._curx, self._cury, 1, 1)
                     else:
                         self._border.set_bottom_right(self._curx, self._cury)
                 elif event.key.keysym.sym == SDLK_ESCAPE:
@@ -1250,6 +1257,9 @@ class EditScreen():
 
     def resize(self):
         self._build_screen()
+        if self._border is None:
+            x, y, w, h = self._border.get_selection()
+            self._make_border(self._curx, self._cury, 1, 1)
 
     def set_option(self, sel):
         if sel == 0:
