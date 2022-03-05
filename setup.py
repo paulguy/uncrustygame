@@ -1,4 +1,4 @@
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
 crustygame = Extension('crustygame',
                        include_dirs = ['/usr/include/SDL2'],

@@ -177,6 +177,9 @@ def load_tileset_codec(filename, maxval=0):
 
     return codecname
 
+def get_codec_max_map(codec):
+    return _codecs[codec].maxval
+
 class TextBox():
     def __init__(self, vw, vh, mw, mh, font, debug=False):
         if array.array('u').itemsize != 4:
