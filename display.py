@@ -1,6 +1,7 @@
 from ctypes import POINTER
 from sdl2 import *
 import crustygame as cg
+from dataclasses import dataclass
 
 SCREEN = object()
 
@@ -153,6 +154,42 @@ def clear(ll, tex, r, g, b, a):
         if SDL_SetRenderTarget(ll.renderer, orig) < 0:
             raise Exception("Failed to restore render target")
 
+def fill(ll, tex, r, g, b, a, x, y, w, h):
+    rect = SDL_Rect(x, y, w, h)
+    if tex == SCREEN:
+        realtex = None
+    else:
+        realtex = tex
+    orig = SDL_GetRenderTarget(ll.renderer)
+    if tex is not None and realtex != orig:
+        if SDL_SetRenderTarget(ll.renderer, realtex) < 0:
+            raise Exception("Failed to set render target")
+    if SDL_SetRenderDrawColor(ll.renderer, r, g, b, a) < 0:
+        raise Exception("Failed to set render draw color.")
+    if SDL_RenderFillColor(ll.renderer, rect) < 0:
+        raise Exception("Failed to fill.")
+    if tex is not None and realtex != orig:
+        if SDL_SetRenderTarget(ll.renderer, orig) < 0:
+            raise Exception("Failed to restore render target")
+
+@dataclass
+class RenderZone():
+    window : SDL_Point = None
+    scroll : SDL_Point = None
+    pos : SDL_Point = None
+    scale : SDL_FPoint = None
+    rotation_center : SDL_FPoint = None
+    rotation : float = None
+    colormod : int = None
+    blendmode : int = None
+
+@dataclass
+class Renderable():
+    layer : cg.Layer = None
+    color : int = None
+    always : bool = False
+    zone : list = None
+
 class DisplayList():
     def setdest(self, dest):
         if dest is not None and dest is not SCREEN and \
@@ -172,7 +209,7 @@ class DisplayList():
                 raise ValueError("DisplayList is already referenced")
             item._ref = True
         elif item is not None and \
-           not isinstance(item, (cg.Layer, int)) and \
+           not isinstance(item, (Renderable, cg.Layer, int)) and \
            not callable(item):
             raise TypeError("item must be DisplayList or Layer or int or None")
 
@@ -205,7 +242,7 @@ class DisplayList():
         elif isinstance(dest, cg.Tileset):
             print('{:><{}}{}: {}'.format('', depth, pfx, dest.name()))
 
-    def draw(self, restore, trace=False, depth=0):
+    def draw(self, restore, trace=False, depth=0, doall=True):
         if trace:
             DisplayList._print_dest(self._dest, 'Destination', depth)
 
@@ -233,6 +270,45 @@ class DisplayList():
                 if trace:
                     print('{:><{}}{} -> {} {} {} {}'.format('', depth, hex(item), r, g, b, a))
                 clear(self._ll, None, r, g, b, a)
+            elif isinstance(item, Renderable):
+                if item.always:
+                    if trace:
+                        print('{:><{}}Renderable (always)'.format('', depth))
+                else:
+                    if trace:
+                        print('{:><{}}Renderable (not always)'.format('', depth))
+                    if not doall:
+                        continue
+                if item.layer is not None:
+                    if item.zone is not None:
+                        for zone in item.zone:
+                            if zone.window is not None:
+                                item.window(zone.window.x, zone.window.y)
+                            if zone.scroll is not None:
+                                item.window(zone.scroll.x, zone.scroll.y)
+                            if zone.pos is not None:
+                                item.pos(zone.pos.x, zone.pos.y)
+                            if zone.scale is not None:
+                                item.scale(zone.scale.x, zone.scale.y)
+                            if zone.rotation_center is not None:
+                                item.rotation_center(zone.rotation_center.x, zone.rotation_center.y)
+                            if zone.rotation is not None:
+                                item.rotation(zone.rotation)
+                            if zone.colormod is not None:
+                                item.colormod(zone.colormod)
+                            if zone.blendmode is not None:
+                                item.blendmode(zone.blendmode)
+                    else:
+                        item.layer.draw()
+                elif item.color is not None:
+                    r, g, b, a = unmake_color(item.color)
+                    if item.zone is not None:
+                        for zone in item.zone:
+                            fill(self._ll, None, r, g, b, a,
+                                 item.zone.pos.x, item.zone.pos.y,
+                                 item.zone.window.x, item.zone.window.y)
+                    else:
+                        clear(self._ll, None, r, g, b, a)
 
         if self._dest != restore:
             if trace:

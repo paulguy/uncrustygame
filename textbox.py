@@ -13,7 +13,8 @@ MENU_DEFAULT_CURSOR = '▶'
 @dataclass
 class TilesetCodec():
     maxval : int
-    ref : int = 0 # maybe useful at some point but probably not at the moment
+    searchfunc : Callable
+    ref : int = 0
 
 _codecs = dict()
 
@@ -124,6 +125,7 @@ def load_tileset_codec(filename, maxval=0):
     if codecname in _codecs:
         if maxval > 0 and _codecs[codecname].maxval > maxval - 1:
             raise ValueError("Map file defines tile num out of range of max value {} > {}.  Maybe unmatched map file and tilemap?".format(_codecs[codecname].maxval, maxval - 1))
+        _codecs[codecname].ref += 1
         return codecname
 
     mapmax = 0
@@ -166,16 +168,25 @@ def load_tileset_codec(filename, maxval=0):
                     enctable[chr(codepoint + num)] = tilenum + num
                     dectable[tilenum + num] = chr(codepoint + num)
 
+    _codecs[codecname] = TilesetCodec(
+        maxval=mapmax,
+        searchfunc=lambda s: tileset_codec_search(s, codecname, codec)
+    )
+    _codecs[codecname].ref += 1
+
     # EUGH!
     codec = codecs.CodecInfo(
         encode=lambda o, e='strict': tileset_encoder(enctable, o, e),
         decode=lambda o, e='strict': tileset_decoder(dectable, o, e))
-    codecs.register(
-        lambda s: tileset_codec_search(s, codecname, codec))
-
-    _codecs[codecname] = TilesetCodec(mapmax)
+    codecs.register(_codecs[codecname].searchfunc)
 
     return codecname
+
+def unload_tileset_codec(codecname):
+    _codecs[codecname].ref -= 1
+    if _codecs[codecname].ref == 0:
+        codecs.unregister(_codecs[codecname].searchfunc)
+        del _codecs[codecname]
 
 def get_codec_max_map(codec):
     return _codecs[codec].maxval
@@ -250,9 +261,10 @@ class MenuItem():
     width: int = 0
 
 class Menu():
-    def __init__(self, ll, font, vw, vh, priv, spacing=1):
+    def __init__(self, ll, font, vw, vh, priv, spacing=1, rel=None):
         self._ll = ll
         self._font = font
+        self._rel = rel
         self._space = array.array('I', ' '.encode(self._font.codec))[0]
         self._tw = self._font.ts.width()
         self._th = self._font.ts.height()
@@ -266,11 +278,15 @@ class Menu():
         self._valtbs = []
         self._cursortm = None
         self._cursorl = None
-        self._dl = None
         self._updated = False
         self._longestlabel = 0
         self._curvalue = None
         self._curpos = 0
+        self._dl = display.DisplayList(self._ll, None)
+        self._tbindex = self._dl.append(None)
+        self._cursorindex = self._dl.append(None)
+        self._valueindex = self._dl.append(None)
+        self._dlvalues = 1
 
     @property
     def layers(self):
@@ -288,7 +304,7 @@ class Menu():
         padding = array.array('I', itertools.repeat(self._space, maxlen - len(value)))
         value.extend(padding)
 
-    def add_item(self, label, value=None, maxlen=None, onEnter=None, onActivate=None, onChange=None):
+    def _init_item(self, pos, label, value, maxlen, onEnter, onActivate, onChange):
         if self._curvalue is not None:
             raise Exception("Editing the menu while text editing is unsupported.")
         if onEnter != None and onActivate != None:
@@ -306,17 +322,34 @@ class Menu():
             self._pad_value(value, maxlen)
 
         label = array.array('I', label.encode(self._font.codec))
-        self._entries.append(MenuItem(label, value, maxlen, onEnter, onActivate, onChange))
-        self._valtbs.append(None)
+        self._entries[pos] = MenuItem(label, value, maxlen, onEnter, onActivate, onChange)
         self._updated = False
+
+    def add_item(self, label, value=None, maxlen=None, onEnter=None, onActivate=None, onChange=None):
+        self._entries.append(None)
+        self._valtbs.append(None)
+        try:
+            self._init_item(len(self._entries) - 1, label, value, maxlen, onEnter, onActivate, onChange)
+        except Exception as e:
+            del self._entries[len(self._entries) - 1]
+            del self._valtbs[len(self._entries) - 1]
+            raise e
+
+    def insert_item(self, pos, label, value=None, maxlen=None, onEnter=None, onActivate=None, onChange=None):
+        self._entries.insert(pos, None)
+        self._valtbs.insert(pos, None)
+        try:
+            self._init_item(pos, label, value, maxlen, onEnter, onActivate, onChange)
+        except Exception as e:
+            del self._entries[pos]
+            del self._valtbs[pos]
+            raise e
 
     def remove(self, item):
         if self._curvalue is not None:
             raise Exception("Editing the menu while text editing is unsupported.")
         del self._entries[item]
         del self._valtbs[item]
-        if self._dl != None:
-            self._dl.remove(Menu._INITIAL_DL_ITEMS + item, None)
         self._updated = False
 
     def _update_cursor(self):
@@ -387,17 +420,22 @@ class Menu():
         self._tb = TextBox(1 + w, vh,
                            1 + w, ((h - 1) * self._spacing) + 1,
                            self._font, debug=True)
-        cursortm = self._font.ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
-        cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._font.codec)))
-        cursortm.update(0, 0, 0, 0)
-        self._cursorl = cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
+        self._tb.layer.relative(self._rel)
+        self._dl.replace(self._tbindex, self._tb.layer)
+        if self._cursorl is None:
+            cursortm = self._font.ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
+            cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._font.codec)))
+            cursortm.update(0, 0, 0, 0)
+            self._cursorl = cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
+            self._dl.replace(self._cursorindex, self._cursorl)
         self._cursorl.relative(self._tb.layer)
-        self._dl = display.DisplayList(self._ll, None)
-        self._dl.append(self._tb.layer)
-        self._dl.append(self._cursorl)
-        self._valueindex = self._dl.append(None)
-        for num in range(self._visibleitems - 1):
-            self._dl.append(None)
+        if self._visibleitems > self._dlvalues:
+            for num in range(self._visibleitems - self._dlvalues):
+                self._dl.append(None)
+        elif self._visibleitems < self._dlvalues:
+            for num in range(self._dlvalues - self._visibleitems):
+                self._dl.remove(self._visibleitems)
+        self._dlvalues = self._visibleitems
 
         for num, entry in enumerate(self._entries):
             self._tb.put_text((entry.label,), 1, num * self._spacing)
