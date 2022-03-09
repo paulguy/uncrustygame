@@ -1749,12 +1749,21 @@ int tilemap_set_layer_relative(LayerList *ll, unsigned int index, int rel) {
     if(l == NULL) {
         return(-1);
     }
+    Layer *rl = NULL;
     if(rel >= 0) {
-        Layer *rl = get_layer(ll, (unsigned int)rel);
+        rl = get_layer(ll, (unsigned int)rel);
         if(rl == NULL) {
             return(-1);
         }
         add_layer_ref(rl);
+    }
+
+    Layer *next;
+    for(next = rl; next != NULL; next = &(ll->layer[next->rel])) {
+        if(l == next) {
+            LOG_PRINTF(ll, "%s: layer %s would point to itself.", l->name, rl->name);
+            return(-1);
+        }
     }
 
     if(l->rel >= 0) {
