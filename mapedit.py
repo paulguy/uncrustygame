@@ -444,6 +444,9 @@ class ProjectScreen():
         if self._quitting:
             self._state.stop()
         self.resize()
+        if len(self._descs) > len(self._editors):
+            # if menu was backed out of without saving, delete the desc
+            del self._descs[-1]
 
     def set_option(self, sel):
         if sel == 0:
@@ -520,6 +523,8 @@ class ProjectScreen():
                 self._set_error("Couldn't open tilemap: {}: {}".format(e, get_error()))
             else:
                 self._set_error("Couldn't open tilemap: {}".format(e))
+            # this could be -1 but keep it consistent in meaning with the call
+            # to _open_settings() above.
             del self._descs[len(self._descs) - 1]
 
     def apply(self, desc, force=False):
@@ -604,7 +609,6 @@ class TilemapScreen():
     def active(self):
         self.resize()
         if self._shrink:
-            self._shrink = False
             try:
                 self._caller.apply(self._tmdesc, force=True)
             except Exception as e:
@@ -615,15 +619,17 @@ class TilemapScreen():
                 else:
                     self._set_error("Couldn't save settings: {}".format(e))
                 return
-            if self._editing:
-                self._caller.edit()
+        self._shrink = False
 
     @property
     def dl(self):
         return self._dl
 
     def input(self, event):
-        if event.type == SDL_TEXTINPUT:
+        if self._editing:
+            self._caller.edit()
+            self._editing = False
+        elif event.type == SDL_TEXTINPUT:
             self._menu.text_event(event)
         elif event.type == SDL_KEYDOWN:
             self._error = 0.0
