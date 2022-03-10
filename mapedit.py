@@ -38,6 +38,7 @@ FONT_WIDTH=8
 FONT_HEIGHT=8
 FONT_SCALE=2.0
 ERROR_TIME=10.0
+FULL_RENDERS = 2
 
 crustyerror = ''
 
@@ -400,7 +401,8 @@ class ProjectScreen():
                                 int(self._fh * self._scale))
         self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
         self._dl = display.DisplayList(self._state.ll)
-        self._dl.append(self._titletb.layer)
+        self._dl.append(display.Renderable(self._titletb.layer,
+                                           always=False))
         self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, spacing=2, rel=self._titletb.layer)
         for desc in self._descs:
             self._menu.add_item(desc.name, onActivate=self._open_tilemap)
@@ -408,7 +410,10 @@ class ProjectScreen():
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
-        self._dl.append(self._menu.displaylist)
+        self._dl.append(display.Renderable(self._menu.displaylist,
+                                           always=False))
+        # cursor would render twice during updates but whatever.
+        self._dl.append(self._cursorl)
         self._errorindex = self._dl.append(None)
 
     def __init__(self, state):
@@ -454,6 +459,7 @@ class ProjectScreen():
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
+            self._state.changed()
             self._error = 0.0
             if event.key.keysym.sym == SDLK_UP:
                 self._menu.up()
@@ -2029,6 +2035,7 @@ class MapeditState():
         self._newscreen = False
         self._resizing = 0.0
         self._extratime = 0.0
+        self._renders = FULL_RENDERS
         self._vw = int(vw)
         self._vh = int(vh)
         self._font_scale = font_scale
@@ -2065,6 +2072,7 @@ class MapeditState():
         self._screen.active()
         self._dl.replace(self._screenindex, self._screen.dl)
         self._newscreen = True
+        self.changed()
 
     def _common_input(self, event):
         if event.type == SDL_QUIT:
@@ -2090,9 +2098,14 @@ class MapeditState():
                     self._screen.resize()
                     # the displaylist may have changed
                     self._dl.replace(self._screenindex, self._screen.dl)
+                    self.changed()
             else:
                 self._screen.update(time + self._extratime)
-                self._dl.draw(display.SCREEN)
+                if self._renders <= 0:
+                    self._dl.draw(display.SCREEN, full=False)
+                else:
+                    self._dl.draw(display.SCREEN)
+                    self._renders -= 1
                 self._extratime = 0.0
         self._newscreen = False
 
@@ -2140,6 +2153,9 @@ class MapeditState():
 
     def add_tilemap(self, tm, name):
         self._tilemaps[name] = tm
+
+    def changed(self):
+        self._renders = FULL_RENDERS
 
 
 def log_cb_return(priv, string):

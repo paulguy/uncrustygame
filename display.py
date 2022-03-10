@@ -185,9 +185,8 @@ class RenderZone():
 
 @dataclass
 class Renderable():
-    layer : cg.Layer = None
-    color : int = None
-    always : bool = False
+    obj : ('DisplayList', cg.Layer, int, None)
+    always : bool = True
     zone : list = None
 
 class DisplayList():
@@ -242,7 +241,7 @@ class DisplayList():
         elif isinstance(dest, cg.Tileset):
             print('{:><{}}{}: {}'.format('', depth, pfx, dest.name()))
 
-    def draw(self, restore, trace=False, depth=0, doall=True):
+    def draw(self, restore, trace=False, depth=0, full=True):
         if trace:
             DisplayList._print_dest(self._dest, 'Destination', depth)
 
@@ -277,31 +276,32 @@ class DisplayList():
                 else:
                     if trace:
                         print('{:><{}}Renderable (not always)'.format('', depth))
-                    if not doall:
+                    if not full:
                         continue
-                if item.layer is not None:
+                if isinstance(item.obj, cg.Layer):
                     if item.zone is not None:
                         for zone in item.zone:
                             if zone.window is not None:
-                                item.window(zone.window.x, zone.window.y)
+                                item.obj.window(zone.window.x, zone.window.y)
                             if zone.scroll is not None:
-                                item.window(zone.scroll.x, zone.scroll.y)
+                                item.obj.window(zone.scroll.x, zone.scroll.y)
                             if zone.pos is not None:
-                                item.pos(zone.pos.x, zone.pos.y)
+                                item.obj.pos(zone.pos.x, zone.pos.y)
                             if zone.scale is not None:
-                                item.scale(zone.scale.x, zone.scale.y)
+                                item.obj.scale(zone.scale.x, zone.scale.y)
                             if zone.rotation_center is not None:
-                                item.rotation_center(zone.rotation_center.x, zone.rotation_center.y)
+                                item.obj.rotation_center(zone.rotation_center.x, zone.rotation_center.y)
                             if zone.rotation is not None:
-                                item.rotation(zone.rotation)
+                                item.obj.rotation(zone.rotation)
                             if zone.colormod is not None:
-                                item.colormod(zone.colormod)
+                                item.obj.colormod(zone.colormod)
                             if zone.blendmode is not None:
-                                item.blendmode(zone.blendmode)
+                                item.obj.blendmode(zone.blendmode)
+                            item.obj.draw()
                     else:
-                        item.layer.draw()
-                elif item.color is not None:
-                    r, g, b, a = unmake_color(item.color)
+                        item.obj.draw()
+                elif isinstance(item.obj, int):
+                    r, g, b, a = unmake_color(item.obj)
                     if item.zone is not None:
                         for zone in item.zone:
                             fill(self._ll, None, r, g, b, a,
@@ -309,6 +309,11 @@ class DisplayList():
                                  item.zone.window.x, item.zone.window.y)
                     else:
                         clear(self._ll, None, r, g, b, a)
+                elif isinstance(item.obj, DisplayList):
+                    if self._dest == None:
+                        item.obj.draw(restore, trace, depth+1)
+                    else:
+                        item.obj.draw(self._dest, trace, depth+1)
 
         if self._dest != restore:
             if trace:
