@@ -535,7 +535,7 @@ class ProjectScreen():
             self._editors[self._selected].modify(desc, force)
             if desc.name != self._descs[self._selected].name:
                 self._menu.remove(self._selected)
-                self._menu.insert_item(desc.name, onActivate=self._open_tilemap)
+                self._menu.insert_item(self._selected, desc.name, onActivate=self._open_tilemap)
         self._menu.update()
         mlayer, _ = self._menu.layers
         mlayer.pos(0, self._fh * 2)
