@@ -213,8 +213,8 @@ class TextBox():
 
     def clear(self):
         # fill with spaces
-        self._tm = array.array('I', itertools.repeat(ord(' '), self._w * self._h))
-        self._stm.updateregion(0, 0, self._w, self._h)
+        self._tm[:] = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
+        self._stm.updateregion(0, 0, self._mw, self._mh)
 
     def put_text(self, lines, x, y):
         x = int(x)

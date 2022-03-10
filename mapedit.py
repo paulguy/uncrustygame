@@ -386,6 +386,12 @@ class TilemapDesc():
     codec : str = None
 
 class ProjectScreen():
+    DEFAULT_BANNER="Project"
+
+    def _set_banner(self, s):
+        self._titletb.clear()
+        put_centered_line(self._titletb, s, 0, self._fmw)
+
     def _build_screen(self):
         self._vw, self._vh = self._state.window
         self._fw = self._state.font.ts.width()
@@ -396,7 +402,7 @@ class ProjectScreen():
         self._titletb = textbox.TextBox(self._fmw, 1,
                                         self._fmw, 1,
                                         self._state.font)
-        put_centered_line(self._titletb, "Project", 0, self._fmw)
+        self._set_banner(ProjectScreen.DEFAULT_BANNER)
         self._titletb.layer.pos(int(self._fw * self._scale),
                                 int(self._fh * self._scale))
         self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
@@ -422,6 +428,8 @@ class ProjectScreen():
         self._editors = list()
         self._selected = 0
         self._quitting = False
+        self._deleting = False
+        self._moving = -1
         self._cursorrad = 0.0
         self._error = 0.0
         self._errortext = ''
@@ -445,6 +453,11 @@ class ProjectScreen():
            self._fmh != int(vh / scale / fh):
             self._build_screen()
 
+    def _update_menu(self):
+        self._menu.update()
+        mlayer, _ = self._menu.layers
+        mlayer.pos(0, self._fh * 2)
+
     def active(self):
         if self._quitting:
             self._state.stop()
@@ -452,6 +465,14 @@ class ProjectScreen():
         if len(self._descs) > len(self._editors):
             # if menu was backed out of without saving, delete the desc
             del self._descs[-1]
+        elif self._deleting:
+            self._deleting = False
+            del self._descs[self._selected]
+            del self._editors[self._selected]
+            self._menu.remove(self._selected)
+            self._update_menu()
+        elif self._moving >= 0:
+            self._set_banner("Swap with?")
 
     def set_option(self, sel):
         if sel == 0:
@@ -476,8 +497,12 @@ class ProjectScreen():
             elif event.key.keysym.sym == SDLK_RETURN:
                 self._menu.activate_selection()
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
-                self._state.active_screen(prompt)
+                if self._moving >= 0:
+                    self._moving = -1
+                    self._set_banner(ProjectScreen.DEFAULT_BANNER)
+                else:
+                    prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                    self._state.active_screen(prompt)
 
     def update(self, time):
         if self._error > 0.0:
@@ -508,15 +533,36 @@ class ProjectScreen():
         self._state.active_screen(tilemapscreen)
 
     def _open_tilemap(self, priv, sel):
-        try:
-            self._open_settings(sel)
-        except Exception as e:
-            print(e)
-            print_tb(e.__traceback__)
-            if isinstance(e, cg.CrustyException):
-                self._set_error("Couldn't open tilemap: {}: {}".format(e, get_error()))
-            else:
-                self._set_error("Couldn't open tilemap: {}".format(e))
+        if self._moving >= 0:
+            if self._moving == sel:
+                self._set_error("Can't swap with same value, use ESCAPE to cancel move.")
+                return
+            moving = self._moving
+            self._moving = -1
+            desc1 = self._descs[sel]
+            editor1 = self._editors[sel]
+            desc2 = self._descs[moving]
+            editor2 = self._editors[moving]
+            self._descs[sel] = desc2
+            self._editors[sel] = editor2
+            self._descs[moving] = desc1
+            self._editors[moving] = editor1
+            self._menu.remove(sel)
+            self._menu.insert_item(sel, desc2.name, onActivate=self._open_tilemap)
+            self._menu.remove(moving)
+            self._menu.insert_item(moving, desc1.name, onActivate=self._open_tilemap)
+            self._update_menu()
+            self._set_banner(ProjectScreen.DEFAULT_BANNER)
+        else:
+            try:
+                self._open_settings(sel)
+            except Exception as e:
+                print(e)
+                print_tb(e.__traceback__)
+                if isinstance(e, cg.CrustyException):
+                    self._set_error("Couldn't open tilemap: {}: {}".format(e, get_error()))
+                else:
+                    self._set_error("Couldn't open tilemap: {}".format(e))
 
     def _new_tilemap(self, priv, sel):
         self._descs.append(TilemapDesc())
@@ -537,18 +583,25 @@ class ProjectScreen():
         if self._selected >= len(self._editors):
             self._editors.append(EditScreen(self._state, self, desc))
             self._menu.insert_item(len(self._descs) - 1, desc.name, onActivate=self._open_tilemap)
+            self._update_menu()
         else:
             self._editors[self._selected].modify(desc, force)
             if desc.name != self._descs[self._selected].name:
                 self._menu.remove(self._selected)
                 self._menu.insert_item(self._selected, desc.name, onActivate=self._open_tilemap)
-        self._menu.update()
-        mlayer, _ = self._menu.layers
-        mlayer.pos(0, self._fh * 2)
+                self._update_menu()
         self._descs[self._selected] = desc
 
     def edit(self):
         self._state.active_screen(self._editors[self._selected])
+
+    def delete(self):
+        self._deleting = True
+
+    def move(self):
+        if self._selected >= len(self._editors):
+            raise ValueError("Item not created yet, settings must be Applied at least once.")
+        self._moving = self._selected
 
 class TilemapScreen():
     def _build_screen(self):
@@ -593,6 +646,7 @@ class TilemapScreen():
         self._cursorrad = 0.0
         self._shrink = False
         self._editing = False
+        self._deleting = False
         self._dl = display.DisplayList(self._state.ll)
         self._titletbindex = self._dl.append(None)
         self._menuindex = self._dl.append(None)
@@ -625,6 +679,9 @@ class TilemapScreen():
                     self._set_error("Couldn't save settings: {}: {}".format(e, get_error()))
                 else:
                     self._set_error("Couldn't save settings: {}".format(e))
+        elif self._deleting:
+            self._caller.delete()
+            self._state.active_screen(self._caller)
 
     @property
     def dl(self):
@@ -734,11 +791,15 @@ class TilemapScreen():
         self._error = ERROR_TIME
 
     def set_option(self, sel):
-        if sel == 0:
-            self._shrink = True
+        if self._deleting:
+            if sel != 0:
+                self._deleting = False
         else:
-            # if canceled, don't proceed to edit
-            self._editing = False
+            if sel == 0:
+                self._shrink = True
+            else:
+                # if canceled, don't proceed to edit
+                self._editing = False
 
     def _apply(self, priv, sel):
         try:
@@ -764,10 +825,22 @@ class TilemapScreen():
         self._apply(priv, sel)
 
     def _move(self, priv, sel):
-        pass
+        try:
+            self._caller.move()
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            if isinstance(e, cg.CrustyException):
+                self._set_error("Couldn't move: {}: {}".format(e, get_error()))
+            else:
+                self._set_error("Couldn't move: {}".format(e))
+            return
+        self._state.active_screen(self._caller)
 
     def _delete(self, priv, sel):
-        pass
+        self._deleting = True
+        prompt = PromptScreen(self._state, self, "Continue?", "This operation will delete this tilemap and it cannot be reversed, are you sure?", ("yes", "no"), default=1)
+        self._state.active_screen(prompt)
 
 class EditScreen():
     MAX_UNDO=100
@@ -1013,6 +1086,11 @@ class EditScreen():
         self._sidebarindex = self._dl.append(None)
         self._errorindex = self._dl.append(None)
         self._build_screen()
+
+    def __del__(self):
+        if self._codec is not None:
+            textbox.unload_tileset_codec(self._codec)
+        self._state.remove_tileset(self._tsdesc)
 
     def _set_error(self, text):
         self._errortext = text
