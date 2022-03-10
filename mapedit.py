@@ -14,12 +14,9 @@ import math
 import effects
 
 #TODO:
-# options for text/UI scale
 # Editor view scale option
-# Multiple layers
 # Preview of multiple layers with independent scale/scroll speed/center
 # layer/project Save/Load
-# resizing tilemaps?
 # mouse support?
 
 # debugging options
@@ -159,12 +156,12 @@ class Sidebar():
 
     def __init__(self, state, text, hpos=0):
         self._state = state
-        self._vw, vh = self._state.window
+        self._vw, self._vh = self._state.window
         fw = self._state.font.ts.width()
         self._fh = self._state.font.ts.height()
         self._scale = self._state.font_scale
         fmw = int(self._vw / self._scale / fw)
-        fmh = int(vh / self._scale / self._fh)
+        fmh = int(self._vh / self._scale / self._fh)
         self._dl = display.DisplayList(self._state.ll)
         helptext, _, width, height = textbox.wrap_text(text, fmw // 2 - 2, fmh)
         sbw = width + 2
@@ -212,10 +209,10 @@ class Sidebar():
     def show_text(self, show):
         if show:
             self._dl.replace(self._textindex, self._textdl)
-            self._sidebarl.window(self._sbw, self._vh)
+            self._sidebarl.window(int(self._sbw / self._scale), int(self._vh / self._scale))
         else:
             self._dl.replace(self._textindex, None)
-            self._sidebarl.window(self._sbw, self._hpos)
+            self._sidebarl.window(int(self._sbw / self._scale), self._hpos)
 
     def update(self, curpos, curx, mw):
         if mw <= self._vw:
@@ -413,6 +410,7 @@ class ProjectScreen():
         for desc in self._descs:
             self._menu.add_item(desc.name, onActivate=self._open_tilemap)
         self._menu.add_item("New Tilemap", onActivate=self._new_tilemap)
+        self._menu.add_item("UI Scale", value=str(self._state.font_scale), maxlen=4, onEnter=self._set_scale)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
@@ -449,7 +447,8 @@ class ProjectScreen():
         scale = self._state.font_scale
         fw = self._state.font.ts.width()
         fh = self._state.font.ts.height()
-        if self._fmw != int(vw / scale / fw) or \
+        if scale != self._scale or \
+           self._fmw != int(vw / scale / fw) or \
            self._fmh != int(vh / scale / fh):
             self._build_screen()
 
@@ -479,7 +478,9 @@ class ProjectScreen():
             self._quitting = True
 
     def input(self, event):
-        if event.type == SDL_KEYDOWN:
+        if event.type == SDL_TEXTINPUT:
+            self._menu.text_event(event)
+        elif event.type == SDL_KEYDOWN:
             self._state.changed()
             self._error = 0.0
             if event.key.keysym.sym == SDLK_UP:
@@ -495,16 +496,25 @@ class ProjectScreen():
             elif event.key.keysym.sym == SDLK_DELETE:
                 self._menu.delete()
             elif event.key.keysym.sym == SDLK_RETURN:
+                if self._moving >= 0 and \
+                   self._menu.selection >= len(self._descs):
+                    self._set_error("Can't swap with a selection that isn't a tilemap, use ESCAPE to cancel move.")
+                    return
                 self._menu.activate_selection()
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                if self._moving >= 0:
-                    self._moving = -1
-                    self._set_banner(ProjectScreen.DEFAULT_BANNER)
-                else:
-                    prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
-                    self._state.active_screen(prompt)
+                if not self._menu.cancel_entry():
+                    if self._moving >= 0:
+                        self._moving = -1
+                        self._set_banner(ProjectScreen.DEFAULT_BANNER)
+                    else:
+                        prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                        self._state.active_screen(prompt)
 
     def update(self, time):
+        if self._scale != self._state.font_scale:
+            # set in motion rebuilding everything, and for the state to get the
+            # new displaylist
+            self._state.active_screen(self)
         if self._error > 0.0:
             if self._errorbox is None:
                 if len(self._errortext) == 0:
@@ -534,8 +544,8 @@ class ProjectScreen():
 
     def _open_tilemap(self, priv, sel):
         if self._moving >= 0:
-            if self._moving == sel:
-                self._set_error("Can't swap with same value, use ESCAPE to cancel move.")
+            if sel == self._moving:
+                self._set_error("Can't swap with same tilemap, use ESCAPE to cancel move.")
                 return
             moving = self._moving
             self._moving = -1
@@ -578,6 +588,16 @@ class ProjectScreen():
             # this could be -1 but keep it consistent in meaning with the call
             # to _open_settings() above.
             del self._descs[len(self._descs) - 1]
+
+    def _set_scale(self, priv, sel, val):
+        try:
+            val = float(val)
+        except ValueError:
+            return None
+        self._state.set_scale(val)
+        if val < 1.0:
+            return None
+        return str(val)
 
     def apply(self, desc, force=False):
         if self._selected >= len(self._editors):
@@ -914,7 +934,8 @@ class EditScreen():
                           self._curx, self._cury)
         self._stm.scroll(xscroll * self._tmdesc.tw, yscroll * self._tmdesc.th)
         self._stm.update()
-        self._cursorl.pos(x * self._tmdesc.tw - self._fw, y * self._tmdesc.th - self._fw)
+        self._cursorl.pos(int(x * self._tmdesc.tw - (self._fw * self._state.font_scale / self._scale / 2)),
+                          int(y * self._tmdesc.th - (self._fw * self._state.font_scale / self._scale / 2)))
         self._statustext.put_text(("    ", "    "), 3, 1)
         self._statustext.put_text((str(self._curx), str(self._cury)), 3, 1)
         if self._border is not None:
@@ -1028,6 +1049,7 @@ class EditScreen():
         self._cursortm.map(0, 0, curwidth, curwidth, curheight, ctm)
         self._cursortm.update()
         self._cursorl = self._cursortm.layer("Map Editor Cursor Layer")
+        self._cursorl.scale(scale / self._scale, scale / self._scale)
         self._make_stm()
         self._dl.replace(self._cursorindex, self._cursorl)
         self._dl.replace(self._sidebarindex, self._sidebar.dl)
@@ -1106,7 +1128,7 @@ class EditScreen():
            self._vw != int(vw / self._scale / self._tmdesc.tw) or \
            self._vh != int(vh / self._scale / self._tmdesc.th):
             self._build_screen()
-            if self._border is None:
+            if self._border is not None:
                 x, y, w, h = self._border.get_selection()
                 self._make_border(self._curx, self._cury, 1, 1)
     
@@ -2140,6 +2162,11 @@ class MapeditState():
     @property
     def font_scale(self):
         return self._font_scale
+
+    def set_scale(self, scale):
+        if scale < 1.0:
+            raise ValueError("Scale out of range.")
+        self._font_scale = scale
 
     @property
     def font(self):
