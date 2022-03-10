@@ -609,6 +609,7 @@ class TilemapScreen():
     def active(self):
         self.resize()
         if self._shrink:
+            self._shrink = False
             try:
                 self._caller.apply(self._tmdesc, force=True)
             except Exception as e:
@@ -618,8 +619,6 @@ class TilemapScreen():
                     self._set_error("Couldn't save settings: {}: {}".format(e, get_error()))
                 else:
                     self._set_error("Couldn't save settings: {}".format(e))
-                return
-        self._shrink = False
 
     @property
     def dl(self):
@@ -627,8 +626,8 @@ class TilemapScreen():
 
     def input(self, event):
         if self._editing:
-            self._caller.edit()
             self._editing = False
+            self._caller.edit()
         elif event.type == SDL_TEXTINPUT:
             self._menu.text_event(event)
         elif event.type == SDL_KEYDOWN:
@@ -731,14 +730,17 @@ class TilemapScreen():
     def set_option(self, sel):
         if sel == 0:
             self._shrink = True
+        else:
+            # if canceled, don't proceed to edit
+            self._editing = False
 
     def _apply(self, priv, sel):
         try:
             self._caller.apply(self._tmdesc)
         except TileMapShrunk:
-            self._shrink = True
             prompt = PromptScreen(self._state, self, "Continue?", "This operation will shrink the tilemap and lose any data that falls outside of the bottom and right edges, are you sure?", ("yes", "no"), default=1)
             self._state.active_screen(prompt)
+            return
         except Exception as e:
             print(e)
             print_tb(e.__traceback__)
@@ -746,12 +748,14 @@ class TilemapScreen():
                 self._set_error("Couldn't save settings: {}: {}".format(e, get_error()))
             else:
                 self._set_error("Couldn't save settings: {}".format(e))
+            return
+        if self._editing:
+            self._editing = False
+            self._caller.edit()
 
     def _edit(self, priv, sel):
         self._editing = True
         self._apply(priv, sel)
-        if not self._shrink:
-            self._caller.edit()
 
     def _move(self, priv, sel):
         pass
