@@ -14,7 +14,6 @@ import math
 import effects
 
 #TODO:
-# Editor view scale option
 # Preview of multiple layers with independent scale/scroll speed/center
 # layer/project Save/Load
 # mouse support?
@@ -151,6 +150,23 @@ def make_checkerboard(font, width, height):
     cbl = cbtm.layer("{}x{} Checkerboard Layer".format(width, height))
     return cbl
  
+def cursor_dims(tw, th, twscale, thscale, fw, fh, fscale):
+    curwidth = (tw * twscale) / (fw * fscale)
+    if curwidth.is_integer():
+        curwidth = int(curwidth) + 1
+    else:
+        curwidth = int(curwidth) + 2
+    if curwidth < 2:
+        curwidth = 2
+    curheight = (th * thscale) / (fh * fscale)
+    if curheight.is_integer():
+        curheight = int(curheight) + 1
+    else:
+        curheight = int(curheight) + 2
+    if curheight < 2:
+        curheight = 2
+    return curwidth, curheight
+
 class Sidebar():
     SIDEBAR_COLOR=display.make_color(255, 255, 255, 96)
 
@@ -381,6 +397,8 @@ class TilemapDesc():
     mw : int = 64
     mh : int = 64
     codec : str = None
+    wscale : float = FONT_SCALE
+    hscale : float = FONT_SCALE
 
 class ProjectScreen():
     DEFAULT_BANNER="Project"
@@ -615,6 +633,28 @@ class ProjectScreen():
     def edit(self):
         self._state.active_screen(self._editors[self._selected])
 
+    def set_wscale(self, scale):
+        if self._selected >= len(self._editors):
+            self._descs[self._selected].wscale = scale
+        else:
+            self._editors[self._selected].set_wscale(scale)
+            self._descs[self._selected].wscale = self._editors[self._selected].wscale
+
+    def set_hscale(self, scale):
+        if self._selected >= len(self._editors):
+            self._descs[self._selected].hscale = scale
+        else:
+            self._editors[self._selected].set_hscale(scale)
+            self._descs[self._selected].hscale = self._editors[self._selected].hscale
+
+    @property
+    def wscale(self):
+        return self._descs[self._selected].wscale
+
+    @property
+    def hscale(self):
+        return self._descs[self._selected].hscale
+
     def delete(self):
         self._deleting = True
 
@@ -649,6 +689,8 @@ class TilemapScreen():
         self._menu.add_item("Tile Height", value=str(self._tmdesc.th), maxlen=4, onEnter=self._settileheight)
         self._menu.add_item("Map Width", value=str(self._tmdesc.mw), maxlen=4, onEnter=self._setmapwidth)
         self._menu.add_item("Map Height", value=str(self._tmdesc.mh), maxlen=4, onEnter=self._setmapheight)
+        self._menu.add_item("View X Scale", value=str(self._caller.wscale), maxlen=5, onEnter=self._set_wscale)
+        self._menu.add_item("View Y Scale", value=str(self._caller.hscale), maxlen=5, onEnter=self._set_hscale)
         self._menu.add_item("Move", onActivate=self._move)
         self._menu.add_item("Delete", onActivate=self._delete)
         self._menu.update()
@@ -806,6 +848,42 @@ class TilemapScreen():
         self._tmdesc.mapname = val.lstrip().rstrip()
         return val
 
+    def _set_wscale(self, priv, sel, val):
+        try:
+            val = float(val)
+        except ValueError:
+            return None
+        try:
+            self._caller.set_wscale(val)
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            if isinstance(e, cg.CrustyException):
+                self._set_error("Couldn't set scale: {}: {}".format(e, get_error()))
+            else:
+                self._set_error("Couldn't set scale: {}".format(e))
+            return None
+        self._tmdesc.wscale = self._caller.wscale
+        return str(self._caller.wscale)
+
+    def _set_hscale(self, priv, sel, val):
+        try:
+            val = float(val)
+        except ValueError:
+            return None
+        try:
+            self._caller.set_hscale(val)
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            if isinstance(e, cg.CrustyException):
+                self._set_error("Couldn't set scale: {}: {}".format(e, get_error()))
+            else:
+                self._set_error("Couldn't set scale: {}".format(e))
+            return None
+        self._tmdesc.hscale = self._caller.hscale
+        return str(self._caller.hscale)
+
     def _set_error(self, text):
         self._errortext = text
         self._error = ERROR_TIME
@@ -934,8 +1012,8 @@ class EditScreen():
                           self._curx, self._cury)
         self._stm.scroll(xscroll * self._tmdesc.tw, yscroll * self._tmdesc.th)
         self._stm.update()
-        self._cursorl.pos(int(x * self._tmdesc.tw - (self._fw * self._state.font_scale / self._scale / 2)),
-                          int(y * self._tmdesc.th - (self._fw * self._state.font_scale / self._scale / 2)))
+        self._cursorl.pos(int(x * self._tmdesc.tw - (self._fw / self._tmdesc.wscale * self._state.font_scale / 2)),
+                          int(y * self._tmdesc.th - (self._fh / self._tmdesc.hscale * self._state.font_scale / 2)))
         self._statustext.put_text(("    ", "    "), 3, 1)
         self._statustext.put_text((str(self._curx), str(self._cury)), 3, 1)
         if self._border is not None:
@@ -943,8 +1021,8 @@ class EditScreen():
 
     def _update_sidebar(self):
         self._sidebar.update(self._curpos,
-                             self._curx * self._scale * self._tmdesc.tw,
-                             self._tmdesc.mw * self._tmdesc.tw * self._scale)
+                             self._curx * self._tmdesc.wscale * self._tmdesc.tw,
+                             self._tmdesc.mw * self._tmdesc.tw * self._tmdesc.wscale)
 
     def _set_tmdesc(self, tmdesc):
         if self._tmdesc is not None and \
@@ -969,8 +1047,8 @@ class EditScreen():
                 textbox.unload_tileset_codec(self._codec)
         self._codec = codec
         vw, vh = self._state.window
-        self._vw = int(vw / self._scale / self._tmdesc.tw)
-        self._vh = int(vh / self._scale / self._tmdesc.th)
+        self._vw = int(vw / self._tmdesc.wscale / self._tmdesc.tw)
+        self._vh = int(vh / self._tmdesc.hscale / self._tmdesc.th)
 
     def _make_stm(self):
         self._curx, self._cury, self._stm = \
@@ -979,8 +1057,21 @@ class EditScreen():
                          0, 0,
                          self._tileset, self._tilemap,
                          flags=self._flags, colormod=self._colormod)
-        self._stm.layer.scale(self._scale, self._scale)
+        self._stm.layer.scale(self._tmdesc.wscale, self._tmdesc.hscale)
+        curwidth, curheight = cursor_dims(self._tmdesc.tw, self._tmdesc.th,
+                                          self._tmdesc.wscale, self._tmdesc.hscale,
+                                          self._fw, self._fh,
+                                          self._state.font_scale)
+        self._cursortm = self._state.font.ts.tilemap(curwidth, curheight, "MapEditor Cursor Tilemap")
+        ctm = make_box(self._state.font.codec, curwidth, curheight)
+        self._cursortm.map(0, 0, curwidth, curwidth, curheight, ctm)
+        self._cursortm.update()
+        self._cursorl = self._cursortm.layer("Map Editor Cursor Layer")
         self._cursorl.relative(self._stm.layer)
+        self._cursorl.scale(1 / self._tmdesc.wscale * self._state.font_scale, 1 / self._tmdesc.hscale * self._state.font_scale)
+        self._dl.replace(self._cursorindex, self._cursorl)
+        if self._border is not None:
+            self._border.relative(self._stm.layer)
         self._dl.replace(self._stmindex, self._stm.layer)
         self._update_cursor()
 
@@ -990,10 +1081,53 @@ class EditScreen():
             width = self._selectscreen.width
         self._selectscreen = TileSelectScreen(self._state, self, self._tsdesc, width=width)
 
+    def _make_border(self, x, y, w, h):
+        vw = self._vw
+        if vw > self._tmdesc.mw:
+            vw = self._tmdesc.mw
+        vh = self._vh
+        if vh > self._tmdesc.mh:
+            vh = self._tmdesc.mh
+        self._border = BorderSelector(self._state, vw, vh,
+                                      self._tmdesc.mw, self._tmdesc.mh,
+                                      self._tmdesc.tw, self._tmdesc.th,
+                                      x, y,
+                                      x + w - 1, y + h - 1)
+        _, _, x, y, _, _ = update_cursor(self._vw, self._vh,
+                                         self._tmdesc.mw, self._tmdesc.mh,
+                                         self._curx, self._cury)
+        self._border.scroll(x, y)
+        self._border.layer.relative(self._stm.layer)
+        self._dl.replace(self._borderindex, self._border.layer)
+
+    def set_wscale(self, scale):
+        if scale < 1.0:
+            raise ValueError("Scale too small.")
+        if scale != self._tmdesc.wscale:
+            self._tmdesc.wscale = scale
+            vw, _ = self._state.window
+            self._vw = int(vw / self._tmdesc.wscale / self._tmdesc.tw)
+            self._make_stm()
+
+    def set_hscale(self, scale):
+        if scale < 1.0:
+            raise ValueError("Scale too small.")
+        if scale != self._tmdesc.hscale:
+            self._tmdesc.hscale = scale
+            _, vh = self._state.window
+            self._vh = int(vh / self._tmdesc.hscale / self._tmdesc.th)
+            self._make_stm()
+
+    @property
+    def wscale(self):
+        return self._tmdesc.wscale
+
+    @property
+    def hscale(self):
+        return self._tmdesc.hscale
+
     def _build_screen(self):
         vw, vh = self._state.window
-        self._vw = int(vw / self._scale / self._tmdesc.tw)
-        self._vh = int(vh / self._scale / self._tmdesc.th)
         self._fw = self._state.font.ts.width()
         self._fh = self._state.font.ts.height()
         scale = self._state.font_scale
@@ -1042,23 +1176,15 @@ class EditScreen():
         self._update_vflip()
         self._update_rotation()
         self._sidebar.dl.append(self._statustext.layer)
-        curwidth = int((self._tmdesc.tw * self._scale) / (self._fw * scale)) + 2
-        curheight = int((self._tmdesc.th * self._scale) / (self._fh * scale)) + 2
-        self._cursortm = self._state.font.ts.tilemap(curwidth, curheight, "MapEditor Cursor Tilemap")
-        ctm = make_box(self._state.font.codec, curwidth, curheight)
-        self._cursortm.map(0, 0, curwidth, curwidth, curheight, ctm)
-        self._cursortm.update()
-        self._cursorl = self._cursortm.layer("Map Editor Cursor Layer")
-        self._cursorl.scale(scale / self._scale, scale / self._scale)
+        self._vw = int(vw / self._tmdesc.wscale / self._tmdesc.tw)
+        self._vh = int(vh / self._tmdesc.hscale / self._tmdesc.th)
         self._make_stm()
-        self._dl.replace(self._cursorindex, self._cursorl)
         self._dl.replace(self._sidebarindex, self._sidebar.dl)
         self._make_selectscreen()
 
     def __init__(self, state, caller, tmdesc):
         self._state = state
         self._caller = caller
-        self._scale = self._state.font_scale
         self._cursorrad = 0.0
         self._fxcolor = 0
         self._curx = 0
@@ -1125,8 +1251,8 @@ class EditScreen():
         fh = self._state.font.ts.height()
         if self._fmw != int(vw / scale / fw) or \
            self._fmh != int(vh / scale / fh) or \
-           self._vw != int(vw / self._scale / self._tmdesc.tw) or \
-           self._vh != int(vh / self._scale / self._tmdesc.th):
+           self._vw != int(vw / self._tmdesc.wscale / self._tmdesc.tw) or \
+           self._vh != int(vh / self._tmdesc.hscale / self._tmdesc.th):
             self._build_screen()
             if self._border is not None:
                 x, y, w, h = self._border.get_selection()
@@ -1219,25 +1345,6 @@ class EditScreen():
                 self._flags[self._cury * self._tmdesc.mw + self._curx] = self._attrib
         if self._drawing or self._puttile or self._putcolor or self._putattrib:
             self._stm.updateregion(self._curx, self._cury, 1, 1)
-
-    def _make_border(self, x, y, w, h):
-        vw = self._vw
-        if vw > self._tmdesc.mw:
-            vw = self._tmdesc.mw
-        vh = self._vh
-        if vh > self._tmdesc.mh:
-            vh = self._tmdesc.mh
-        self._border = BorderSelector(self._state, vw, vh,
-                                      self._tmdesc.mw, self._tmdesc.mh,
-                                      self._tmdesc.tw, self._tmdesc.th,
-                                      x, y,
-                                      x + w - 1, y + h - 1)
-        _, _, x, y, _, _ = update_cursor(self._vw, self._vh,
-                                         self._tmdesc.mw, self._tmdesc.mh,
-                                         self._curx, self._cury)
-        self._border.scroll(x, y)
-        self._border.layer.relative(self._stm.layer)
-        self._dl.replace(self._borderindex, self._border.layer)
 
     def _up(self):
         miny = 0
