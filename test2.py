@@ -233,9 +233,9 @@ def do_main(window, renderer, pixfmt):
         bigcm[num*512+1:num*512+511].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
         #a = num % 2 * 255
         #bigcm[num*128+1:num*128+127].fill(display.make_color(a, a, a, SDL_ALPHA_OPAQUE))
-    stm = display.ScrollingTilemap(text, bigtm, RES_WIDTH / 8, RES_HEIGHT / 8, 512, 512, 8, 8, colormod=bigcm)
+    stm = display.ScrollingTilemap(text, bigtm, RES_WIDTH / 8, RES_HEIGHT / 8, 512, 512, colormod=bigcm)
     #stm.layer.scale(2.0, 2.0)
-    pt3 = effects.BouncingPoint(0, 0, (512 * 8) - RES_WIDTH, (512 * 8) - RES_HEIGHT, 1000, minspeed=60)
+    pt3 = effects.BouncingPoint(-RES_WIDTH - 10, -RES_HEIGHT - 10, (512 * 8) + 10, (512 * 8) + 10, 1000, minspeed=60)
 
     scene = display.DisplayList(ll, display.SCREEN)
     osc1dl = display.DisplayList(ll, osc2)
@@ -245,7 +245,7 @@ def do_main(window, renderer, pixfmt):
     scopelid = osc2dl.append(None)
     scoperid = osc2dl.append(None)
     scene.append(display.make_color(32, 16, 48, SDL_ALPHA_OPAQUE))
-    scene.append(stm.layer)
+    scene.append(lambda: stm.draw())
     oscdl = display.DisplayList(ll, None)
     oscdl.append(lambda: osc2l.scale(1.0, 1.0))
     oscdl.append(osc1dl)
