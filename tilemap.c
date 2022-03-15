@@ -64,6 +64,7 @@ typedef struct {
 } Tilemap;
 
 typedef struct {
+    int inUse;
     int tilemap;
     SDL_Texture *tex;
     int x;
@@ -1426,13 +1427,14 @@ static int init_layer(LayerList *ll,
         LOG_PRINTF(ll, "Failed to allocate memory for name for layer %s.\n", name);
         return(-1);
     }
+    l->inUse = 1;
     strncpy(l->name, name, namelen);
 
     return(0);
 }
 
 int tilemap_add_layer(LayerList *ll,
-                      unsigned int tilemap,
+                      int tilemap,
                       SDL_Texture *tex,
                       const char *name) {
     Layer *temp;
@@ -1441,7 +1443,13 @@ int tilemap_add_layer(LayerList *ll,
     int w, h;
     Tilemap *tm;
     Tileset *ts;
-    if(tex == NULL) {
+    if(tilemap < 0) {
+        w = 0;
+        h = 0;
+        tex = NULL;
+        tm = NULL;
+        ts = NULL;
+    } else if(tex == NULL) {
         tm = get_tilemap(ll, tilemap);
         if(tm == NULL) {
             return(-1);
@@ -1482,10 +1490,9 @@ int tilemap_add_layer(LayerList *ll,
         return(0);
     }
 
-    /* find first NULL surface and assign it */
+    /* find first unused layer and assign it */
     for(i = 0; i < ll->layersmem; i++) {
-        if(ll->layer[i].tilemap == -1 &&
-           ll->layer[i].tex == NULL) {
+        if(ll->layer[i].inUse == 0) {
             if(init_layer(ll, &(ll->layer[i]), w, h, tilemap, tex, name) < 0) {
                 return(-1);
             }
@@ -1508,8 +1515,7 @@ int tilemap_add_layer(LayerList *ll,
     ll->layersmem *= 2;
     /* initialize empty excess surfaces as NULL */
     for(j = item; j < ll->layersmem; j++) {
-        ll->layer[j].tilemap = -1;
-        ll->layer[j].tex = NULL;
+        ll->layer[j].inUse = 0;
     }
  
     if(init_layer(ll, &(ll->layer[item]), w, h, tilemap, tex, name) < 0) {
@@ -1524,8 +1530,7 @@ int tilemap_add_layer(LayerList *ll,
 
 static Layer *get_layer(LayerList *ll, unsigned int index) {
     if(index >= ll->layersmem ||
-       (ll->layer[index].tilemap == -1 &&
-        ll->layer[index].tex == NULL)) {
+       ll->layer[index].inUse == 0) {
         LOG_PRINTF(ll, "Invalid layer index.\n");
         return(NULL);
     }
@@ -1551,7 +1556,8 @@ static void scan_layer_refs(LayerList *ll, int index) {
 
     LOG_PRINTF(ll, "Scanning for references...\n");
     for(i = 0; i < ll->layersmem; i++) {
-        if(ll->layer[i].rel == index) {
+        if(ll->layer[i].inUse &&
+           ll->layer[i].rel == index) {
             LOG_PRINTF(ll, " %u %s\n", i, ll->layer[i].name);
         }
     }
@@ -1577,8 +1583,7 @@ int tilemap_free_layer(LayerList *ll, unsigned int index) {
     }
 
     free(l->name);
-    l->tilemap = -1;
-    l->tex = NULL;
+    l->inUse = 0;
 
     return(0);
 }
@@ -1843,6 +1848,10 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     }
 
     if(l->tex == NULL) {
+        if(l->tilemap < 0) {
+            /* Non-graphical layer */
+            return(0);
+        }
         Tilemap *tm = get_tilemap(ll, l->tilemap);
         if(tm == NULL) {
             return(-1);

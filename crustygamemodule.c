@@ -1497,7 +1497,10 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
         goto error;
     }
 
-    if(PyObject_TypeCheck(tmtex, state->TilemapType)) {
+    if(tmtex == Py_None) {
+        Py_XDECREF(tmtex);
+        tilemap = -1;
+    } else if(PyObject_TypeCheck(tmtex, state->TilemapType)) {
         self->tm = (TilemapObject *)tmtex;
         tilemap = self->tm->tilemap;
     } else {
@@ -1998,7 +2001,8 @@ static PyType_Slot LayerSlots[] = {
                 "Tilemap(layerlist, texture, name)\n"
                 "layerlist  A LayerList\n"
                 "texture    An SDL_Texture\n"
-                "name       Optional name or None"},
+                "name       Optional name or None"
+                "tilemap/texture may be None to make a non-graphical layer"},
     {Py_tp_new, Layer_new},
     {Py_tp_init, (initproc)Layer_init},
     {Py_tp_dealloc, (destructor)Layer_dealloc},

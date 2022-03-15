@@ -410,14 +410,15 @@ int tilemap_update_tilemap(LayerList *ll,
  * Add a layer.
  *
  * ll       the LayerList
- * tilemap  the tilemap which the layer will display.
+ * tilemap  the tilemap which the layer will display or negative for a non-
+ *          graphical layer used for relative positioning.
  * tex      instead of a tilemap, just refer to a texture directly.  tilemap
  *          is ignored in this case.
  * name     optional name or NULL
  * return   the layer handle or -1 on failure
  */
 int tilemap_add_layer(LayerList *ll,
-                      unsigned int tilemap,
+                      int tilemap,
                       SDL_Texture *tex,
                       const char *name);
 /*
