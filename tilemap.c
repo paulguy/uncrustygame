@@ -1758,19 +1758,23 @@ int tilemap_set_layer_relative(LayerList *ll, unsigned int index, int rel) {
     }
     Layer *rl = NULL;
     if(rel >= 0) {
+        if(l->rel == rel) {
+            /* no change */
+            return(0);
+        }
         rl = get_layer(ll, (unsigned int)rel);
         if(rl == NULL) {
             return(-1);
         }
-        add_layer_ref(rl);
-    }
 
-    Layer *next;
-    for(next = rl; next != NULL; next = &(ll->layer[next->rel])) {
-        if(l == next) {
-            LOG_PRINTF(ll, "%s: layer %s would point to itself.", l->name, rl->name);
-            return(-1);
+        int next;
+        for(next = index; next >= 0; next = ll->layer[next].rel) {
+            if(rel == next) {
+                LOG_PRINTF(ll, "%s: layer %s would point to itself.", l->name, rl->name);
+                return(-1);
+            }
         }
+        add_layer_ref(rl);
     }
 
     if(l->rel >= 0) {

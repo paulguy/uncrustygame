@@ -205,11 +205,10 @@ class TextBox():
         self._th = self._font.ts.height()
         self._tm = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
         self._stm = display.ScrollingTilemap(self._font.ts, self._tm, self._vw, self._vh, self._mw, self._mh)
-        self._l = self._stm.layer
 
     @property
     def layer(self):
-        return self._l
+        return self._stm.layer
 
     def clear(self):
         # fill with spaces
@@ -250,6 +249,13 @@ class TextBox():
         self._stm.scroll(x, y)
         self._stm.update()
 
+    def pos(self, x, y):
+        self._stm.pos(x, y)
+        self._stm.update()
+
+    def draw(self):
+        self._stm.draw()
+
 @dataclass
 class MenuItem():
     label: str
@@ -264,7 +270,6 @@ class Menu():
     def __init__(self, ll, font, vw, vh, priv, spacing=1, rel=None):
         self._ll = ll
         self._font = font
-        self._rel = rel
         self._space = array.array('I', ' '.encode(self._font.codec))[0]
         self._tw = self._font.ts.width()
         self._th = self._font.ts.height()
@@ -282,6 +287,8 @@ class Menu():
         self._longestlabel = 0
         self._curvalue = None
         self._curpos = 0
+        self._rel = cg.Layer(self._ll, None, "{}x{} Menu Relative Layer".format(self._vw, self._vh))
+        self._rel.relative(rel)
         self._dl = display.DisplayList(self._ll, None)
         self._tbindex = self._dl.append(None)
         self._cursorindex = self._dl.append(None)
@@ -290,7 +297,7 @@ class Menu():
 
     @property
     def layers(self):
-        return self._tb.layer, self._cursorl
+        return self._rel, self._cursorl
 
     @property
     def displaylist(self):
@@ -428,7 +435,7 @@ class Menu():
             cursortm.update(0, 0, 0, 0)
             self._cursorl = cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
             self._dl.replace(self._cursorindex, self._cursorl)
-        self._cursorl.relative(self._tb.layer)
+        self._cursorl.relative(self._rel)
         if self._visibleitems > self._dlvalues:
             for num in range(self._visibleitems - self._dlvalues):
                 self._dl.append(None)
@@ -448,7 +455,7 @@ class Menu():
                                             entry.maxlen, 1,
                                             self._font)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
-                self._valtbs[num].layer.relative(self._tb.layer)
+                self._valtbs[num].layer.relative(self._rel)
 
         if self._selection >= len(self._entries):
             self._selection = len(self._entries) - 1

@@ -199,12 +199,12 @@ class Sidebar():
         self._hpos = int(self._fh * (1 + hpos))
         self._sbtext.layer.relative(self._sidebarl)
         self._textdl = display.DisplayList(self._state.ll)
-        self._textdl.append(lambda: self._sbtext.layer.pos(fw + 1, self._hpos + 1))
+        self._textdl.append(lambda: self._sbtext.pos(fw + 1, self._hpos + 1))
         self._textdl.append(lambda: self._sbtext.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
-        self._textdl.append(self._sbtext.layer)
-        self._textdl.append(lambda: self._sbtext.layer.pos(fw, self._hpos))
+        self._textdl.append(self._sbtext.draw)
+        self._textdl.append(lambda: self._sbtext.pos(fw, self._hpos))
         self._textdl.append(lambda: self._sbtext.layer.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
-        self._textdl.append(self._sbtext.layer)
+        self._textdl.append(self._sbtext.draw)
         self._textindex = self._dl.append(self._textdl)
 
     @property
@@ -418,11 +418,11 @@ class ProjectScreen():
                                         self._fmw, 1,
                                         self._state.font)
         self._set_banner(ProjectScreen.DEFAULT_BANNER)
-        self._titletb.layer.pos(int(self._fw * self._scale),
-                                int(self._fh * self._scale))
+        self._titletb.pos(int(self._fw * self._scale),
+                          int(self._fh * self._scale))
         self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
         self._dl = display.DisplayList(self._state.ll)
-        self._dl.append(display.Renderable(self._titletb.layer,
+        self._dl.append(display.Renderable(self._titletb.draw,
                                            always=False))
         self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, spacing=2, rel=self._titletb.layer)
         for desc in self._descs:
@@ -453,6 +453,7 @@ class ProjectScreen():
         self._build_screen()
 
     def _set_error(self, text):
+        print(text)
         self._errortext = text
         self._error = ERROR_TIME
 
@@ -715,6 +716,11 @@ class TilemapScreen():
         self._errorindex = self._dl.append(None)
         self._build_screen()
 
+    def _set_error(self, text):
+        print(text)
+        self._errortext = text
+        self._error = ERROR_TIME
+
     @property
     def name(self):
         return self._name
@@ -883,10 +889,6 @@ class TilemapScreen():
             return None
         self._tmdesc.hscale = self._caller.hscale
         return str(self._caller.hscale)
-
-    def _set_error(self, text):
-        self._errortext = text
-        self._error = ERROR_TIME
 
     def set_option(self, sel):
         if self._deleting:
@@ -1241,6 +1243,7 @@ class EditScreen():
         self._state.remove_tileset(self._tsdesc)
 
     def _set_error(self, text):
+        print(text)
         self._errortext = text
         self._error = ERROR_TIME
 
@@ -1602,25 +1605,25 @@ class EditScreen():
                             if self._tileset.tiles() < textbox.get_codec_max_map(self._codec):
                                 raise ValueError("Tileset has insufficient tiles for tilemap codec.")
                         except Exception as e:
+                            print(e)
+                            print_tb(e.__traceback__)
                             if isinstance(e, cg.CrustyException):
                                 self._set_error("Couldn't load tileset: {}: {}".format(e, get_error()))
                             else:
                                 self._set_error("Couldn't load tileset: {}".format(e))
                             self._tileset = self._state.reload_tileset(self._tsdesc, tileset)
-                            print(e)
-                            print_tb(e.__traceback__)
                             return
                         try:
                             self._make_stm()
                         except Exception as e:
+                            print(e)
+                            print_tb(e.__traceback__)
                             if isinstance(e, cg.CrustyException):
                                 self._set_error("Couldn't make tilemap: {}: {}".format(e, get_error()))
                             else:
                                 self._set_error("Couldn't make tilemap: {}".format(e))
                             self._tileset = self._state.reload_tileset(self._tsdesc, tileset)
                             self._make_stm()
-                            print(e)
-                            print_tb(e.__traceback__)
                             return
                         self._tiles = self._tileset.tiles()
                         self._make_selectscreen()

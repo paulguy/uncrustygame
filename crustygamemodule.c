@@ -1498,23 +1498,21 @@ static int Layer_init(LayerObject *self, PyObject *args, PyObject *kwds) {
     }
 
     if(tmtex == Py_None) {
-        Py_XDECREF(tmtex);
+        Py_CLEAR(tmtex);
         tilemap = -1;
     } else if(PyObject_TypeCheck(tmtex, state->TilemapType)) {
         self->tm = (TilemapObject *)tmtex;
         tilemap = self->tm->tilemap;
-    } else {
-        if(PyObject_TypeCheck(tmtex, state->LP_SDL_Texture)) {
-            self->tex = tmtex;
-            tex = get_value_from_lp_object(state, self->tex);
-            if(tex == NULL) {
-                PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Texture");
-                goto error;
-            }
-        } else {
-            PyErr_SetString(PyExc_TypeError, "second argument must be either a Tilemap or a SDL_Texture");
+    } else if(PyObject_TypeCheck(tmtex, state->LP_SDL_Texture)) {
+        self->tex = tmtex;
+        tex = get_value_from_lp_object(state, self->tex);
+        if(tex == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "couldn't get pointer of SDL_Texture");
             goto error;
         }
+    } else {
+        PyErr_SetString(PyExc_TypeError, "second argument must be either a Tilemap or a SDL_Texture or None");
+        goto error;
     }
 
     if(name == Py_None) {
@@ -1876,7 +1874,7 @@ static PyObject *Tilemap_set_layer_relative(LayerObject *self,
     }
 
     if(tilemap_set_layer_relative(self->ll->ll, self->layer, layer) < 0) {
-        PyErr_SetString(state->CrustyException, "tilemap_set_layer_blendmode failed");
+        PyErr_SetString(state->CrustyException, "tilemap_set_layer_relative failed");
         return(NULL);
     }
 
@@ -1994,15 +1992,10 @@ static PyMethodDef Layer_methods[] = {
 
 static PyType_Slot LayerSlots[] = {
     {Py_tp_doc, "A Layer.\n\n"
-                "Tilemap(layerlist, tilemap, name)\n"
+                "Tilemap(layerlist, gfx, name)\n"
                 "layerlist  A LayerList\n"
-                "tilemap    A Tilemap\n"
-                "name       Optional name or None\n\n"
-                "Tilemap(layerlist, texture, name)\n"
-                "layerlist  A LayerList\n"
-                "texture    An SDL_Texture\n"
-                "name       Optional name or None"
-                "tilemap/texture may be None to make a non-graphical layer"},
+                "gfx        A Tilemap, SDL_Texture or None for no graphics, useful for a relative reference point\n"
+                "name       Optional name or None"},
     {Py_tp_new, Layer_new},
     {Py_tp_init, (initproc)Layer_init},
     {Py_tp_dealloc, (destructor)Layer_dealloc},
