@@ -543,7 +543,7 @@ class ProjectScreen():
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._titletb.layer)
-                self._errorbox.layer.pos(0, int((self._fmh - h - 2) * self._fh))
+                self._errorbox.pos(0, int((self._fmh - h - 2) * self._fh))
                 self._dl.replace(self._errorindex, self._errorbox.layer)
             self._error -= time
         if self._error <= 0.0 and self._errorbox is not None:
@@ -676,8 +676,8 @@ class TilemapScreen():
                                         self._fmw, 1,
                                         self._state.font)
         put_centered_line(self._titletb, "Tilemap Settings", 0, self._fmw)
-        self._titletb.layer.pos(int(self._fw * self._scale),
-                                int(self._fh * self._scale))
+        self._titletb.pos(int(self._fw * self._scale),
+                          int(self._fh * self._scale))
         self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
         self._dl.replace(self._titletbindex, self._titletb.layer)
         self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, spacing=2, rel=self._titletb.layer)
@@ -791,7 +791,7 @@ class TilemapScreen():
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._titletb.layer)
-                self._errorbox.layer.pos(0, int((self._fmh - h - 2) * self._fh))
+                self._errorbox.pos(0, int((self._fmh - h - 2) * self._fh))
                 self._dl.replace(self._errorindex, self._errorbox.layer)
             self._error -= time
         if self._error <= 0.0 and self._errorbox is not None:
@@ -1167,7 +1167,7 @@ class EditScreen():
         self._sidebar.set_hpos(tstart + h)
         self._statustext = textbox.TextBox(self._sidebar.width - 2, h, self._sidebar.width - 2, h, self._state.font)
         self._statustext.put_text(lines, 0, 0)
-        self._statustext.layer.pos(self._fw, self._fh * (1 + tstart))
+        self._statustext.pos(self._fw, self._fh * (1 + tstart))
         self._statustext.layer.relative(self._sidebar.layer)
         self._update_tile()
         self._update_red()
@@ -1223,10 +1223,10 @@ class EditScreen():
         self._flags = array.array('I', itertools.repeat(self._attrib, self._tmdesc.mw * self._tmdesc.mh))
         self._colormod = array.array('I', itertools.repeat(self._color, self._tmdesc.mw * self._tmdesc.mh))
         self._errordl = display.DisplayList(self._state.ll)
-        self._errordl.append(lambda: self._errorbox.layer.pos(self._fw + 1, self._errorh + 1))
+        self._errordl.append(lambda: self._errorbox.pos(self._fw + 1, self._errorh + 1))
         self._errordl.append(lambda: self._errorbox.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
         self._errordlindex1 = self._errordl.append(None)
-        self._errordl.append(lambda: self._errorbox.layer.pos(self._fw, self._errorh))
+        self._errordl.append(lambda: self._errorbox.pos(self._fw, self._errorh))
         self._errordl.append(lambda: self._errorbox.layer.colormod(self._fxcolor))
         self._errordlindex2 = self._errordl.append(None)
         self._dl = display.DisplayList(self._state.ll)
@@ -1748,8 +1748,8 @@ class EditScreen():
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._stm.layer)
                 self._errorh = (self._fmh - h - 1) * self._fh
-                self._errordl.replace(self._errordlindex1, self._errorbox.layer)
-                self._errordl.replace(self._errordlindex2, self._errorbox.layer)
+                self._errordl.replace(self._errordlindex1, self._errorbox.draw)
+                self._errordl.replace(self._errordlindex2, self._errorbox.draw)
                 self._dl.replace(self._errorindex, self._errordl)
             self._error -= time
         if self._error <= 0.0 and self._errorbox is not None:
@@ -1985,7 +1985,7 @@ class PromptScreen():
         titletb = textbox.TextBox(vw, titleh, vw, titleh,
                                   self._state.font)
         titletb.layer.scale(scale, scale)
-        titletb.layer.pos(int(fw * scale), int(fh * scale))
+        titletb.pos(int(fw * scale), int(fh * scale))
         for num, line in enumerate(text):
             put_centered_line(titletb, line, num, vw - 2)
         self._dl.append(titletb.layer)
@@ -1994,7 +1994,7 @@ class PromptScreen():
                                   self._state.font)
         message.put_text(text, 0, 0)
         message.layer.relative(titletb.layer)
-        message.layer.pos(0, fh * (titleh + 1))
+        message.pos(0, fh * (titleh + 1))
         self._dl.append(message.layer)
         self._menu = textbox.Menu(self._state.ll, self._state.font, vw - 2, vh - 3, None, rel=message.layer)
         for opt in self._options:
@@ -2067,7 +2067,7 @@ class ColorPickerScreen():
         self._dl = display.DisplayList(self._state.ll)
         titletb = textbox.TextBox(vw, 1, vw, 1, self._state.font)
         titletb.layer.scale(scale, scale)
-        titletb.layer.pos(int(fw * scale), int(fh * scale))
+        titletb.pos(int(fw * scale), int(fh * scale))
         put_centered_line(titletb, "Pick Color", 0, vw - 2)
         self._dl.append(titletb.layer)
         self._menu = textbox.Menu(self._state.ll, self._state.font, vw - 2, vw - 3, None, spacing=2, rel=titletb.layer)

@@ -392,7 +392,7 @@ class Menu():
                 tb = self._valtbs[yscroll + num]
                 if tb is not None:
                     self._dl.replace(self._valueindex + num, tb.layer)
-                    tb.layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
+                    tb.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
                 else:
                     self._dl.replace(self._valueindex + num, None)
             self._tb.scroll(0, yscroll * self._spacing * self._th)
