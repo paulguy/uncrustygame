@@ -192,7 +192,7 @@ def get_codec_max_map(codec):
     return _codecs[codec].maxval
 
 class TextBox():
-    def __init__(self, vw, vh, mw, mh, font, debug=False):
+    def __init__(self, ll, vw, vh, mw, mh, font, debug=False):
         if array.array('u').itemsize != 4:
             raise Exception("Unicode array item size must be 4 bytes wide.")
         self._debug = debug
@@ -204,7 +204,7 @@ class TextBox():
         self._tw = self._font.ts.width()
         self._th = self._font.ts.height()
         self._tm = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
-        self._stm = display.ScrollingTilemap(self._font.ts, self._tm, self._vw, self._vh, self._mw, self._mh)
+        self._stm = display.ScrollingTilemap(ll, self._font.ts, self._tm, self._vw, self._vh, self._mw, self._mh)
 
     @property
     def layer(self):
@@ -249,10 +249,6 @@ class TextBox():
         self._stm.scroll(x, y)
         self._stm.update()
 
-    def pos(self, x, y):
-        self._stm.pos(x, y)
-        self._stm.update()
-
     def draw(self):
         self._stm.draw()
 
@@ -277,6 +273,7 @@ class Menu():
         self._vh = int(vh)
         self._priv = priv
         self._spacing = int(spacing)
+        self._rel = rel
         self._entries = []
         self._selection = 0
         self._tb = None
@@ -287,8 +284,6 @@ class Menu():
         self._longestlabel = 0
         self._curvalue = None
         self._curpos = 0
-        self._rel = cg.Layer(self._ll, None, "{}x{} Menu Relative Layer".format(self._vw, self._vh))
-        self._rel.relative(rel)
         self._dl = display.DisplayList(self._ll, None)
         self._tbindex = self._dl.append(None)
         self._cursorindex = self._dl.append(None)
@@ -297,7 +292,7 @@ class Menu():
 
     @property
     def layers(self):
-        return self._rel, self._cursorl
+        return self._tb.layer, self._cursorl
 
     @property
     def displaylist(self):
@@ -391,8 +386,8 @@ class Menu():
             for num in range(self._visibleitems):
                 tb = self._valtbs[yscroll + num]
                 if tb is not None:
-                    self._dl.replace(self._valueindex + num, tb.layer)
-                    tb.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
+                    self._dl.replace(self._valueindex + num, tb.draw)
+                    tb.layer.pos((1 + self._longestlabel + 1) * self._tw, num * self._th * self._spacing)
                 else:
                     self._dl.replace(self._valueindex + num, None)
             self._tb.scroll(0, yscroll * self._spacing * self._th)
@@ -424,18 +419,19 @@ class Menu():
                 vh += 2
         else:
             self._visibleitems = len(self._entries)
-        self._tb = TextBox(1 + w, vh,
+        self._tb = TextBox(self._ll,
+                           1 + w, vh,
                            1 + w, ((h - 1) * self._spacing) + 1,
                            self._font, debug=True)
         self._tb.layer.relative(self._rel)
-        self._dl.replace(self._tbindex, self._tb.layer)
+        self._dl.replace(self._tbindex, self._tb.draw)
         if self._cursorl is None:
             cursortm = self._font.ts.tilemap(1, 1, "{} Item Menu Cursor Tilemap".format(len(self._entries)))
             cursortm.map(0, 0, 0, 1, 1, array.array('I', MENU_DEFAULT_CURSOR.encode(self._font.codec)))
             cursortm.update(0, 0, 0, 0)
             self._cursorl = cursortm.layer("{} Item Menu Cursor Layer".format(len(self._entries)))
             self._dl.replace(self._cursorindex, self._cursorl)
-        self._cursorl.relative(self._rel)
+        self._cursorl.relative(self._tb.layer)
         if self._visibleitems > self._dlvalues:
             for num in range(self._visibleitems - self._dlvalues):
                 self._dl.append(None)
@@ -451,11 +447,12 @@ class Menu():
                 entry.width = entry.maxlen
                 if entry.width > valuelen:
                     entry.width = valuelen
-                self._valtbs[num] = TextBox(entry.width, 1,
+                self._valtbs[num] = TextBox(self._ll,
+                                            entry.width, 1,
                                             entry.maxlen, 1,
                                             self._font)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
-                self._valtbs[num].layer.relative(self._rel)
+                self._valtbs[num].layer.relative(self._tb.layer)
 
         if self._selection >= len(self._entries):
             self._selection = len(self._entries) - 1

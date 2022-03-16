@@ -326,7 +326,7 @@ class ScrollingTilemap():
     NOSCROLL_X = 1 << 0
     NOSCROLL_Y = 1 << 1
 
-    def __init__(self, tileset, tilemap, vw, vh, mw, mh, xpos=0, ypos=0, flags=None, colormod=None, optimize=False, debug=False):
+    def __init__(self, ll, tileset, tilemap, vw, vh, mw, mh, flags=None, colormod=None, optimize=False, debug=False):
         noscroll = 0
         if vw == mw:
             noscroll |= ScrollingTilemap.NOSCROLL_X
@@ -355,8 +355,9 @@ class ScrollingTilemap():
         if not noscroll & ScrollingTilemap.NOSCROLL_Y:
             self._vmh += 1
         self._tm = tileset.tilemap(self._vmw, self._vmh, "{}x{} Scrolling Tilemap {}".format(self._vmw, self._vmh, tileset.name()))
-        self._l = self._tm.layer("{}x{} Scrolling Layer {}".format(self._vmw, self._vmh, tileset.name()))
-        self.pos(xpos, ypos)
+        self._l = self._tm.layer("{}x{} Scrolling Layer {}".format(self._vw, self._vh, tileset.name()))
+        self._ref = cg.Layer(ll, None, "{}x{} Scrolling Relative Layer {}".format(self._vw, self._vh, tileset.name()))
+        self._l.relative(self._ref)
         self.scroll(0, 0)
         self._vmx = self._newx
         self._vmy = self._newy
@@ -367,10 +368,14 @@ class ScrollingTilemap():
 
     @property
     def layer(self):
-        return self._l
+        return self._ref
 
     def optimize(self, val):
         self._optimize = not not val
+
+    def scroll(self, x, y):
+        self._newx = int(x)
+        self._newy = int(y)
 
     def _setmap(self, x, y, vmx=0, vmy=0, w=0, h=0):
         self._tm.map(vmx, vmy, self._mw, w, h, self._tilemap[y * self._mw + x:])
@@ -379,14 +384,6 @@ class ScrollingTilemap():
         if self._colormod is not None:
             self._tm.attr_colormod(vmx, vmy, self._mw, w, h, self._colormod[y * self._mw + x:])
         self._tm.update(vmx, vmy, w, h)
-
-    def scroll(self, x, y):
-        self._newx = int(x)
-        self._newy = int(y)
-
-    def pos(self, x, y):
-        self._xpos = int(x)
-        self._ypos = int(y)
 
     def update(self, force=False):
         if self._newx + (self._vw * self._tw) <= 0 or \
@@ -488,20 +485,19 @@ class ScrollingTilemap():
         if self._newx < 0:
             if self._newy < 0:
                 # push to bottom right
-                self._l.pos(self._xpos + -self._newx,
-                            self._ypos + -self._newy)
+                self._l.pos(-self._newx, -self._newy)
                 self._l.window(self._vw * self._tw + self._newx,
                                self._vh * self._th + self._newy)
                 self._l.scroll_pos(0, 0)
             elif self._newy + (self._vmh * self._th) > self._mh * self._th:
                 # push to top right
                 vh = self._mh * self._th - self._newy
-                self._l.pos(self._xpos + -self._newx, self._ypos)
+                self._l.pos(-self._newx, 0)
                 self._l.window(self._vw * self._tw + self._newx, vh)
                 self._l.scroll_pos(0, self._vmh * self._th - vh)
             else:
                 # push to right
-                self._l.pos(self._xpos + -self._newx, self._ypos)
+                self._l.pos(-self._newx, 0)
                 self._l.window(self._vw * self._tw + self._newx,
                                self._vh * self._th)
                 self._l.scroll_pos(0, self._newy - (ny * self._th))
@@ -509,41 +505,41 @@ class ScrollingTilemap():
             if self._newy < 0:
                 # push to bottom left
                 vw = self._mw * self._tw - self._newx
-                self._l.pos(self._xpos, self._ypos + -self._newy)
+                self._l.pos(0, -self._newy)
                 self._l.window(vw, self._vh * self._th + self._newy)
                 self._l.scroll_pos(self._vmw * self._tw - vw, 0)
             elif self._newy + (self._vmh * self._th) > self._mh * self._th:
                 # push to top left
                 vw = self._mw * self._tw - self._newx
                 vh = self._mh * self._th - self._newy
-                self._l.pos(self._xpos, self._ypos)
+                self._l.pos(0, 0)
                 self._l.window(vw, vh)
                 self._l.scroll_pos(self._vmw * self._tw - vw,
                                    self._vmh * self._th - vh)
             else:
                 # push to left
                 vw = self._mw * self._tw - self._newx
-                self._l.pos(self._xpos, self._ypos)
+                self._l.pos(0, 0)
                 self._l.window(vw, self._vh * self._th)
                 self._l.scroll_pos(self._vmw * self._tw - vw,
                                    self._newy - (ny * self._th))
         else:
             if self._newy < 0:
                 # push to bottom
-                self._l.pos(self._xpos, self._ypos + -self._newy)
+                self._l.pos(0, -self._newy)
                 self._l.window(self._vw * self._tw,
                                self._vh * self._th + self._newy)
                 self._l.scroll_pos(self._newx - (nx * self._tw), 0)
             elif self._newy + (self._vmh * self._th) > self._mh * self._th:
                 # push to top
                 vh = self._mh * self._th - self._newy
-                self._l.pos(self._xpos, self._ypos)
+                self._l.pos(0, 0)
                 self._l.window(self._vw * self._tw, vh)
                 self._l.scroll_pos(self._newx - (nx * self._tw),
                                    self._vmh * self._th - vh)
             else:
                 # view all
-                self._l.pos(self._xpos, self._ypos)
+                self._l.pos(0, 0)
                 self._l.window(self._vw * self._tw,
                                self._vh * self._th)
                 self._l.scroll_pos(self._newx - (nx * self._tw),
