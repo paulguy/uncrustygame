@@ -493,7 +493,7 @@ class ScrollingTilemap():
                 self._l.window(self._vw * self._tw + self._newx,
                                self._vh * self._th + self._newy)
                 self._l.scroll_pos(0, 0)
-            elif self._newy + (self._vmh * self._th) >= self._mh * self._th:
+            elif self._newy + (self._vmh * self._th) > self._mh * self._th:
                 # push to top right
                 vh = self._mh * self._th - self._newy
                 self._l.pos(self._xpos + -self._newx, self._ypos)
@@ -505,14 +505,14 @@ class ScrollingTilemap():
                 self._l.window(self._vw * self._tw + self._newx,
                                self._vh * self._th)
                 self._l.scroll_pos(0, self._newy - (ny * self._th))
-        elif self._newx + (self._vmw * self._tw) >= self._mw * self._tw:
+        elif self._newx + (self._vmw * self._tw) > self._mw * self._tw:
             if self._newy < 0:
                 # push to bottom left
                 vw = self._mw * self._tw - self._newx
                 self._l.pos(self._xpos, self._ypos + -self._newy)
                 self._l.window(vw, self._vh * self._th + self._newy)
                 self._l.scroll_pos(self._vmw * self._tw - vw, 0)
-            elif self._newy + (self._vmh * self._th) >= self._mh * self._th:
+            elif self._newy + (self._vmh * self._th) > self._mh * self._th:
                 # push to top left
                 vw = self._mw * self._tw - self._newx
                 vh = self._mh * self._th - self._newy
@@ -534,7 +534,7 @@ class ScrollingTilemap():
                 self._l.window(self._vw * self._tw,
                                self._vh * self._th + self._newy)
                 self._l.scroll_pos(self._newx - (nx * self._tw), 0)
-            elif self._newy + (self._vmh * self._th) >= self._mh * self._th:
+            elif self._newy + (self._vmh * self._th) > self._mh * self._th:
                 # push to top
                 vh = self._mh * self._th - self._newy
                 self._l.pos(self._xpos, self._ypos)

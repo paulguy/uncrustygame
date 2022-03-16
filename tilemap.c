@@ -1626,8 +1626,7 @@ int tilemap_set_layer_window(LayerList *ll,
         h = l->boundh;
     }
 
-    if(l->scroll_x + w >= l->boundw * 2 ||
-       l->scroll_y + h >= l->boundh * 2) {
+    if(w > l->boundw || h > l->boundh) {
         LOG_PRINTF(ll, "%s: Layer window out of range. (%u > %u) or (%u > %u)\n", l->name, w, l->boundw, h, l->boundh);
         return(-1);
     }
@@ -1647,8 +1646,7 @@ int tilemap_set_layer_scroll_pos(LayerList *ll,
         return(-1);
     }
 
-    if(scroll_x + l->w >= l->boundw * 2 ||
-       scroll_y * l->h >= l->boundh * 2) {
+    if(scroll_x >= l->boundw || scroll_y >= l->boundh) {
         LOG_PRINTF(ll, "%s: Layer scroll pos out of range.\n", l->name);
         return(-1);
     }
