@@ -467,9 +467,9 @@ class Menu():
             raise Exception("Menu must be updated to process movement.")
         newval = self._selection + movement
         if newval < 0:
-            newval = 0
+            newval = len(self._entries) + (newval % len(self._entries))
         if newval >= len(self._entries):
-            newval = len(self._entries) - 1
+            newval = newval % len(self._entries)
         if newval == self._selection:
             return
         self._selection = newval
