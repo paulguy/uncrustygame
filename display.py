@@ -185,7 +185,7 @@ class RenderZone():
 
 @dataclass
 class Renderable():
-    obj : ('DisplayList', cg.Layer, int, None)
+    obj : ('DisplayList', cg.Layer, int, 'ScrollingTilemap', None)
     always : bool = True
     zone : list = None
 
@@ -201,6 +201,8 @@ class DisplayList():
         self.setdest(dest)
         self._list = []
         self._ref = False
+        self._xscroll = 0
+        self._yscroll = 0
 
     def _checkitem(item):
         if isinstance(item, DisplayList):
@@ -211,6 +213,10 @@ class DisplayList():
            not isinstance(item, (Renderable, cg.Layer, int)) and \
            not callable(item):
             raise TypeError("item must be DisplayList or Layer or int or None")
+
+    def scroll(self, x, y):
+        self._xscroll = int(x)
+        self._yscroll = int(y)
 
     def append(self, item):
         DisplayList._checkitem(item)
@@ -288,7 +294,8 @@ class DisplayList():
                             if zone.scroll is not None:
                                 item.obj.window(zone.scroll.x, zone.scroll.y)
                             if zone.pos is not None:
-                                item.obj.pos(zone.pos.x, zone.pos.y)
+                                item.obj.pos(self._xscroll + zone.pos.x,
+                                             self._yscroll + zone.pos.y)
                             if zone.scale is not None:
                                 item.obj.scale(zone.scale.x, zone.scale.y)
                             if zone.rotation_center is not None:
@@ -307,15 +314,21 @@ class DisplayList():
                     if item.zone is not None:
                         for zone in item.zone:
                             fill(self._ll, None, r, g, b, a,
-                                 item.zone.pos.x, item.zone.pos.y,
+                                 self._xscroll + item.zone.pos.x,
+                                 self._yscroll + item.zone.pos.y,
                                  item.zone.window.x, item.zone.window.y)
                     else:
                         clear(self._ll, None, r, g, b, a)
                 elif isinstance(item.obj, DisplayList):
                     if self._dest == None:
+                        item.obj.scroll(self._xscroll, self._yscroll)
                         item.obj.draw(restore, trace, depth+1)
                     else:
+                        item.obj.scroll(self._xscroll, self._yscroll)
                         item.obj.draw(self._dest, trace, depth+1)
+                elif isinstance(item.obj, ScrollingTilemap):
+                    item.obj.scroll(self._xscroll, self._yscroll)
+                    item.obj.draw()
 
         if self._dest != restore:
             if trace:

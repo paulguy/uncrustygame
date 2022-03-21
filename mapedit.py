@@ -6,6 +6,7 @@ from sys import argv
 import time
 from dataclasses import dataclass
 from traceback import print_tb
+from enum import Enum
 import display
 import textbox
 import copy
@@ -392,6 +393,95 @@ class BorderSelector():
     def draw(self):
         self._stm.draw()
 
+class PromptScreen():
+    def _build_screen(self):
+        vw, vh = self._state.window
+        scale = self._state.font_scale
+        fw = self._state.font.ts.width()
+        fh = self._state.font.ts.height()
+        vw = int(vw / scale / fw)
+        vh = int(vh / scale / fh)
+        self._dl = display.DisplayList(self._state.ll)
+        text, _, w, titleh = textbox.wrap_text(self._title, vw - 2, 2)
+        titletb = textbox.TextBox(self._state.ll,
+                                  vw, titleh, vw, titleh,
+                                  self._state.font)
+        titletb.layer.scale(scale, scale)
+        titletb.layer.pos(int(fw * scale), int(fh * scale))
+        for num, line in enumerate(text):
+            put_centered_line(titletb, line, num, vw - 2)
+        self._dl.append(titletb.draw)
+        message = titletb
+        messageh = 0
+        if self._message is not None:
+            text, _, w, messageh = textbox.wrap_text(self._message, vw - 2, 5)
+            message = textbox.TextBox(self._state.ll,
+                                      w, messageh, w, messageh,
+                                      self._state.font)
+            message.put_text(text, 0, 0)
+            message.layer.relative(titletb.layer)
+            message.layer.pos(0, fh * (titleh + 1))
+            self._dl.append(message.draw)
+        self._menu = textbox.Menu(self._state.ll, self._state.font, vw - 2, vh - 3 - messageh - 1, None, rel=message.layer)
+        for opt in self._options:
+            self._menu.add_item(opt, onActivate=self._activate)
+        self._menu.update()
+        mlayer, self._cursorl = self._menu.layers
+        mlayer.pos(0, fh * (messageh + 1))
+        self._dl.append(self._menu.displaylist)
+ 
+    def __init__(self, state, caller, title, options, message=None, default=0):
+        self._cursorrad = 0.0
+        self._state = state
+        self._caller = caller
+        self._title = title
+        self._message = message
+        self._options = options
+        self._build_screen()
+        self._menu.move_selection(default)
+
+    @property
+    def dl(self):
+        return self._dl
+
+    def active(self):
+        # On demand screens that destroy when done don't need to rebuild
+        pass
+
+    def input(self, event):
+        if event.type == SDL_KEYDOWN:
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                self._return(None)
+
+    def update(self, time):
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
+
+    def resize(self):
+        vw, vh = self._state.window
+        scale = self._state.font_scale
+        fw = self._state.font.ts.width()
+        fh = self._state.font.ts.height()
+        if self._fmw != int(vw / scale / fw) or \
+           self._fmh != int(vh / scale / fh):
+            self._build_screen()
+
+    def resize(self):
+        self._build_screen()
+
+    def _activate(self, priv, sel):
+        self._return(sel)
+
+    def _return(self, option):
+        self._caller.set_option(option)
+        self._state.active_screen(self._caller)
+
 @dataclass
 class TilemapDesc():
     name : str = "Untitled Tilemap"
@@ -435,6 +525,7 @@ class ProjectScreen():
             self._menu.add_item(desc.name, onActivate=self._open_tilemap)
         self._menu.add_item("New Tilemap", onActivate=self._new_tilemap)
         self._menu.add_item("UI Scale", value=str(self._state.font_scale), maxlen=4, onEnter=self._set_scale)
+        self._menu.add_item("Preview Manager", onActivate=self._open_layers)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
@@ -456,6 +547,7 @@ class ProjectScreen():
         self._error = 0.0
         self._errortext = ''
         self._errorbox = None
+        self._layers = LayersScreen(self._state, self)
         self._build_screen()
 
     def _set_error(self, text):
@@ -532,7 +624,7 @@ class ProjectScreen():
                         self._moving = -1
                         self._set_banner(ProjectScreen.DEFAULT_BANNER)
                     else:
-                        prompt = PromptScreen(self._state, self, "Quit?", "Any unsaved changes will be lost, are you sure?", ("yes", "no"), default=1)
+                        prompt = PromptScreen(self._state, self, "Quit?", ("yes", "no"), message="Any unsaved changes will be lost, are you sure?", default=1)
                         self._state.active_screen(prompt)
 
     def update(self, time):
@@ -670,6 +762,17 @@ class ProjectScreen():
         if self._selected >= len(self._editors):
             raise ValueError("Item not created yet, settings must be Applied at least once.")
         self._moving = self._selected
+
+    def _open_layers(self, priv, sel):
+        self._state.active_screen(self._layers)
+
+    @property
+    def descs(self):
+        return self._descs
+
+    @property
+    def editors(self):
+        return self._editors
 
 class TilemapScreen():
     def _build_screen(self):
@@ -813,7 +916,7 @@ class TilemapScreen():
 
     def _setname(self, priv, sel, val):
         self._tmdesc.name = val.lstrip().rstrip()
-        return val
+        return self._tmdesc.name
 
     def _setfilename(self, priv, sel, val):
         self._tmdesc.filename = val.lstrip().rstrip()
@@ -914,7 +1017,7 @@ class TilemapScreen():
         try:
             self._caller.apply(self._tmdesc)
         except TileMapShrunk:
-            prompt = PromptScreen(self._state, self, "Continue?", "This operation will shrink the tilemap and lose any data that falls outside of the bottom and right edges, are you sure?", ("yes", "no"), default=1)
+            prompt = PromptScreen(self._state, self, "Continue?", ("yes", "no"), message="This operation will shrink the tilemap and lose any data that falls outside of the bottom and right edges, are you sure?", default=1)
             self._state.active_screen(prompt)
             return
         except Exception as e:
@@ -948,7 +1051,7 @@ class TilemapScreen():
 
     def _delete(self, priv, sel):
         self._deleting = True
-        prompt = PromptScreen(self._state, self, "Continue?", "This operation will delete this tilemap and it cannot be reversed, are you sure?", ("yes", "no"), default=1)
+        prompt = PromptScreen(self._state, self, "Continue?", ("yes", "no"), message="This operation will delete this tilemap and it cannot be reversed, are you sure?", default=1)
         self._state.active_screen(prompt)
 
 class EditScreen():
@@ -1817,6 +1920,18 @@ class EditScreen():
         self._set_tmdesc(desc)
         self._make_stm()
 
+    @property
+    def tilemap(self):
+        return self._tilemap
+
+    @property
+    def flags(self):
+        return self._flags
+
+    @property
+    def colormod(self):
+        return self._colormod
+
 class TileSelectScreen():
     def _update_cursor(self):
         self._curpos, _, xscroll, yscroll, x, y = \
@@ -1986,92 +2101,6 @@ class TileSelectScreen():
     def update(self, time):
         self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
         self._cursorl.colormod(color)
-
-class PromptScreen():
-    def _build_screen(self):
-        vw, vh = self._state.window
-        scale = self._state.font_scale
-        fw = self._state.font.ts.width()
-        fh = self._state.font.ts.height()
-        vw = int(vw / scale / fw)
-        vh = int(vh / scale / fh)
-        self._dl = display.DisplayList(self._state.ll)
-        text, _, w, titleh = textbox.wrap_text(self._title, vw - 2, 2)
-        titletb = textbox.TextBox(self._state.ll,
-                                  vw, titleh, vw, titleh,
-                                  self._state.font)
-        titletb.layer.scale(scale, scale)
-        titletb.layer.pos(int(fw * scale), int(fh * scale))
-        for num, line in enumerate(text):
-            put_centered_line(titletb, line, num, vw - 2)
-        self._dl.append(titletb.draw)
-        text, _, w, messageh = textbox.wrap_text(self._message, vw - 2, 5)
-        message = textbox.TextBox(self._state.ll,
-                                  w, messageh, w, messageh,
-                                  self._state.font)
-        message.put_text(text, 0, 0)
-        message.layer.relative(titletb.layer)
-        message.layer.pos(0, fh * (titleh + 1))
-        self._dl.append(message.draw)
-        self._menu = textbox.Menu(self._state.ll, self._state.font, vw - 2, vh - 3, None, rel=message.layer)
-        for opt in self._options:
-            self._menu.add_item(opt, onActivate=self._activate)
-        self._menu.update()
-        mlayer, self._cursorl = self._menu.layers
-        mlayer.pos(0, fh * (messageh + 1))
-        self._dl.append(self._menu.displaylist)
- 
-    def __init__(self, state, caller, title, message, options, default=0):
-        self._cursorrad = 0.0
-        self._state = state
-        self._caller = caller
-        self._title = title
-        self._message = message
-        self._options = options
-        self._build_screen()
-        self._menu.move_selection(default)
-
-    @property
-    def dl(self):
-        return self._dl
-
-    def active(self):
-        # On demand screens that destroy when done don't need to rebuild
-        pass
-
-    def input(self, event):
-        if event.type == SDL_KEYDOWN:
-            if event.key.keysym.sym == SDLK_UP:
-                self._menu.up()
-            elif event.key.keysym.sym == SDLK_DOWN:
-                self._menu.down()
-            elif event.key.keysym.sym == SDLK_RETURN:
-                self._menu.activate_selection()
-            elif event.key.keysym.sym == SDLK_ESCAPE:
-                self._return(None)
-
-    def update(self, time):
-        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
-        self._cursorl.colormod(color)
-
-    def resize(self):
-        vw, vh = self._state.window
-        scale = self._state.font_scale
-        fw = self._state.font.ts.width()
-        fh = self._state.font.ts.height()
-        if self._fmw != int(vw / scale / fw) or \
-           self._fmh != int(vh / scale / fh):
-            self._build_screen()
-
-    def resize(self):
-        self._build_screen()
-
-    def _activate(self, priv, sel):
-        self._return(sel)
-
-    def _return(self, option):
-        self._caller.set_option(option)
-        self._state.active_screen(self._caller)
 
 class ColorPickerScreen():
     def _build_screen(self):
@@ -2243,6 +2272,479 @@ class ColorPickerScreen():
 
     def _accept(self, priv, sel):
         self._caller.set_color(self._red, self._green, self._blue, self._alpha)
+        self._state.active_screen(self._caller)
+
+class ScrollMode(Enum):
+    NONE = 0
+    LAYER = 1
+    POSITION = 2
+
+@dataclass
+class LayerDesc():
+    name : str = "Untitled Layer"
+    tilemap : int = -1 
+    relative : int = -1
+    vw : int = 1
+    vh : int = 1
+    scalex : float = 1.0
+    scaley : float = 1.0
+    mode : ScrollMode = ScrollMode.NONE
+    posx : int = 0
+    posy : int = 0
+
+class LayersScreen():
+    DEFAULT_BANNER="Layers"
+
+    def _set_banner(self, s):
+        self._titletb.clear()
+        put_centered_line(self._titletb, s, 0, self._fmw)
+
+    def _build_screen(self):
+        self._vw, self._vh = self._state.window
+        self._fw = self._state.font.ts.width()
+        self._fh = self._state.font.ts.height()
+        self._scale = self._state.font_scale
+        self._fmw = int(self._vw / self._scale / self._fw)
+        self._fmh = int(self._vh / self._scale / self._fh)
+        self._titletb = textbox.TextBox(self._state.ll,
+                                        self._fmw, 1,
+                                        self._fmw, 1,
+                                        self._state.font)
+        self._set_banner(ProjectScreen.DEFAULT_BANNER)
+        self._titletb.layer.pos(int(self._fw * self._scale),
+                                int(self._fh * self._scale))
+        self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
+        self._dl = display.DisplayList(self._state.ll)
+        self._dl.append(display.Renderable(self._titletb.draw,
+                                           always=False))
+        self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, rel=self._titletb.layer)
+        for desc in self._descs:
+            self._menu.add_item(desc.name, onActivate=self._open_layer)
+        self._menu.add_item("New Layer", onActivate=self._new_layer)
+        self._menu.add_item("Show Preview", onActivate=self._show)
+        self._menu.update()
+        mlayer, self._cursorl = self._menu.layers
+        mlayer.pos(0, self._fh * 2)
+        self._dl.append(self._menu.displaylist)
+        self._errorindex = self._dl.append(None)
+
+    def __init__(self, state, caller):
+        self._state = state
+        self._caller = caller
+        self._descs = list()
+        self._selected = 0
+        self._deleting = False
+        self._moving = -1
+        self._cursorrad = 0.0
+        self._error = 0.0
+        self._errortext = ''
+        self._errorbox = None
+        self._build_screen()
+
+    def _set_error(self, text):
+        print(text)
+        self._errortext = text
+        self._error = ERROR_TIME
+
+    @property
+    def dl(self):
+        return self._dl
+
+    def resize(self):
+        vw, vh = self._state.window
+        scale = self._state.font_scale
+        fw = self._state.font.ts.width()
+        fh = self._state.font.ts.height()
+        if scale != self._scale or \
+           self._fmw != int(vw / scale / fw) or \
+           self._fmh != int(vh / scale / fh):
+            self._build_screen()
+
+    def _update_menu(self):
+        self._menu.update()
+        mlayer, _ = self._menu.layers
+        mlayer.pos(0, self._fh * 2)
+
+    def active(self):
+        self.resize()
+        if self._deleting:
+            self._deleting = False
+            del self._descs[self._selected]
+            self._menu.remove(self._selected)
+            self._update_menu()
+        elif self._moving >= 0:
+            self._set_banner("Swap with?")
+
+    def input(self, event):
+        if event.type == SDL_KEYDOWN:
+            self._state.changed()
+            self._error = 0.0
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                if self._moving >= 0 and \
+                   self._menu.selection >= len(self._descs):
+                    self._set_error("Can't swap with a selection that isn't a layer, use ESCAPE to cancel move.")
+                    return
+                self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                if not self._menu.cancel_entry():
+                    if self._moving >= 0:
+                        self._moving = -1
+                        self._set_banner(ProjectScreen.DEFAULT_BANNER)
+                    else:
+                        self._state.active_screen(self._caller)
+
+    def update(self, time):
+        if self._error > 0.0:
+            if self._errorbox is None:
+                if len(self._errortext) == 0:
+                    self._errortext = "Unknown error"
+                lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
+                self._errorbox = textbox.TextBox(self._state.ll,
+                                                 w, h, w, h,
+                                                 self._state.font)
+                self._errorbox.put_text(lines, 0, 0)
+                self._errorbox.layer.relative(self._titletb.layer)
+                self._errorbox.layer.pos(0, int((self._fmh - h - 2) * self._fh))
+                self._dl.replace(self._errorindex, self._errorbox.draw)
+            self._error -= time
+        if self._error <= 0.0 and self._errorbox is not None:
+            self._dl.replace(self._errorindex, None)
+            self._errorbox = None
+            self._errortext = ''
+
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
+
+    def _open_settings(self, sel):
+        self._selected = sel
+        # make a copy so the original stays unmodified
+        desc = copy.deepcopy(self._descs[sel])
+        layerscreen = LayerScreen(self._state, self, desc)
+        self._state.active_screen(layerscreen)
+
+    def _open_layer(self, priv, sel):
+        if self._moving >= 0:
+            if sel == self._moving:
+                self._set_error("Can't swap with same layer, use ESCAPE to cancel move.")
+                return
+            moving = self._moving
+            self._moving = -1
+            desc1 = self._descs[sel]
+            desc2 = self._descs[moving]
+            self._descs[sel] = desc2
+            self._descs[moving] = desc1
+            self._menu.remove(sel)
+            self._menu.insert_item(sel, desc2.name, onActivate=self._open_layer)
+            self._menu.remove(moving)
+            self._menu.insert_item(moving, desc1.name, onActivate=self._open_layer)
+            self._update_menu()
+            self._set_banner(ProjectScreen.DEFAULT_BANNER)
+        else:
+            try:
+                self._open_settings(sel)
+            except Exception as e:
+                print(e)
+                print_tb(e.__traceback__)
+                if isinstance(e, cg.CrustyException):
+                    self._set_error("Couldn't open layer: {}: {}".format(e, get_error()))
+                else:
+                    self._set_error("Couldn't open layer: {}".format(e))
+
+    def _new_layer(self, priv, sel):
+        self._descs.append(LayerDesc())
+        self._menu.insert_item(len(self._descs) - 1, self._descs[-1].name, onActivate=self._open_layer)
+        self._update_menu()
+        self._open_settings(len(self._descs) - 1)
+
+    def _show(self, priv, sel):
+        pass
+
+    def apply(self, desc):
+        if desc.name != self._descs[self._selected].name:
+            self._menu.remove(self._selected)
+            self._menu.insert_item(self._selected, desc.name, onActivate=self._open_layer)
+            self._update_menu()
+        self._descs[self._selected] = desc
+
+    def delete(self):
+        self._deleting = True
+
+    def move(self):
+        self._moving = self._selected
+
+    @property
+    def layers(self):
+        return self._descs
+
+    @property
+    def tmdescs(self):
+        return self._caller.descs
+
+class LayerScreenSelecting(Enum):
+    NONE = 0
+    TILEMAP = 1
+    RELATIVE = 2
+
+class LayerScreen():
+    SCROLL_MODE_NONE="No Scrolling"
+    SCROLL_MODE_LAYER="Layer Scrolling"
+    SCROLL_MODE_POS="Position Scrolling"
+
+    def get_scroll_mode(mode):
+        if mode == ScrollMode.NONE:
+            return LayerScreen.SCROLL_MODE_NONE
+        elif mode == ScrollMode.LAYER:
+            return LayerScreen.SCROLL_MODE_LAYER
+        elif mode == ScrollMode.POSITION:
+            return LayerScreen.SCROLL_MODE_POS
+        return "Unknown"
+
+    def _get_tmname(self):
+        if self._ldesc.tilemap < 0:
+            return "None"
+        return self._caller.tmdescs[self._ldesc.tilemap].name
+
+    def _get_relname(self):
+        if self._ldesc.relative < 0:
+            return "None"
+        return self._caller.layers[self._ldesc.relative].name
+
+    def _build_screen(self):
+        self._vw, self._vh = self._state.window
+        self._fw = self._state.font.ts.width()
+        self._fh = self._state.font.ts.height()
+        self._scale = self._state.font_scale
+        self._fmw = int(self._vw / self._scale / self._fw)
+        self._fmh = int(self._vh / self._scale / self._fh)
+        self._titletb = textbox.TextBox(self._state.ll,
+                                        self._fmw, 1,
+                                        self._fmw, 1,
+                                        self._state.font)
+        put_centered_line(self._titletb, "Tilemap Settings", 0, self._fmw)
+        self._titletb.layer.pos(int(self._fw * self._scale),
+                                int(self._fh * self._scale))
+        self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
+        self._dl.replace(self._titletbindex, self._titletb.draw)
+        self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, spacing=2, rel=self._titletb.layer)
+        self._menu.add_item("Apply", onActivate=self._apply)
+        self._menu.add_item("Name", value=self._ldesc.name, maxlen=255, onEnter=self._setname)
+        self._menu.add_item("Tilemap", value=self._get_tmname(), maxlen=255, onActivate=self._select_tilemap)
+        self._menu.add_item("Relative", value=self._get_relname(), maxlen=255, onActivate=self._select_relative)
+        self._menu.add_item("Width", value=str(self._ldesc.vw), maxlen=4, onEnter=self._setwidth)
+        self._menu.add_item("Height", value=str(self._ldesc.vh), maxlen=4, onEnter=self._setheight)
+        self._menu.add_item("X Scale", value=str(self._ldesc.scalex), maxlen=5, onEnter=self._set_scalex)
+        self._menu.add_item("Y Scale", value=str(self._ldesc.scaley), maxlen=5, onEnter=self._set_scaley)
+        self._menu.add_item("Mode", value=LayerScreen.get_scroll_mode(self._ldesc.mode), maxlen=32, onActivate=self._toggle_mode)
+        self._menu.add_item(" None:", value="Layer position is never adjusted.")
+        self._menu.add_item(" Layer:", value="Layer is scrolled.")
+        self._menu.add_item(" Position:", value="Layer is moved.")
+        self._menu.add_item("X Pos", value=str(self._ldesc.posx), maxlen=5, onEnter=self._set_posx)
+        self._menu.add_item("Y Pos", value=str(self._ldesc.posy), maxlen=5, onEnter=self._set_posy)
+        self._menu.add_item("Move", onActivate=self._move)
+        self._menu.add_item("Delete", onActivate=self._delete)
+        self._menu.update()
+        mlayer, self._cursorl = self._menu.layers
+        mlayer.pos(0, self._fh * 2)
+        self._dl.replace(self._menuindex, self._menu.displaylist)
+
+    def __init__(self, state, caller, ldesc):
+        self._state = state
+        self._caller = caller
+        self._ldesc = ldesc
+        self._error = 0.0
+        self._errortext = ''
+        self._errorbox = None
+        self._cursorrad = 0.0
+        self._selecting = LayerScreenSelecting.NONE
+        self._selection = 0
+        self._dl = display.DisplayList(self._state.ll)
+        self._titletbindex = self._dl.append(None)
+        self._menuindex = self._dl.append(None)
+        self._errorindex = self._dl.append(None)
+        self._build_screen()
+
+    def _set_error(self, text):
+        print(text)
+        self._errortext = text
+        self._error = ERROR_TIME
+
+    @property
+    def name(self):
+        return self._name
+
+    def resize(self):
+        vw, vh = self._state.window
+        scale = self._state.font_scale
+        fw = self._state.font.ts.width()
+        fh = self._state.font.ts.height()
+        if self._fmw != int(vw / scale / fw) or \
+           self._fmh != int(vh / scale / fh):
+            self._build_screen()
+
+    def active(self):
+        self.resize()
+        if self._selecting == LayerScreenSelecting.TILEMAP:
+            if self._selection is not None:
+                self._ldesc.tilemap = self._selection - 1
+                self._menu.update_value(2, self._get_tmname())
+        elif self._selecting == LayerScreenSelecting.RELATIVE:
+            if self._selection is not None:
+                self._ldesc.relative = self._selection - 1
+                self._menu.update_value(3, self._get_relname())
+        self._selecting = LayerScreenSelecting.NONE
+
+    @property
+    def dl(self):
+        return self._dl
+
+    def input(self, event):
+        if event.type == SDL_TEXTINPUT:
+            self._menu.text_event(event)
+        elif event.type == SDL_KEYDOWN:
+            self._error = 0.0
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_LEFT:
+                self._menu.left()
+            elif event.key.keysym.sym == SDLK_RIGHT:
+                self._menu.right()
+            elif event.key.keysym.sym == SDLK_BACKSPACE:
+                self._menu.backspace()
+            elif event.key.keysym.sym == SDLK_DELETE:
+                self._menu.delete()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                if not self._menu.cancel_entry():
+                    self._state.active_screen(self._caller)
+
+    def update(self, time):
+        if self._error > 0.0:
+            if self._errorbox is None:
+                if len(self._errortext) == 0:
+                    self._errortext = "Unknown error"
+                lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
+                self._errorbox = textbox.TextBox(self._state.ll,
+                                                 w, h, w, h,
+                                                 self._state.font)
+                self._errorbox.put_text(lines, 0, 0)
+                self._errorbox.layer.relative(self._titletb.layer)
+                self._errorbox.layer.pos(0, int((self._fmh - h - 2) * self._fh))
+                self._dl.replace(self._errorindex, self._errorbox.draw)
+            self._error -= time
+        if self._error <= 0.0 and self._errorbox is not None:
+            self._dl.replace(self._errorindex, None)
+            self._errorbox = None
+            self._errortext = ''
+
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
+
+    def _setname(self, priv, sel, val):
+        self._ldesc.name = val.lstrip().rstrip()
+        return self._ldesc.name
+
+    def set_option(self, sel):
+        self._selection = sel
+
+    def _select_tilemap(self, priv, sel, val):
+        tilesets = [desc.name for desc in self._caller.tmdescs]
+        tilesets.insert(0, "None")
+        promptscreen = PromptScreen(self._state, self, "Select Tileset", tilesets, default=self._ldesc.tilemap + 1)
+        self._state.active_screen(promptscreen)
+        self._selecting = LayerScreenSelecting.TILEMAP
+        return None
+
+    def _select_relative(self, priv, sel, val):
+        layers = [desc.name for desc in self._caller.layers]
+        layers.insert(0, "None")
+        promptscreen = PromptScreen(self._state, self, "Select Layer", layers, default=self._ldesc.relative + 1)
+        self._state.active_screen(promptscreen)
+        self._selecting = LayerScreenSelecting.RELATIVE
+        return None
+
+    def _setwidth(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 1:
+            return None
+        self._ldesc.vw = val
+        return str(self._ldesc.vw)
+
+    def _setheight(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        if val < 1:
+            return None
+        self._ldesc.vh = val
+        return str(self._ldesc.vh)
+
+    def _set_scalex(self, priv, sel, val):
+        try:
+            val = float(val)
+        except ValueError:
+            return None
+        if val < 0.0:
+            self._set_error("Scale must be positive.")
+            return None
+        self._ldesc.scalex = val
+        return str(self._ldesc.scalex)
+
+    def _set_scaley(self, priv, sel, val):
+        try:
+            val = float(val)
+        except ValueError:
+            return None
+        if val < 0.0:
+            self._set_error("Scale must be positive.")
+            return None
+        self._ldesc.scaley = val
+        return str(self._ldesc.scaley)
+
+    def _toggle_mode(self, priv, sel, val):
+        if self._ldesc.mode == ScrollMode.NONE:
+            self._ldesc.mode = ScrollMode.LAYER
+        elif self._ldesc.mode == ScrollMode.LAYER:
+            self._ldesc.mode = ScrollMode.POSITION
+        else:
+            self._ldesc.mode = ScrollMode.NONE
+        return LayerScreen.get_scroll_mode(self._ldesc.mode)
+
+    def _set_posx(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        self._ldesc.posx = val
+        return str(self._ldesc.posx)
+
+    def _set_posy(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        self._ldesc.posy = val
+        return str(self._ldesc.posy)
+
+    def _apply(self, priv, sel):
+        self._caller.apply(self._ldesc)
+
+    def _move(self, priv, sel):
+        self._caller.move()
+        self._state.active_screen(self._caller)
+
+    def _delete(self, priv, sel):
+        self._caller.delete()
         self._state.active_screen(self._caller)
 
 

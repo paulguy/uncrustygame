@@ -507,7 +507,16 @@ class Menu():
                 val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value.tobytes().decode(self._font.codec))
                 self._accept_value(val)
 
-    def _update_value(self):
+    def update_value(self, num, val):
+        if self._valtbs[num] is None:
+            raise IndexError("Item has no value.")
+        if len(val) > self._entries[num].maxlen:
+            raise ValueError("Value is longer than max value length.")
+        val = array.array('I', val.encode(self._font.codec))
+        self._pad_value(val, self._entries[num].maxlen)
+        self._valtbs[self._selection].put_text((val,), 0, 0)
+
+    def _update_curvalue(self):
         self._valtbs[self._selection].put_text((self._curvalue[self._curpos:],), self._curpos, 0)
 
     def backspace(self):
@@ -516,7 +525,7 @@ class Menu():
                 self._curvalue[self._curpos-1:-1] = self._curvalue[self._curpos:]
                 self._curvalue[-1] = ord(' ')
                 self._curpos -= 1
-                self._update_value()
+                self._update_curvalue()
                 self._update_cursor()
 
     def delete(self):
@@ -524,7 +533,7 @@ class Menu():
             if self._curpos + 1 < len(self._curvalue):
                 self._curvalue[self._curpos:-1] = self._curvalue[self._curpos+1:]
             self._curvalue[-1] = ord(' ')
-            self._update_value()
+            self._update_curvalue()
 
     def _accept_value(self, val):
         if val is None:
@@ -535,7 +544,7 @@ class Menu():
         self._curvalue = array.array('I', val.encode(self._font.codec))
         self._pad_value(self._curvalue, self._entries[self._selection].maxlen)
         self._curpos = 0
-        self._update_value()
+        self._update_curvalue()
         self._update_cursor()
         self._entries[self._selection].value = self._curvalue
         self._curvalue = None
@@ -563,7 +572,7 @@ class Menu():
         if self._curvalue is not None:
             self._curvalue = self._entries[self._selection].value
             self._curpos = 0
-            self._update_value()
+            self._update_curvalue()
             self._update_cursor()
             self._curvalue = None
             self._update_cursor()
@@ -579,6 +588,6 @@ class Menu():
                 char = event.text.text.decode('utf-8')
                 self._curvalue[self._curpos+1:] = self._curvalue[self._curpos:-1]
                 self._curvalue[self._curpos:self._curpos+1] = array.array('I', char.encode(self._font.codec))
-                self._update_value()
+                self._update_curvalue()
                 self._curpos += 1
                 self._update_cursor()
