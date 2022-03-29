@@ -233,9 +233,11 @@ def do_main(window, renderer, pixfmt):
         bigcm[num*512+1:num*512+511].fill(display.make_color(r, g, b, SDL_ALPHA_OPAQUE))
         #a = num % 2 * 255
         #bigcm[num*128+1:num*128+127].fill(display.make_color(a, a, a, SDL_ALPHA_OPAQUE))
-    stm = display.ScrollingTilemap(text, bigtm, RES_WIDTH / 8, RES_HEIGHT / 8, 512, 512, colormod=bigcm)
+    stm = display.ScrollingTilemap(ll, text, bigtm, RES_WIDTH, RES_HEIGHT, 512, 512, colormod=bigcm)
+    #stm = display.ScrollingTilemap(ll, text, bigtm, RES_WIDTH, RES_HEIGHT, 32, 32, colormod=bigcm)
     #stm.layer.scale(2.0, 2.0)
     pt3 = effects.BouncingPoint(-RES_WIDTH - 10, -RES_HEIGHT - 10, (512 * 8) + 10, (512 * 8) + 10, 1000, minspeed=60)
+    #pt3 = effects.BouncingPoint(-RES_WIDTH - 10, -RES_HEIGHT - 10, (32 * 8) + 10, (32 * 8) + 10, 1000, minspeed=60)
 
     scene = display.DisplayList(ll, display.SCREEN)
     osc1dl = display.DisplayList(ll, osc2)
