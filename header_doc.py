@@ -72,6 +72,15 @@ def _name_to_id(name):
     return name.translate({' ': '_',
                            '.': '_'})
 
+def _clear_trailing_blank_lines(strlist):
+    for num in range(len(strlist) - 1, 0, -1):
+        if len(strlist[num].lstrip().rstrip()) == 0:
+            del strlist[num]
+        else:
+            break
+
+    return strlist
+
 class DocTOC():
     def __init__(self, docs):
         self._toclist = list()
@@ -226,11 +235,7 @@ class HeaderReader:
                 idx = line.index('/*')
                 code.append(line[:idx])
                 rest = line[idx+2:]
-                for num in range(len(code) - 1, 0, -1):
-                    if len(code[num].lstrip().rstrip()) == 0:
-                        del code[num]
-                    else:
-                        break
+                code = _clear_trailing_blank_lines(code)
                 return DocPair(code, rest)
             except ValueError:
                 if len(code) > 0 or len(line.lstrip().rstrip()) > 0:
@@ -255,11 +260,7 @@ class HeaderReader:
                 idx = line.index('*/')
                 comment.append(line[:idx])
                 rest = line[idx+2:]
-                for num in range(len(comment) - 1, 0, -1):
-                    if len(comment[num].lstrip().rstrip()) == 0:
-                        del comment[num]
-                    else:
-                        break
+                comment = _clear_trailing_blank_lines(comment)
                 return DocPair(comment, rest)
             except ValueError:
                 if line.startswith(' *'):
@@ -346,6 +347,9 @@ class HeaderReader:
                                                   _strlist_to_html(pair.comment),
                                                   depth))
                 else:
+                    if pair.code[-1].startswith('#endif'):
+                        pair.code = pair.code[:-1]
+                        pair.code = _clear_trailing_blank_lines(pair.code)
                     found = len(pair.comment) - 1
                     for num in range(len(pair.comment) - 1, 0, -1):
                         if len(pair.comment[num].lstrip().rstrip()) == 0:

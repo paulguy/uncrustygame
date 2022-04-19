@@ -224,8 +224,6 @@
 <code id="synth_run_filter">int synth_run_filter(Synth *s,
                      unsigned int index,
                      unsigned int reqSamples);</code><p><p>Run the filter for a certain number of samples. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>s</td><td>the Synth structure</td></tr><tr><td>index</td><td>the filter index to run</td></tr><tr><td>reqSamples</td><td>the number of samples to try to run</td></tr><tr><td>return</td><td>the number of samples which could run or -1 on error</td></tr></tbody></table><hr>
-<code id="synth_filter_stopped_reason">int synth_filter_stopped_reason(Synth *syn, unsigned int index);
-
-#endif</code><p><p>Get the reason why the filter stopped running. </p></p><p>See: <a href="#SYNTH_STOPPED_*">SYNTH_STOPPED_*</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>syn</td><td>the Synth structure</td></tr><tr><td>index</td><td>the index of the filter</td></tr><tr><td>requested</td><td>number of samples requested</td></tr><tr><td>returned</td><td>number of samples returned</td></tr><tr><td>return</td><td>the reason or -1 on failure</td></tr></tbody></table><hr>
+<code id="synth_filter_stopped_reason">int synth_filter_stopped_reason(Synth *syn, unsigned int index);</code><p><p>Get the reason why the filter stopped running. </p></p><p>See: <a href="#SYNTH_STOPPED_*">SYNTH_STOPPED_*</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>syn</td><td>the Synth structure</td></tr><tr><td>index</td><td>the index of the filter</td></tr><tr><td>requested</td><td>number of samples requested</td></tr><tr><td>returned</td><td>number of samples returned</td></tr><tr><td>return</td><td>the reason or -1 on failure</td></tr></tbody></table><hr>
     </body>
 </html>
