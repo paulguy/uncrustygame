@@ -360,7 +360,10 @@ class HeaderReader:
                                 desc += ' '
                                 desc += arg.lstrip()
                             else:
+                                if name is not None:
+                                    args.append(DocArg(name, desc))
                                 name, desc = arg.split(maxsplit=1)
+                        if name is not None:
                             args.append(DocArg(name, desc))
                     else:
                         args = None
