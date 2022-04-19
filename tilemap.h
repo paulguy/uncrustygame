@@ -61,40 +61,77 @@
 
 #include "log_cb_helper.h"
 
+/* Definitions */
+
+/* horizontal flip flag */
 #define TILEMAP_HFLIP_MASK (0x01)
+/* vertical flip flag */
 #define TILEMAP_VFLIP_MASK (0x02)
+/* mask of bits for rotation value */
 #define TILEMAP_ROTATE_MASK (0x0C)
+/* No rotation */
 #define TILEMAP_ROTATE_NONE (0x00)
+/* 90 degree rotation clockwise */
 #define TILEMAP_ROTATE_90   (0x04)
+/* 180 degree rotation clockwise */
 #define TILEMAP_ROTATE_180  (0x08)
+/* 270 degree rotation clockwise */
 #define TILEMAP_ROTATE_270  (0x0C)
 
+/* alpha blend layer over background */
 #define TILEMAP_BLENDMODE_BLEND (0)
+/* add layer pixel values to background */
 #define TILEMAP_BLENDMODE_ADD   (1)
+/* modulate layer pixel values with background */
 #define TILEMAP_BLENDMODE_MOD   (2)
+/* multiply layer pixel values to background */
 #define TILEMAP_BLENDMODE_MUL   (3)
+/* subtract layer pixel values from background */
 #define TILEMAP_BLENDMODE_SUB   (4)
 
-/* comment that was here doesn't matter, this is just for creating colormod
- * values which are converted to what they should be internally */
+/* Color Value Macros
+ * These are only useful for methods that take a colormod, they don't indicate
+ * any sort of optimal internal format, BGRA was just chosen more or less
+ * arbitrarily */
+
+/* bit position of blue value */
 #define TILEMAP_BSHIFT (24)
+/* bit mask of blue value */
 #define TILEMAP_BMASK (0xFF << TILEMAP_BSHIFT)
+/* bit position of green value */
 #define TILEMAP_GSHIFT (16)
+/* bit mask of green value */
 #define TILEMAP_GMASK (0xFF << TILEMAP_GSHIFT)
+/* bit position of red value */
 #define TILEMAP_RSHIFT (8)
+/* bit mask of red value */
 #define TILEMAP_RMASK (0xFF << TILEMAP_RSHIFT)
+/* bit position of alpha value */
 #define TILEMAP_ASHIFT (0)
+/* bit mask of alpha value */
 #define TILEMAP_AMASK (0xFF << TILEMAP_ASHIFT)
+/* macro to generate color integer from RGBA values */
 #define TILEMAP_COLOR(CR, CG, CB, CA) (((CR) << TILEMAP_RSHIFT) | \
                                        ((CG) << TILEMAP_GSHIFT) | \
                                        ((CB) << TILEMAP_BSHIFT) | \
                                        ((CA) << TILEMAP_ASHIFT))
+/* get blue value from color integer */
 #define TILEMAP_COLOR_B(VAL) ((VAL & TILEMAP_BMASK) >> TILEMAP_BSHIFT)
+/* get green value from color integer */
 #define TILEMAP_COLOR_G(VAL) ((VAL & TILEMAP_GMASK) >> TILEMAP_GSHIFT)
+/* get red value from color integer */
 #define TILEMAP_COLOR_R(VAL) ((VAL & TILEMAP_RMASK) >> TILEMAP_RSHIFT)
+/* get alpha value from color integer */
 #define TILEMAP_COLOR_A(VAL) ((VAL & TILEMAP_AMASK) >> TILEMAP_ASHIFT)
 
+/*
+ * The layerlist.
+ */
 typedef struct LayerList_t LayerList;
+
+/**/
+
+/* Global Functions */
 
 /*
  * Accept a path to a BMP file and use SDL_LoadBMP to load the BMP file which
@@ -104,7 +141,8 @@ typedef struct LayerList_t LayerList;
  *
  * ll       the LayerList context
  * filename the path to the BMP file
- * tw, th   dimensions of tiles
+ * tw       width of a tile
+ * th       height of a tile
  * name     optional tileset name, otherwise it'll use filename
  * return   the tileset handle or -1 on failuer
  */
@@ -118,10 +156,12 @@ int tilemap_tileset_from_bmp(LayerList *ll,
  * See: tilemap_add_tileset
  *
  * ll       the LayerList context
- * w, h     the entire tileset dimensions
+ * w        tileset width
+ * h        tileset height
  * color    the color the tileset will be initialized to, use something like
  *          SDL_MapRGBA or something
- * tw, th   dimensions of tiles
+ * tw       width of a tile
+ * th       height of a tile
  * name     optional name or NULL
  * return   the tileset handle or -1 on failure
  */
@@ -154,6 +194,7 @@ LayerList *layerlist_new(SDL_Renderer *renderer,
  * report so it can be fixed.
  *
  * ll       the LayerList to free
+ * return   void
  */
 void layerlist_free(LayerList *ll);
 /*
@@ -162,7 +203,7 @@ void layerlist_free(LayerList *ll);
  * direct SDL_render API calls.
  *
  * ll       the LayerList to get the SDL_Renderer from
- * return   the SDL_Renderer
+ * return   the SDL_Rendere,
  */
 SDL_Renderer *layerlist_get_renderer(LayerList *ll);
 /*
@@ -171,6 +212,7 @@ SDL_Renderer *layerlist_get_renderer(LayerList *ll);
  *
  * ll       the LayerList
  * tex      the SDL_Texture to render to or NULL for the screen
+ * return   void
  */
 void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);
 /*
@@ -184,12 +226,17 @@ void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);
  */
 int tilemap_set_target_tileset(LayerList *ll, int tileset);
 
+/**/
+
+/* Tileset Functions */
+
 /*
  * Add a tileset given an SDL_Surface.
  *
  * ll       the LayerList
  * surface  the SDL_Surface to transfer to the tileset.
- * tw, th   the tile dimensions
+ * tw       width of a tile
+ * th       height of a tile
  * name     optional name or NULL
  * return   the tileset handle or -1 on failure
  */
@@ -245,12 +292,17 @@ int tilemap_tileset_tile_width(LayerList *ll, unsigned int index);
  */
 int tilemap_tileset_tile_height(LayerList *ll, unsigned int index);
 
+/**/
+
+/* Tilemap Functions */
+
 /*
  * Add a tilemap.
  *
  * ll       the LayerList
  * tileset  the tileset applied to this tilemap
- * w, h     the tilemap dimensions in tiles
+ * w        tilemap width
+ * h        tilemap height
  * name     optional name or NULL
  * return   the tilemap handle or -1 on failure
  */
@@ -261,7 +313,7 @@ int tilemap_add_tilemap(LayerList *ll,
                         const char *name);
 /*
  * Free a tilemap and any resources.
- * See: tilemap_free_tileset NOTE
+ * See: tilemap_free_tileset
  *
  * ll       the LayerList
  * return   0 on success, -1 on failure
@@ -282,6 +334,7 @@ const char *tilemap_tilemap_name(LayerList *ll, unsigned int index);
  * ll       the LayerList
  * index    the tilemap handle
  * tileset  the tileset handle to apply to the tilemap
+ * return   0 on success, -1 on failure
  */
 int tilemap_set_tilemap_tileset(LayerList *ll,
                                 unsigned int index,
@@ -291,9 +344,11 @@ int tilemap_set_tilemap_tileset(LayerList *ll,
  *
  * ll       the LayerList
  * index    the tilemap handle to update
- * x, y     the top-left corner of the rectangle to update
+ * x        the top-left corner X position of the rectangle to update
+ * y        the top-left corner Y position of the rectangle to update
  * pitch    the width of the array of values to update with
- * w, h     the dimensions of the rectangle to update
+ * w        the width of the rectangle to update
+ * h        the height of the rectangle to update
  * value    the array containing the values to update with
  * size     the total size of the array, as a sanity check
  * return   0 on success, -1 on failure
@@ -322,7 +377,7 @@ int tilemap_set_tilemap_map(LayerList *ll,
  *                      destination should be preserved.  Useful to pass 0 to
  *                      this to avoid an extra copy if the rest is going to be
  *                      drawn over anyway.
- * return   0 on success, -1 on failure
+ * return               0 on success, -1 on failure
  */
 int tilemap_copy_block(LayerList *ll,
                        unsigned int index,
@@ -343,9 +398,11 @@ int tilemap_copy_block(LayerList *ll,
  *
  * ll       the LayerList
  * index    the tilemap to add or update attribute flags with
- * x, y     the top-left corner of the rectangle to update
+ * x        the top-left corner X position of the rectangle to update
+ * y        the top-left corner Y position of the rectangle to update
  * pitch    the width of the array of values to update with
- * w, h     the dimensions of the rectangle to update
+ * w        the width of the rectangle to update
+ * h        the height of the rectangle to update
  * value    the array containing the values to update with
  * size     the total size of the array, as a sanity check
  * return   0 on success, -1 on failure
@@ -368,13 +425,15 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
  * to roughly 0.25, 0.5 and 1.0, which will make the original pixel of
  * 255, 255, 255 take on close to those values.  This is scaled to the alpha of
  * the colormod value, where tha range of the alpha is scaled from 0.0 to 1.0.
- * See: tilemap_set_tilemap_attr_flags NOTE
+ * See: tilemap_set_tilemap_attr_flags
  *
  * ll       the LayerList
  * index    the tilemap to add/update
- * x, y     the top-left corner of the rectangle to update
+ * x        the top-left corner X position of the rectangle to update
+ * y        the top-left corner Y position of the rectangle to update
  * pitch    the width of the array of values to update with
- * w, h     the dimensions of the rectangle to update
+ * w        the width of the rectangle to update
+ * h        the height of the rectangle to update
  * value    the array containing the values to update with
  * size     the total size of the array, as a sanity check
  * return   0 on success, -1 on failure     
@@ -395,8 +454,10 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
  * 
  * ll       the LayerList
  * index    the tilemap to update
- * x, y     the top-left corner of the rectangle to update, in tiles
- * w, h     the dimensions of the rectangle to update, in tiles
+ * x        the top-left corner X position of the rectangle to render
+ * y        the top-left corner Y position of the rectangle to render
+ * w        the width of the rectangle to render
+ * h        the height of the rectangle to render
  * return   0 on success, -1 on failure
  */
 int tilemap_update_tilemap(LayerList *ll,
@@ -405,6 +466,10 @@ int tilemap_update_tilemap(LayerList *ll,
                            unsigned int y,
                            unsigned int w,
                            unsigned int h);
+
+/**/
+
+/* Layer Functions */
 
 /*
  * Add a layer.
@@ -423,7 +488,7 @@ int tilemap_add_layer(LayerList *ll,
                       const char *name);
 /*
  * Free a layer.
- * See: tilemap_free_tileset NOTE
+ * See: tilemap_free_tileset
  *
  * ll       the LayerList
  * index    the layer to free
@@ -444,7 +509,8 @@ const char *tilemap_layer_name(LayerList *ll, unsigned int index);
  *
  * ll       the LayerList
  * index    the layer to update
- * x, y     the position the layer is to be drawn to
+ * x        the X position the layer is to be drawn to
+ * y        the Y position the layer is to be drawn to
  * return   0 on success, -1 on failure
  */
 int tilemap_set_layer_pos(LayerList *ll,
@@ -456,7 +522,8 @@ int tilemap_set_layer_pos(LayerList *ll,
  *
  * ll       the LayerList
  * index    the layer to update
- * w, h     the size of the window
+ * w        the width of the window
+ * h        the height of the window
  * return   0 on success, -1 on failure
  */
 int tilemap_set_layer_window(LayerList *ll,
@@ -466,10 +533,11 @@ int tilemap_set_layer_window(LayerList *ll,
 /*
  * Set the scroll position (top-left corner) of the tilemap to show.
  *
- * ll                   the LayerList
- * index                the layer to update
- * scroll_x, scroll_y   the corner of the tilemap to show
- * return               0 on success, -1 on failure
+ * ll       the LayerList
+ * index    the layer to update
+ * scroll_x the corner X position of the tilemap to show
+ * scroll_y the corner X position of the tilemap to show
+ * return   0 on success, -1 on failure
  */
 int tilemap_set_layer_scroll_pos(LayerList *ll,
                                  unsigned int index,
@@ -480,10 +548,11 @@ int tilemap_set_layer_scroll_pos(LayerList *ll,
  * NOTE: The dimensions of the layer will be the layer's window size multiplied
  *       by this scale factor when drawn to the screen.
  *
- * ll               the LayerList
- * index            the layer to update
- * scale_x, scale_y the scales of each dimension
- * return           0 on success, -1 on failure
+ * ll       the LayerList
+ * index    the layer to update
+ * scale_x  the X scale
+ * scale_y  the Y scale
+ * return   0 on success, -1 on failure
  */
 int tilemap_set_layer_scale(LayerList *ll,
                             unsigned int index,
@@ -494,7 +563,8 @@ int tilemap_set_layer_scale(LayerList *ll,
  *
  * ll       the LayerList
  * index    the layer to update
- * x, y     the center of rotation relative to the top-left corner
+ * x        the center of rotation X position relative to the top-left corner
+ * y        the center of rotation Y position relative to the top-left corner
  * return   0 on success, -1 on failure
  */
 int tilemap_set_layer_rotation_center(LayerList *ll,

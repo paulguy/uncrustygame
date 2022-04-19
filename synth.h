@@ -43,8 +43,27 @@
 
 #include "log_cb_helper.h"
 
+/* Definitions */
+
 /* try to determine a sane size which is roughly half a frame long at 60 FPS. 48000 / 120 = 400, nearest power of two is 512, user can set more fragments if they need */
 #define SYNTH_DEFAULT_FRAGMENT_SIZE (512)
+
+/* Synth stopped because the output buffer filled. */
+#define SYNTH_STOPPED_OUTBUFFER    (0x01)
+/* Synth stopped because the input buffer emptied */
+#define SYNTH_STOPPED_INBUFFER     (0x02)
+/* Synth stopped because the volume buffer reached the end */
+#define SYNTH_STOPPED_VOLBUFFER    (0x04)
+/* Synth stopped because the speed buffer reached the end */
+#define SYNTH_STOPPED_SPEEDBUFFER  (0x08)
+/* Synth stopped because the phase buffer reached the end */
+#define SYNTH_STOPPED_PHASEBUFFER  (0x10)
+/* Synth stopped because the slice buffer reached the end */
+#define SYNTH_STOPPED_SLICEBUFFER  (0x20)
+/* Synth stopped because the loop start buffer reached the end */
+#define SYNTH_STOPPED_STARTBUFFER  (0x40)
+/* Synth stopped because the loop length buffer reached the end */
+#define SYNTH_STOPPED_LENGTHBUFFER (0x80)
 
 /* most common formats */
 typedef enum {
@@ -55,38 +74,49 @@ typedef enum {
     SYNTH_TYPE_F64 = 4
 } SynthImportType;
 
+/* synthesizer state:
+ * STOPPED: not running
+ * ENABLED: just started but hasn't generated any audio yet
+ * RUNNING: started and has generated audio
+ */
 typedef enum {
     SYNTH_STOPPED = 0,
     SYNTH_ENABLED = 1,
     SYNTH_RUNNING = 2
 } SynthState;
 
+/* REPLACE: Replace buffer contents with output.
+ * ADD: Add/mix output with buffer contents.
+ */
 typedef enum {
     SYNTH_OUTPUT_REPLACE = 0,
     SYNTH_OUTPUT_ADD = 1
 } SynthOutputOperation;
 
+/* CONSTANT: Use a constant value.
+ * SOURCE: Use values sequentially from another buffer, possibly modified by a constant.
+ */
 typedef enum {
     SYNTH_AUTO_CONSTANT = 0,
     SYNTH_AUTO_SOURCE = 1
 } SynthAutoMode;
 
+/* ONCE: Play once then stop.
+ * LOOP: Wrap play position by play bounds.
+ * PHASE_SOURCE: Determine read position by values read from a buffer.
+ */
 typedef enum {
     SYNTH_MODE_ONCE = 0,
     SYNTH_MODE_LOOP = 1,
     SYNTH_MODE_PHASE_SOURCE = 2
 } SynthPlayerMode;
 
-#define SYNTH_STOPPED_OUTBUFFER    (0x01)
-#define SYNTH_STOPPED_INBUFFER     (0x02)
-#define SYNTH_STOPPED_VOLBUFFER    (0x04)
-#define SYNTH_STOPPED_SPEEDBUFFER  (0x08)
-#define SYNTH_STOPPED_PHASEBUFFER  (0x10)
-#define SYNTH_STOPPED_SLICEBUFFER  (0x20)
-#define SYNTH_STOPPED_STARTBUFFER  (0x40)
-#define SYNTH_STOPPED_LENGTHBUFFER (0x80)
-
+/* the synth */
 typedef struct Synth_s Synth;
+
+/**/
+
+/* Global Functions */
 
 /*
  * The callback which you, the programmer, provide for the synth engine to
@@ -202,6 +232,7 @@ Synth *synth_new(const char *filename,
  * SDL_audio device.
  *
  * s        The Synth structure.
+ * return   void
  */
 void synth_free(Synth *s);
 /*
@@ -298,6 +329,7 @@ int synth_frame(Synth *s);
  * device while messing with buffer state so it should be safe, though.
  *
  * s        the Synth structure
+ * return   void
  */
 void synth_invalidate_buffers(Synth *s);
 /*
@@ -326,8 +358,14 @@ unsigned int synth_samples_available(Synth *s);
  *
  * s        the Synth structure
  * consumed the amount to mark as consumed
+ * return   void
  */
 void synth_consume_samples(Synth *s, unsigned int consumed);
+
+/**/
+
+/* Buffer Functions */
+
 /*
  * Add a new buffer, given type, data and a size, in samples.  NULL can be given
  * as data to create a "silent" buffer which can be output to.  Everything is
@@ -404,6 +442,11 @@ int synth_silence_buffer(Synth *s,
                          unsigned int index,
                          unsigned int start,
                          unsigned int length);
+
+/**/
+
+/* Player Functions */
+
 /*
  * Create a player.  These control all the input and output of buffers and how
  * they will be played back.
@@ -768,6 +811,10 @@ int synth_run_player(Synth *s,
  * return       A bitfield of reasons.
  */
 int synth_player_stopped_reason(Synth *syn, unsigned int index);
+
+/**/
+
+/* Filter Functions */
 
 /*
  * Create a new filter.

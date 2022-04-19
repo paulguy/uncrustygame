@@ -6,931 +6,166 @@
     </head>
     <body>
         <img src="cdemo/title.bmp">
-        <h1>tilemap.h Documentation</h1>
-        <p>This is the tilemap library component of uncrustygame/libcrustygame.so, it is the entire graphics system unique to uncrustygame, separated out and fixed up from the previous crustygame project.  It's built upon the SDL_render API so it's not quite the most efficient thing that could be used, I'm sure it could be ported to using pure OpenGL or Vulkan or something but it's just a bit of silly fun and not meant to be super practical or to really make very complex graphics that would call for greater efficiency.  One can still interact with things directly through the SDL_render API or OpenGL (or whatever API it ends up being backed by I imagine..) as it's pretty non-intrusive and just holds texture resources but doesn't otherwise interact with the underlying API in any major way.</p>
-        <p>The theory to how it is to be used is that one creates/loads in tilesets from SDL_Surfaces (helpers are provided for creating blank tilesets if one wants to create a new tileset from existing tilemaps/layers, as well as using SDL's built in function for loading BMPs.).  The reason for this is it's a slower process to update a texture pixel by pixel, so the idea would be that you create fully prepared textures ahead of time as surfaces and pass them on to the graphics API.</p>
-        <p>Once there are tilesets, tilemaps can be created and have a tileset assigned to them.  Tiles are laid out on a grid in the tilemap, optionally using various attributes that allow to easily reuse tiles that just need to be recolored or flipped or rotated in the cardinal directions.  Once all the parameters are entered or any time they're changed, the tilemap needs to be updated.  For the sake of preventing updating the entire tilemap especially if it's a very large tilemap, a rectangular region can be selected to be updated rather then the entire thing updated on every attribute or map change.  Multiple tilemaps can be assigned to the same tileset.</p>
-        <p>Tilemaps can't be displayed on their own though, they are just backed by a texture, ultimately, in memory.  A layer needs to be created for the tilemap as a view in to the tilemap to place on screen.  There are many parameters which a layer can have which defines this view and how it's rendered to the window or target tileset.</p>
-        <hr>
-        <ul>
-            <li><a href="#definitions">Definitions</a></li>
-            <li><a href="#macros">Macros</a></li>
-            <li><a href="#utility">Utility Functions</a></li>
-            <ul>
-                <li><a href="#tilemap_tileset_from_bmp">tilemap_tileset_from_bmp</a></li>
-                <li><a href="#tilemap_blank_tileset">tilemap_blank_tileset</a></li>
-            </ul>
-            <li><a href="#global-state">Global State Functions</a></li>
-            <ul>
-                <li><a href="#layerlist_new">layerlist_new</a></li>
-                <li><a href="#layerlist_free">layerlist_free</a></li>
-                <li><a href="#layerlist_get_renderer">layerlist_get_renderer</a></li>
-                <li><a href="#tilemap_set_default_render_target">tilemap_set_default_render_target</a></li>
-                <li><a href="#tilemap_set_target_tileset">tilemap_set_target_tileset</a></li>
-            </ul>
-            <li><a href="#tileset">Tileset Functions</a></li>
-            <ul>
-                <li><a href="#tilemap_add_tileset">tilemap_add_tileset</a></li>
-                <li><a href="#tilemap_free_tileset">tilemap_free_tileset</a></li>
-            </ul>
-            <li><a href="#tilemap">Tilemap Functions</a></li>
-            <ul>
-                <li><a href="#tilemap_add_tilemap">tilemap_add_tilemap</a></li>
-                <li><a href="#tilemap_free_tilemap">tilemap_free_tilemap</a></li>
-                <li><a href="#tilemap_set_tilemap_tileset">tilemap_set_tilemap_tileset</a></li>
-                <li><a href="#tilemap_set_tilemap_map">tilemap_set_tilemap_map</a></li>
-                <li><a href="#tilemap_set_tilemap_attr_flags">tilemap_set_tilemap_attr_flags</a></li>
-                <li><a href="#tilemap_set_tilemap_attr_colormod">tilemap_set_tilemap_attr_colormod</a></li>
-                <li><a href="#tilemap_update_tilemap">tilemap_update_tilemap</a></li>
-            </ul>
-            <li><a href="#layer">Layer Functions</a></li>
-            <ul>
-                <li><a href="#tilemap_add_layer">tilemap_add_layer</a></li>
-                <li><a href="#tilemap_free_layer">tilemap_free_layer</a></li>
-                <li><a href="#tilemap_set_layer_pos">tilemap_set_layer_pos</a></li>
-                <li><a href="#tilemap_set_layer_window">tilemap_set_layer_window</a></li>
-                <li><a href="#tilemap_set_layer_scroll_pos">tilemap_set_layer_scroll_pos</a></li>
-                <li><a href="#tilemap_set_layer_scale">tilemap_set_layer_scale</a></li>
-                <li><a href="#tilemap_set_layer_rotation_center">tilemap_set_layer_rotation_center</a></li>
-                <li><a href="#tilemap_set_layer_rotation">tilemap_set_layer_rotation</a></li>
-                <li><a href="#tilemap_set_layer_colormod">tilemap_set_layer_colormod</a></li>
-                <li><a href="#tilemap_set_layer_blendmode">tilemap_set_layer_blendmode</a></li>
-                <ul>
-                    <li><a href="#blendmode-descriptions">TILEMAP_BLENDMODE_* Descriptions</a></li>
-                </ul>
-                <li><a href="#tilemap_draw_layer">tilemap_draw_layer</a></li>
-            </ul>
-        </ul>
-        <hr>
-        <h2 id="definitions">Definitions</h2>
-        <code>#define TILEMAP_HFLIP_MASK (0x01)
-#define TILEMAP_VFLIP_MASK (0x02)
-#define TILEMAP_ROTATE_MASK (0x0C)
-#define TILEMAP_ROTATE_NONE (0x00)
-#define TILEMAP_ROTATE_90   (0x04)
-#define TILEMAP_ROTATE_180  (0x08)
-#define TILEMAP_ROTATE_270  (0x0C)
-
-#define TILEMAP_BLENDMODE_BLEND (0)
-#define TILEMAP_BLENDMODE_ADD   (1)
-#define TILEMAP_BLENDMODE_MOD   (2)
-#define TILEMAP_BLENDMODE_MUL   (3)
-#define TILEMAP_BLENDMODE_SUB   (4)
-
-#define TILEMAP_BSHIFT (24)
-#define TILEMAP_BMASK (0xFF &lt;&lt; TILEMAP_BSHIFT)
-#define TILEMAP_GSHIFT (16)
-#define TILEMAP_GMASK (0xFF &lt;&lt; TILEMAP_GSHIFT)
-#define TILEMAP_RSHIFT (8)
-#define TILEMAP_RMASK (0xFF &lt;&lt; TILEMAP_RSHIFT)
-#define TILEMAP_ASHIFT (0)
-#define TILEMAP_AMASK (0xFF &lt;&lt; TILEMAP_ASHIFT)</code>
-        <p>The TILEMAP_*MASK and TILEMAP_*SHIFT definitions are just for dealing with colormod values, they don't represent any sort of internal color format.</p>
-        <h2 id="macros">Macros</h2>
-        <code>#define TILEMAP_COLOR(CR, CG, CB, CA) (((CR) &lt;&lt; TILEMAP_RSHIFT) | \
-                                       ((CG) &lt;&lt; TILEMAP_GSHIFT) | \
-                                       ((CB) &lt;&lt; TILEMAP_BSHIFT) | \
-                                       ((CA) &lt;&lt; TILEMAP_ASHIFT))
-#define TILEMAP_COLOR_B(VAL) ((VAL &amp; TILEMAP_BMASK) &gt;&gt; TILEMAP_BSHIFT)
-#define TILEMAP_COLOR_G(VAL) ((VAL &amp; TILEMAP_GMASK) &gt;&gt; TILEMAP_GSHIFT)
-#define TILEMAP_COLOR_R(VAL) ((VAL &amp; TILEMAP_RMASK) &gt;&gt; TILEMAP_RSHIFT)
-#define TILEMAP_COLOR_A(VAL) ((VAL &amp; TILEMAP_AMASK) &gt;&gt; TILEMAP_ASHIFT)</code>
-        <p>The TILEMAP_COLOR* macros are just for dealing with colormod values, they don't represent any sort of internal color format.</p>
-        <h2 id="utility">Utility Functions</h2>
-        <code id="tilemap_tileset_from_bmp">int tilemap_tileset_from_bmp(LayerList *ll,
+<ul><li><a href="#tilemap.h Documentation">tilemap.h Documentation</a></li><ul><li><a href="# Definitions "> Definitions </a></li><ul><li><a href="#TILEMAP_HFLIP_MASK">TILEMAP_HFLIP_MASK</a></li><li><a href="#TILEMAP_VFLIP_MASK">TILEMAP_VFLIP_MASK</a></li><li><a href="#TILEMAP_ROTATE_MASK">TILEMAP_ROTATE_MASK</a></li><li><a href="#TILEMAP_ROTATE_NONE">TILEMAP_ROTATE_NONE</a></li><li><a href="#TILEMAP_ROTATE_90">TILEMAP_ROTATE_90</a></li><li><a href="#TILEMAP_ROTATE_180">TILEMAP_ROTATE_180</a></li><li><a href="#TILEMAP_ROTATE_270">TILEMAP_ROTATE_270</a></li><li><a href="#TILEMAP_BLENDMODE_BLEND">TILEMAP_BLENDMODE_BLEND</a></li><li><a href="#TILEMAP_BLENDMODE_ADD">TILEMAP_BLENDMODE_ADD</a></li><li><a href="#TILEMAP_BLENDMODE_MOD">TILEMAP_BLENDMODE_MOD</a></li><li><a href="#TILEMAP_BLENDMODE_MUL">TILEMAP_BLENDMODE_MUL</a></li><li><a href="#TILEMAP_BLENDMODE_SUB">TILEMAP_BLENDMODE_SUB</a></li><li><a href="# Color Value Macros"> Color Value Macros</a></li><li><a href="#TILEMAP_BSHIFT">TILEMAP_BSHIFT</a></li><li><a href="#TILEMAP_BMASK">TILEMAP_BMASK</a></li><li><a href="#TILEMAP_GSHIFT">TILEMAP_GSHIFT</a></li><li><a href="#TILEMAP_GMASK">TILEMAP_GMASK</a></li><li><a href="#TILEMAP_RSHIFT">TILEMAP_RSHIFT</a></li><li><a href="#TILEMAP_RMASK">TILEMAP_RMASK</a></li><li><a href="#TILEMAP_ASHIFT">TILEMAP_ASHIFT</a></li><li><a href="#TILEMAP_AMASK">TILEMAP_AMASK</a></li><li><a href="#TILEMAP_COLOR">TILEMAP_COLOR</a></li><li><a href="#TILEMAP_COLOR_B">TILEMAP_COLOR_B</a></li><li><a href="#TILEMAP_COLOR_G">TILEMAP_COLOR_G</a></li><li><a href="#TILEMAP_COLOR_R">TILEMAP_COLOR_R</a></li><li><a href="#TILEMAP_COLOR_A">TILEMAP_COLOR_A</a></li><li><a href="#LayerList">LayerList</a></li></ul><li><a href="# Global Functions "> Global Functions </a></li><ul><li><a href="#tilemap_tileset_from_bmp">tilemap_tileset_from_bmp</a></li><li><a href="#tilemap_blank_tileset">tilemap_blank_tileset</a></li><li><a href="#layerlist_new">layerlist_new</a></li><li><a href="#layerlist_free">layerlist_free</a></li><li><a href="#layerlist_get_renderer">layerlist_get_renderer</a></li><li><a href="#tilemap_set_default_render_target">tilemap_set_default_render_target</a></li><li><a href="#tilemap_set_target_tileset">tilemap_set_target_tileset</a></li></ul><li><a href="# Tileset Functions "> Tileset Functions </a></li><ul><li><a href="#tilemap_add_tileset">tilemap_add_tileset</a></li><li><a href="#tilemap_free_tileset">tilemap_free_tileset</a></li><li><a href="#tilemap_tileset_name">tilemap_tileset_name</a></li><li><a href="#tilemap_tileset_tiles">tilemap_tileset_tiles</a></li><li><a href="#tilemap_tileset_tile_width">tilemap_tileset_tile_width</a></li><li><a href="#tilemap_tileset_tile_height">tilemap_tileset_tile_height</a></li></ul><li><a href="# Tilemap Functions "> Tilemap Functions </a></li><ul><li><a href="#tilemap_add_tilemap">tilemap_add_tilemap</a></li><li><a href="#tilemap_free_tilemap">tilemap_free_tilemap</a></li><li><a href="#tilemap_tilemap_name">tilemap_tilemap_name</a></li><li><a href="#tilemap_set_tilemap_tileset">tilemap_set_tilemap_tileset</a></li><li><a href="#tilemap_set_tilemap_map">tilemap_set_tilemap_map</a></li><li><a href="#tilemap_copy_block">tilemap_copy_block</a></li><li><a href="#tilemap_set_tilemap_attr_flags">tilemap_set_tilemap_attr_flags</a></li><li><a href="#tilemap_set_tilemap_attr_colormod">tilemap_set_tilemap_attr_colormod</a></li><li><a href="#tilemap_update_tilemap">tilemap_update_tilemap</a></li></ul><li><a href="# Layer Functions "> Layer Functions </a></li><ul><li><a href="#tilemap_add_layer">tilemap_add_layer</a></li><li><a href="#tilemap_free_layer">tilemap_free_layer</a></li><li><a href="#tilemap_layer_name">tilemap_layer_name</a></li><li><a href="#tilemap_set_layer_pos">tilemap_set_layer_pos</a></li><li><a href="#tilemap_set_layer_window">tilemap_set_layer_window</a></li><li><a href="#tilemap_set_layer_scroll_pos">tilemap_set_layer_scroll_pos</a></li><li><a href="#tilemap_set_layer_scale">tilemap_set_layer_scale</a></li><li><a href="#tilemap_set_layer_rotation_center">tilemap_set_layer_rotation_center</a></li><li><a href="#tilemap_set_layer_rotation">tilemap_set_layer_rotation</a></li><li><a href="#tilemap_set_layer_colormod">tilemap_set_layer_colormod</a></li><li><a href="#tilemap_set_layer_blendmode">tilemap_set_layer_blendmode</a></li><li><a href="#tilemap_set_layer_relative">tilemap_set_layer_relative</a></li><li><a href="#tilemap_draw_layer">tilemap_draw_layer</a></li></ul></ul></ul>
+<h1 id="tilemap.h Documentation">tilemap.h Documentation</h1><p><p>This is the tilemap library component of uncrustygame/libcrustygame.so, it is the entire graphics system unique to uncrustygame, separated out and fixed up from the previous crustygame project.  It's built upon the SDL_render API so it's not quite the most efficient thing that could be used, I'm sure it could be ported to using pure OpenGL or Vulkan or something but it's just a bit of silly fun and not meant to be super practical or to really make very complex graphics that would call for greater efficiency.  One can still interact with things directly through the SDL_render API or OpenGL (or whatever API it ends up being backed by I imagine..) as it's pretty non-intrusive and just holds texture resources but doesn't otherwise interact with the underlying API in any major way. </p><p>The theory to how it is to be used is that one creates/loads in tilesets from SDL_Surfaces (helpers are provided for creating blank tilesets if one wants to create a new tileset from existing tilemaps/layers, as well as using SDL's built in function for loading BMPs.).  The reason for this is it's a slower process to update a texture pixel by pixel, so the idea would be that you create fully prepared textures ahead of time as surfaces and pass them on to the graphics API. </p><p>Once there are tilesets, tilemaps can be created and have a tileset assigned to them.  Tiles are laid out on a grid in the tilemap, optionally using various attributes that allow to easily reuse tiles that just need to be recolored or flipped or rotated in the cardinal directions.  Once all the parameters are entered or any time they're changed, the tilemap needs to be updated.  For the sake of preventing updating the entire tilemap especially if it's a very large tilemap, a rectangular region can be selected to be updated rather then the entire thing updated on every attribute or map change.  Multiple tilemaps can be assigned to the same tileset. </p><p>Tilemaps can't be displayed on their own though, they are just backed by a texture, ultimately, in memory.  A layer needs to be created for the tilemap as a view in to the tilemap to place on screen.  There are many parameters which a layer can have which defines this view and how it's rendered to the window or target tileset. </p></p>
+<h2 id=" Definitions "> Definitions </h2>
+<code id="TILEMAP_HFLIP_MASK">#define TILEMAP_HFLIP_MASK (0x01)</code><p><p> horizontal flip flag  </p></p><hr>
+<code id="TILEMAP_VFLIP_MASK">#define TILEMAP_VFLIP_MASK (0x02)</code><p><p> vertical flip flag  </p></p><hr>
+<code id="TILEMAP_ROTATE_MASK">#define TILEMAP_ROTATE_MASK (0x0C)</code><p><p> mask of bits for rotation value  </p></p><hr>
+<code id="TILEMAP_ROTATE_NONE">#define TILEMAP_ROTATE_NONE (0x00)</code><p><p> No rotation  </p></p><hr>
+<code id="TILEMAP_ROTATE_90">#define TILEMAP_ROTATE_90   (0x04)</code><p><p> 90 degree rotation clockwise  </p></p><hr>
+<code id="TILEMAP_ROTATE_180">#define TILEMAP_ROTATE_180  (0x08)</code><p><p> 180 degree rotation clockwise  </p></p><hr>
+<code id="TILEMAP_ROTATE_270">#define TILEMAP_ROTATE_270  (0x0C)</code><p><p> 270 degree rotation clockwise  </p></p><hr>
+<code id="TILEMAP_BLENDMODE_BLEND">#define TILEMAP_BLENDMODE_BLEND (0)</code><p><p> alpha blend layer over background  </p></p><hr>
+<code id="TILEMAP_BLENDMODE_ADD">#define TILEMAP_BLENDMODE_ADD   (1)</code><p><p> add layer pixel values to background  </p></p><hr>
+<code id="TILEMAP_BLENDMODE_MOD">#define TILEMAP_BLENDMODE_MOD   (2)</code><p><p> modulate layer pixel values with background  </p></p><hr>
+<code id="TILEMAP_BLENDMODE_MUL">#define TILEMAP_BLENDMODE_MUL   (3)</code><p><p> multiply layer pixel values to background  </p></p><hr>
+<code id="TILEMAP_BLENDMODE_SUB">#define TILEMAP_BLENDMODE_SUB   (4)</code><p><p> subtract layer pixel values from background  </p></p><hr>
+<h3 id=" Color Value Macros"> Color Value Macros</h3><p><p>These are only useful for methods that take a colormod, they don't indicate any sort of optimal internal format, BGRA was just chosen more or less  * arbitrarily  </p></p>
+<code id="TILEMAP_BSHIFT">#define TILEMAP_BSHIFT (24)</code><p><p> bit position of blue value  </p></p><hr>
+<code id="TILEMAP_BMASK">#define TILEMAP_BMASK (0xFF << TILEMAP_BSHIFT)</code><p><p> bit mask of blue value  </p></p><hr>
+<code id="TILEMAP_GSHIFT">#define TILEMAP_GSHIFT (16)</code><p><p> bit position of green value  </p></p><hr>
+<code id="TILEMAP_GMASK">#define TILEMAP_GMASK (0xFF << TILEMAP_GSHIFT)</code><p><p> bit mask of green value  </p></p><hr>
+<code id="TILEMAP_RSHIFT">#define TILEMAP_RSHIFT (8)</code><p><p> bit position of red value  </p></p><hr>
+<code id="TILEMAP_RMASK">#define TILEMAP_RMASK (0xFF << TILEMAP_RSHIFT)</code><p><p> bit mask of red value  </p></p><hr>
+<code id="TILEMAP_ASHIFT">#define TILEMAP_ASHIFT (0)</code><p><p> bit position of alpha value  </p></p><hr>
+<code id="TILEMAP_AMASK">#define TILEMAP_AMASK (0xFF << TILEMAP_ASHIFT)</code><p><p> bit mask of alpha value  </p></p><hr>
+<code id="TILEMAP_COLOR">#define TILEMAP_COLOR(CR, CG, CB, CA) (((CR) << TILEMAP_RSHIFT) | \
+                                       ((CG) << TILEMAP_GSHIFT) | \
+                                       ((CB) << TILEMAP_BSHIFT) | \
+                                       ((CA) << TILEMAP_ASHIFT))</code><p><p> macro to generate color integer from RGBA values  </p></p><hr>
+<code id="TILEMAP_COLOR_B">#define TILEMAP_COLOR_B(VAL) ((VAL & TILEMAP_BMASK) >> TILEMAP_BSHIFT)</code><p><p> get blue value from color integer  </p></p><hr>
+<code id="TILEMAP_COLOR_G">#define TILEMAP_COLOR_G(VAL) ((VAL & TILEMAP_GMASK) >> TILEMAP_GSHIFT)</code><p><p> get green value from color integer  </p></p><hr>
+<code id="TILEMAP_COLOR_R">#define TILEMAP_COLOR_R(VAL) ((VAL & TILEMAP_RMASK) >> TILEMAP_RSHIFT)</code><p><p> get red value from color integer  </p></p><hr>
+<code id="TILEMAP_COLOR_A">#define TILEMAP_COLOR_A(VAL) ((VAL & TILEMAP_AMASK) >> TILEMAP_ASHIFT)</code><p><p> get alpha value from color integer  </p></p><hr>
+<code id="LayerList">typedef struct LayerList_t LayerList;</code><p><p>The layerlist. </p></p><hr>
+<h2 id=" Global Functions "> Global Functions </h2>
+<code id="tilemap_tileset_from_bmp">int tilemap_tileset_from_bmp(LayerList *ll,
                              const char *filename,
                              unsigned int tw,
-                             unsigned int th);</code>
-        <p>Accept a path to a BMP file and use SDL_LoadBMP to load the BMP file which at this time conveniently loads in the RGBA-format BMP files exported by the GIMP, then returns a tileset.</p>
-        <p>See: <a href="#tilemap_add_tileset">tilemap_add_tileset</a></p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList context</td>
-                </tr>
-                <tr>
-                    <td>filename</td>
-                    <td>the path to the BMP file</td>
-                </tr>
-                <tr>
-                    <td>tw, th</td>
-                    <td>dimensions of tiles</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the tileset handle or -1 on failuer</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_blank_tileset">int tilemap_blank_tileset(LayerList *ll,
+                             unsigned int th,
+                             const char *name);</code><p><p>Accept a path to a BMP file and use SDL_LoadBMP to load the BMP file which at this time conveniently loads in the RGBA-format BMP files exported by the GIMP, then returns a tileset. </p></p><p>See: <a href="#tilemap_add_tileset">tilemap_add_tileset</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList context</td></tr><tr><td>filename</td><td>the path to the BMP file</td></tr><tr><td>tw</td><td>width of a tile</td></tr><tr><td>th</td><td>height of a tile</td></tr><tr><td>name</td><td>optional tileset name, otherwise it'll use filename</td></tr><tr><td>return</td><td>the tileset handle or -1 on failuer</td></tr></tbody></table><hr>
+<code id="tilemap_blank_tileset">int tilemap_blank_tileset(LayerList *ll,
                           unsigned int w,
                           unsigned int h,
                           Uint32 color,
                           unsigned int tw,
-                          unsigned int th);</code>
-        <p>Create a new blank tileset filled with some color.</p>
-        <p>See: <a href="#tilemap_add_tileset">tilemap_add_tileset</a></p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList context</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the entire tileset dimensions</td>
-                </tr>
-                <tr>
-                    <td>color</td>
-                    <td>the color the tileset will be initialized to, use something like SDL_MapRGBA or something</td>
-                </tr>
-                <tr>
-                    <td>tw, th</td>
-                    <td>dimensions of tiles</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the tileset handle or -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <h2 id="global-state">Global State Functions</h2>
-        <code id="layerlist_new">LayerList *layerlist_new(SDL_Renderer *renderer,
+                          unsigned int th,
+                          const char *name);</code><p><p>Create a new blank tileset filled with some color. </p></p><p>See: <a href="#tilemap_add_tileset">tilemap_add_tileset</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList context</td></tr><tr><td>w</td><td>tileset width</td></tr><tr><td>h</td><td>tileset height</td></tr><tr><td>color</td><td>the color the tileset will be initialized to, use something like</td></tr><tr><td>color</td><td>the color the tileset will be initialized to, use something like SDL_MapRGBA or something</td></tr><tr><td>tw</td><td>width of a tile</td></tr><tr><td>th</td><td>height of a tile</td></tr><tr><td>name</td><td>optional name or NULL</td></tr><tr><td>return</td><td>the tileset handle or -1 on failure</td></tr></tbody></table><hr>
+<code id="layerlist_new">LayerList *layerlist_new(SDL_Renderer *renderer,
                          Uint32 format,
                          log_cb_return_t log_cb,
-                         void *log_priv);</code>
-        <p>Create a new LayerList context.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>renderer</td>
-                    <td>the SDL_Renderer which the context is to use
-                </tr>
-                <tr>
-                    <td>format</td>
-                    <td>a prefered format for the SDL_Renderer</td>
-                </tr>
-                <tr>
-                    <td>log_cb</td>
-                    <td>a callback you (the programmer using this library) provide to handle logging output from the library.</td>
-                </tr>
-                <tr>
-                    <td>log_priv</td>
-                    <td>handed off to log_cb as priv that can contain whatever you may find useful</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the created LayerList or -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="layerlist_free">void layerlist_free(LayerList *ll);</code>
-            <p>Free a layerlist and any associated memory/resources.  You shouldn't have to free anything yourself on quit, and if you do it's a bug you should probably report so it can be fixed.</p>
-        <table>
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList to free</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="layerlist_get_renderer">SDL_Renderer *layerlist_get_renderer(LayerList *ll);</code>
-        <p>Get the renderer back from the LayerList, mostly a convenience function to not have to hold on to it/pass it along to other functions that might make direct SDL_render API calls.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList to get the SDL_Renderer from</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the SDL_Renderer</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_default_render_target">void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);</code>
-        <p>Set the default texture to render to.  Isn't applied immediately, though.</p>
-        <p>See: <a href="#tilemap_set_target_tileset">tilemap_set_target_tileset</a></p>
-        <table>
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>tex</td>
-                    <td>the SDL_Texture to render to or NULL for the screen</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_target_tileset">int tilemap_set_target_tileset(LayerList *ll, int tileset);</code>
-        <p>Set the tileset to render to or the default render target if less than 0.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>tileset</td>
-                    <td>the tileset which should be rendered to.  Important to kniow is that any tilemaps which refer to this tileset need to be updated before changes are applied.</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <h2 id="tileset">Tileset Functions</h2>
-        <code id="tilemap_add_tileset">int tilemap_add_tileset(LayerList *ll,
+                         void *log_priv);</code><p><p>Create a new LayerList context. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>renderer</td><td>the SDL_Renderer which the context is to use</td></tr><tr><td>format</td><td>a prefered format for the SDL_Renderer</td></tr><tr><td>log_cb</td><td>a callback you (the programmer using this library) provide to</td></tr><tr><td>log_cb</td><td>a callback you (the programmer using this library) provide to handle logging output from the library.</td></tr><tr><td>log_priv</td><td>handed off to log_cb as priv that can contain whatever you may</td></tr><tr><td>log_priv</td><td>handed off to log_cb as priv that can contain whatever you may find useful</td></tr><tr><td>return</td><td>the created LayerList or -1 on failure</td></tr></tbody></table><hr>
+<code id="layerlist_free">void layerlist_free(LayerList *ll);</code><p><p>Free a layerlist and any associated memory/resources.  You shouldn't have to free anything yourself on quit, and if you do it's a bug you should probably report so it can be fixed. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList to free</td></tr><tr><td>return</td><td>void</td></tr></tbody></table><hr>
+<code id="layerlist_get_renderer">SDL_Renderer *layerlist_get_renderer(LayerList *ll);</code><p><p>Get the renderer back from the LayerList, mostly a convenience function to not have to hold on to it/pass it along to other functions that might make direct SDL_render API calls. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList to get the SDL_Renderer from</td></tr><tr><td>return</td><td>the SDL_Rendere,</td></tr></tbody></table><hr>
+<code id="tilemap_set_default_render_target">void tilemap_set_default_render_target(LayerList *ll, SDL_Texture *tex);</code><p><p>Set the default texture to render to.  Isn't applied immediately, though. </p></p><p>See: <a href="#tilemap_set_target_tileset">tilemap_set_target_tileset</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>tex</td><td>the SDL_Texture to render to or NULL for the screen</td></tr><tr><td>return</td><td>void</td></tr></tbody></table><hr>
+<code id="tilemap_set_target_tileset">int tilemap_set_target_tileset(LayerList *ll, int tileset);</code><p><p>Set the tileset to render to or the default render target if less than 0. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>tileset</td><td>the tileset which should be rendered to.  Important to kniow is that</td></tr><tr><td>tileset</td><td>the tileset which should be rendered to.  Important to kniow is that any tilemaps which refer to this tileset need to be updated before</td></tr><tr><td>tileset</td><td>the tileset which should be rendered to.  Important to kniow is that any tilemaps which refer to this tileset need to be updated before changes are applied.</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<h2 id=" Tileset Functions "> Tileset Functions </h2>
+<code id="tilemap_add_tileset">int tilemap_add_tileset(LayerList *ll,
                         SDL_Surface *surface,
                         unsigned int tw,
-                        unsigned int th);</code>
-        <p>Add a tileset given an SDL_Surface.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>surface</td>
-                    <td>the SDL_Surface to transfer to the tileset.</td>
-                </tr>
-                <tr>
-                    <td>tw, th</td>
-                    <td>the tile dimensions</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the tileset handle or -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_free_tileset">int tilemap_free_tileset(LayerList *ll, unsigned int index);</code>
-        <p>Free a tileset and any resources.
-        <p>NOTE: there's a logarithmically growing array of structures which is grown as needed as tilesets are added, on free, any other memory or resources pointed to by the structure are freed but the structures themselves aren't freed, and on adding, they are linearly searched through to find the first free one.  This shouldn't be any concern but just for the sake of being up-front about things, I guess.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the tileset handle index</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <h2 id="tilemap">Tilemap Functions</h2>
-        <code id="tilemap_add_tilemap">int tilemap_add_tilemap(LayerList *ll,
+                        unsigned int th,
+                        const char *name);</code><p><p>Add a tileset given an SDL_Surface. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>surface</td><td>the SDL_Surface to transfer to the tileset.</td></tr><tr><td>tw</td><td>width of a tile</td></tr><tr><td>th</td><td>height of a tile</td></tr><tr><td>name</td><td>optional name or NULL</td></tr><tr><td>return</td><td>the tileset handle or -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_free_tileset">int tilemap_free_tileset(LayerList *ll, unsigned int index);</code><p><p>Free a tileset and any resources. NOTE: there's a logarithmically growing array of structures which is grown       as needed as tilesets are added, on free, any other memory or       resources pointed to by the structure are freed but the structures       themselves aren't freed, and on adding, they are linearly searched       through to find the first free one.  This shouldn't be any concern but       just for the sake of being up-front about things, I guess. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tileset handle index</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_tileset_name">const char *tilemap_tileset_name(LayerList *ll, unsigned int index);</code><p><p>Get the tileset's name. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tileset handle index</td></tr><tr><td>return</td><td>the name or NULL on failure</td></tr></tbody></table><hr>
+<code id="tilemap_tileset_tiles">int tilemap_tileset_tiles(LayerList *ll, unsigned int index);</code><p><p>Get the number of tiles (max tile index + 1) in this tileset. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tileset handle index</td></tr><tr><td>return</td><td>the number of tiles, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_tileset_tile_width">int tilemap_tileset_tile_width(LayerList *ll, unsigned int index);</code><p><p>Get the width of a tile. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tileset handle index</td></tr><tr><td>return</td><td>the width of a tile</td></tr></tbody></table><hr>
+<code id="tilemap_tileset_tile_height">int tilemap_tileset_tile_height(LayerList *ll, unsigned int index);</code><p><p>Get the height of a tile. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tileset handle index</td></tr><tr><td>return</td><td>the height of a tile</td></tr></tbody></table><hr>
+<h2 id=" Tilemap Functions "> Tilemap Functions </h2>
+<code id="tilemap_add_tilemap">int tilemap_add_tilemap(LayerList *ll,
+                        unsigned int tileset,
                         unsigned int w,
-                        unsigned int h);</code>
-        <p>Add a tilemap.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the tilemap dimensions in tiles</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the tilemap handle or -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_free_tilemap">int tilemap_free_tilemap(LayerList *ll, unsigned int index);</code>
-        <p>Free a tilemap and any resources.</p>
-        <p>See: <a href="#tilemap_free_tileset">tilemap_free_tileset</a> NOTE</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <code id="tilemap_set_tilemap_tileset">int tilemap_set_tilemap_tileset(LayerList *ll,
+                        unsigned int h,
+                        const char *name);</code><p><p>Add a tilemap. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>tileset</td><td>the tileset applied to this tilemap</td></tr><tr><td>w</td><td>tilemap width</td></tr><tr><td>h</td><td>tilemap height</td></tr><tr><td>name</td><td>optional name or NULL</td></tr><tr><td>return</td><td>the tilemap handle or -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_free_tilemap">int tilemap_free_tilemap(LayerList *ll, unsigned int index);</code><p><p>Free a tilemap and any resources. </p></p><p>See: <a href="#tilemap_free_tileset">tilemap_free_tileset</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_tilemap_name">const char *tilemap_tilemap_name(LayerList *ll, unsigned int index);</code><p><p>Get the tilemap's name. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap handle index</td></tr><tr><td>return</td><td>the name or NULL on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_tilemap_tileset">int tilemap_set_tilemap_tileset(LayerList *ll,
                                 unsigned int index,
-                                unsigned int tileset);</code>
-        <p>Set a tileset which will be used for rendering out the tilemap.  This needs to be done at least once before the tilemap can be updated.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the tilemap handle</td>
-                </tr>
-                <tr>
-                    <td>tileset</td>
-                    <td>the tileset handle to apply to the tilemap</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_tilemap_map">int tilemap_set_tilemap_map(LayerList *ll,
+                                unsigned int tileset);</code><p><p>Set a tileset which will be used for rendering out the tilemap.  This needs to be done at least once before the tilemap can be updated. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap handle</td></tr><tr><td>tileset</td><td>the tileset handle to apply to the tilemap</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_tilemap_map">int tilemap_set_tilemap_map(LayerList *ll,
                             unsigned int index,
                             unsigned int x,
                             unsigned int y,
-                            unsigned int pitch,
-                            unsigned int w,
-                            unsigned int h,
+                            int pitch,
+                            int w,
+                            int h,
                             const unsigned int *value,
-                            unsigned int size);</code>
-        <p>Update a rectangle section of the tilemap.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the tilemap handle to update</td>
-                </tr>
-                <tr>
-                    <td>x, y</td>
-                    <td>the top-left corner of the rectangle to update</td>
-                </tr>
-                <tr>
-                    <td>pitch</td>
-                    <td>the width of the array of values to update with</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the dimensions of the rectangle to update</td>
-                </tr>
-                <tr>
-                    <td>value</td>
-                    <td>the array containing the values to update with</td>
-                </tr>
-                <tr>
-                    <td>size</td>
-                    <td>the total size of the array, as a sanity check</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_tilemap_attr_flags">int tilemap_set_tilemap_attr_flags(LayerList *ll,
+                            unsigned int size);</code><p><p>Update a rectangle section of the tilemap. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap handle to update</td></tr><tr><td>x</td><td>the top-left corner X position of the rectangle to update</td></tr><tr><td>y</td><td>the top-left corner Y position of the rectangle to update</td></tr><tr><td>pitch</td><td>the width of the array of values to update with</td></tr><tr><td>w</td><td>the width of the rectangle to update</td></tr><tr><td>h</td><td>the height of the rectangle to update</td></tr><tr><td>value</td><td>the array containing the values to update with</td></tr><tr><td>size</td><td>the total size of the array, as a sanity check</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_copy_block">int tilemap_copy_block(LayerList *ll,
+                       unsigned int index,
+                       unsigned int x,
+                       unsigned int y,
+                       unsigned int w,
+                       unsigned int h,
+                       unsigned int dx,
+                       unsigned int dy,
+                       unsigned int valid_outside_copy);</code><p><p>Copy a block of a tilemap. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap to copy a block in</td></tr><tr><td>x</td><td>X position to copy from</td></tr><tr><td>y</td><td>Y position to copy from</td></tr><tr><td>w</td><td>width to copy</td></tr><tr><td>h</td><td>height to copy</td></tr><tr><td>dx</td><td>X position to copy to</td></tr><tr><td>dy</td><td>Y position to copy to</td></tr><tr><td>valid_outside_copy</td><td>Whether the contents of the region outside of tthe copy</td></tr><tr><td>valid_outside_copy</td><td>Whether the contents of the region outside of tthe copy destination should be preserved.  Useful to pass 0 to</td></tr><tr><td>valid_outside_copy</td><td>Whether the contents of the region outside of tthe copy destination should be preserved.  Useful to pass 0 to this to avoid an extra copy if the rest is going to be</td></tr><tr><td>valid_outside_copy</td><td>Whether the contents of the region outside of tthe copy destination should be preserved.  Useful to pass 0 to this to avoid an extra copy if the rest is going to be drawn over anyway.</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_tilemap_attr_flags">int tilemap_set_tilemap_attr_flags(LayerList *ll,
                                    unsigned int index,
                                    unsigned int x,
                                    unsigned int y,
-                                   unsigned int pitch,
-                                   unsigned int w,
-                                   unsigned int h,
+                                   int pitch,
+                                   int w,
+                                   int h,
                                    const unsigned int *value,
-                                   unsigned int size);</code>
-        <p>Add/update attribute flags to a tilemap.  Non-squared tiles can only be rotated 180 degrees.</p>
-        <p>See: <a href="#definitions">TILEMAP_.FLIP_MASK, TILEMAP_ROTATE_.*</a></p>
-        <p>NOTE: For a slight optimization, a tilemap without an attribute map will never try to apply attributes which might make some difference to performance.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the tilemap to add or update attribute flags with</td>
-                </tr>
-                <tr>
-                    <td>x, y</td>
-                    <td>the top-left corner of the rectangle to update</td>
-                </tr>
-                <tr>
-                    <td>pitch</td>
-                    <td>the width of the array of values to update with</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the dimensions of the rectangle to update</td>
-                </tr>
-                <tr>
-                    <td>value</td>
-                    <td>the array containing the values to update with</td>
-                </tr>
-                <tr>
-                    <td>size</td>
-                    <td>the total size of the array, as a sanity check</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_tilemap_attr_colormod">int tilemap_set_tilemap_attr_colormod(LayerList *ll,
+                                   unsigned int size);</code><p><p>Add/update attribute flags to a tilemap.  Non-squared tiles can only be rotated 180 degrees. See: TILEMAP_.FLIP_MASK, TILEMAP_ROTATE_.* NOTE: For a slight optimization, a tilemap without an attribute map will       never try to apply attributes which might make some difference to       performance. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap to add or update attribute flags with</td></tr><tr><td>x</td><td>the top-left corner X position of the rectangle to update</td></tr><tr><td>y</td><td>the top-left corner Y position of the rectangle to update</td></tr><tr><td>pitch</td><td>the width of the array of values to update with</td></tr><tr><td>w</td><td>the width of the rectangle to update</td></tr><tr><td>h</td><td>the height of the rectangle to update</td></tr><tr><td>value</td><td>the array containing the values to update with</td></tr><tr><td>size</td><td>the total size of the array, as a sanity check</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_tilemap_attr_colormod">int tilemap_set_tilemap_attr_colormod(LayerList *ll,
                                       unsigned int index,
                                       unsigned int x,
                                       unsigned int y,
-                                      unsigned int pitch,
-                                      unsigned int w,
-                                      unsigned int h,
+                                      int pitch,
+                                      int w,
+                                      int h,
                                       const Uint32 *value,
-                                      unsigned int size);</code>
-        <p>Add/update colormod values for a tilemap.  The way colormod works is, think like the range of colors is scaled from 0.0 to 1.0 and multiplies by the color value of the pixel, so for example if you have a pixel on the tilemap which is RGB: 255, 255, 255 (full white), and the colormod for the tile which the pixel is on is something like, 63, 127, 255, those values would be scaled to roughly 0.25, 0.5 and 1.0, which will make the original pixel of 255, 255, 255 take on close to those values.  This is scaled to the alpha of the colormod value, where tha range of the alpha is scaled from 0.0 to 1.0.</p>
-        <p>See: <a href="#tilemap_set_tilemap_attr_flags">tilemap_set_tilemap_attr_flags</a> NOTE</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the tilemap to add/update</td>
-                </tr>
-                <tr>
-                    <td>x, y</td>
-                    <td>the top-left corner of the rectangle to update</td>
-                </tr>
-                <tr>
-                    <td>pitch</td>
-                    <td>the width of the array of values to update with</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the dimensions of the rectangle to update</td>
-                </tr>
-                <tr>
-                    <td>value</td>
-                    <td>the array containing the values to update with</td>
-                </tr>
-                <tr>
-                    <td>size</td>
-                    <td>the total size of the array, as a sanity check</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_update_tilemap">int tilemap_update_tilemap(LayerList *ll,
+                                      unsigned int size);</code><p><p>Add/update colormod values for a tilemap.  The way colormod works is, think like the range of colors is scaled from 0.0 to 1.0 and multiplies by the color value of the pixel, so for example if you have a pixel on the tilemap which is RGB: 255, 255, 255 (full white), and the colormod for the tile which the pixel is on is something like, 63, 127, 255, those values would be scaled to roughly 0.25, 0.5 and 1.0, which will make the original pixel of 255, 255, 255 take on close to those values.  This is scaled to the alpha of the colormod value, where tha range of the alpha is scaled from 0.0 to 1.0. </p></p><p>See: <a href="#tilemap_set_tilemap_attr_flags">tilemap_set_tilemap_attr_flags</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap to add/update</td></tr><tr><td>x</td><td>the top-left corner X position of the rectangle to update</td></tr><tr><td>y</td><td>the top-left corner Y position of the rectangle to update</td></tr><tr><td>pitch</td><td>the width of the array of values to update with</td></tr><tr><td>w</td><td>the width of the rectangle to update</td></tr><tr><td>h</td><td>the height of the rectangle to update</td></tr><tr><td>value</td><td>the array containing the values to update with</td></tr><tr><td>size</td><td>the total size of the array, as a sanity check</td></tr><tr><td>return</td><td>0 on success, -1 on failure     </td></tr></tbody></table><hr>
+<code id="tilemap_update_tilemap">int tilemap_update_tilemap(LayerList *ll,
                            unsigned int index,
                            unsigned int x,
                            unsigned int y,
                            unsigned int w,
-                           unsigned int h);</code>
-        <p>Update a region of the tilemap.  This is necessary to perform on any update to the tilemap or pointed-to tileset, otherwise it won't appear any different, or may just error.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the tilemap to update</td>
-                </tr>
-                <tr>
-                    <td>x, y</td>
-                    <td>the top-left corner of the rectangle to update, in tiles</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the dimensions of the rectangle to update, in tiles</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <h2 id="layer">Layer Functions</h2>
-        <code id="tilemap_add_layer">int tilemap_add_layer(LayerList *ll,
-                      unsigned int tilemap);</code>
-        <p>Add a layer.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>tilemap</td>
-                    <td>the tilemap which the layer will display.</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>the layer handle or -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_free_layer">int tilemap_free_layer(LayerList *ll,
-                       unsigned int index);</code>
-        <p>Free a layer.</p>
-        <p>See: <a href="#tilemap_free_tileset">tilemap_free_tileset</a> NOTE</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to free</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_pos">int tilemap_set_layer_pos(LayerList *ll,
+                           unsigned int h);</code><p><p>Redraw a region of the tilemap.  This is necessary to perform on any update to the tilemap or pointed-to tileset, otherwise it won't appear any different, or may just error. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the tilemap to update</td></tr><tr><td>x</td><td>the top-left corner X position of the rectangle to render</td></tr><tr><td>y</td><td>the top-left corner Y position of the rectangle to render</td></tr><tr><td>w</td><td>the width of the rectangle to render</td></tr><tr><td>h</td><td>the height of the rectangle to render</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<h2 id=" Layer Functions "> Layer Functions </h2>
+<code id="tilemap_add_layer">int tilemap_add_layer(LayerList *ll,
+                      int tilemap,
+                      SDL_Texture *tex,
+                      const char *name);</code><p><p>Add a layer. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>tilemap</td><td>the tilemap which the layer will display or negative for a non-</td></tr><tr><td>tilemap</td><td>the tilemap which the layer will display or negative for a non- graphical layer used for relative positioning.</td></tr><tr><td>tex</td><td>instead of a tilemap, just refer to a texture directly.  tilemap</td></tr><tr><td>tex</td><td>instead of a tilemap, just refer to a texture directly.  tilemap is ignored in this case.</td></tr><tr><td>name</td><td>optional name or NULL</td></tr><tr><td>return</td><td>the layer handle or -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_free_layer">int tilemap_free_layer(LayerList *ll,
+                       unsigned int index);</code><p><p>Free a layer. </p></p><p>See: <a href="#tilemap_free_tileset">tilemap_free_tileset</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to free</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_layer_name">const char *tilemap_layer_name(LayerList *ll, unsigned int index);</code><p><p>Get the layer's name. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer handle index</td></tr><tr><td>return</td><td>the name or NULL on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_pos">int tilemap_set_layer_pos(LayerList *ll,
                           unsigned int index,
                           int x,
-                          int y);</code>
-        <p>Set the on-screen position to draw the layer to.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>x, y</td>
-                    <td>the position the layer is to be drawn to</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_window">int tilemap_set_layer_window(LayerList *ll,
+                          int y);</code><p><p>Set the on-screen position to draw the layer to. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>x</td><td>the X position the layer is to be drawn to</td></tr><tr><td>y</td><td>the Y position the layer is to be drawn to</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_window">int tilemap_set_layer_window(LayerList *ll,
                              unsigned int index,
                              unsigned int w,
-                             unsigned int h);</code>
-        <p>Set the window size of the view in to the tilemap to show.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>w, h</td>
-                    <td>the size of the window</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_scroll_pos">int tilemap_set_layer_scroll_pos(LayerList *ll,
+                             unsigned int h);</code><p><p>Set the window size of the view in to the tilemap to show. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>w</td><td>the width of the window</td></tr><tr><td>h</td><td>the height of the window</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_scroll_pos">int tilemap_set_layer_scroll_pos(LayerList *ll,
                                  unsigned int index,
                                  unsigned int scroll_x,
-                                 unsigned int scroll_y);</code>
-        <p>Set the scroll position (top-left corner) of the tilemap to show.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>scroll_x, scroll_y</td>
-                    <td>the corner of the tilemap to show</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_scale">int tilemap_set_layer_scale(LayerList *ll,
+                                 unsigned int scroll_y);</code><p><p>Set the scroll position (top-left corner) of the tilemap to show. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>scroll_x</td><td>the corner X position of the tilemap to show</td></tr><tr><td>scroll_y</td><td>the corner X position of the tilemap to show</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_scale">int tilemap_set_layer_scale(LayerList *ll,
                             unsigned int index,
                             double scale_x,
-                            double scale_y);</code>
-        <p>Set the scale of the layer.</p>
-        <p>NOTE: The dimensions of the layer will be the layer's window size multiplied by this scale factor when drawn to the screen.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>scale_x, scale_y</td>
-                    <td>the scales of each dimension</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_rotation_center">int tilemap_set_layer_rotation_center(LayerList *ll,
+                            double scale_y);</code><p><p>Set the scale of the layer. NOTE: The dimensions of the layer will be the layer's window size multiplied       by this scale factor when drawn to the screen. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>scale_x</td><td>the X scale</td></tr><tr><td>scale_y</td><td>the Y scale</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_rotation_center">int tilemap_set_layer_rotation_center(LayerList *ll,
                                       unsigned int index,
                                       int x,
-                                      int y);</code>
-        <p>Set the point around which the layer is rotated.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>x, y</td>
-                    <td>the center of rotation relative to the top-left corner</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_rotation">int tilemap_set_layer_rotation(LayerList *ll,
+                                      int y);</code><p><p>Set the point around which the layer is rotated. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>x</td><td>the center of rotation X position relative to the top-left corner</td></tr><tr><td>y</td><td>the center of rotation Y position relative to the top-left corner</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_rotation">int tilemap_set_layer_rotation(LayerList *ll,
                                unsigned int index,
-                               double angle);</code>
-        <p>Set the rotation of the layer, in degrees.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <td>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <td>
-                    <td>angle</td>
-                    <td>the angle in degrees it should be rotated</td>
-                </tr>
-                <td>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_colormod">int tilemap_set_layer_colormod(LayerList *ll,
+                               double angle);</code><p><p>Set the rotation of the layer, in degrees. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>angle</td><td>the angle in degrees it should be rotated</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_colormod">int tilemap_set_layer_colormod(LayerList *ll,
                                unsigned int index,
-                               Uint32 colormod);</code>
-        <p>Set the layer's colormod.</p>
-        <p>See: <a href="#tilemap_set_tilemap_attr_colormod">tilemap_set_tilemap_attr_colormod</a></p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>colormod</td>
-                    <td>the color modulation value</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_set_layer_blendmode">int tilemap_set_layer_blendmode(LayerList *ll,
+                               Uint32 colormod);</code><p><p>Set the layer's colormod. </p></p><p>See: <a href="#tilemap_set_tilemap_attr_colormod">tilemap_set_tilemap_attr_colormod</a></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>colormod</td><td>the color modulation value</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_blendmode">int tilemap_set_layer_blendmode(LayerList *ll,
                                 unsigned int index,
-                                int blendMode);</code>
-        <p>Set the layer blendmode.</p>
-        <table>
-            <caption id="blendmode-descriptions">TILEMAP_BLENDMODE_* Descriptions</caption>
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>BLEND</td>
-                    <td>add -alpha of the underlying color with +alpha of the layer color</td>
-                </tr>
-                <tr>
-                    <td>ADD</td>
-                    <td>add +alpha of the layer color to the underlying color</td>
-                </tr>
-                <tr>
-                    <td>MOD</td>
-                    <td>See: <a href="#tilemap_set_tilemap_attr_colormod">tilemap_set_tilemap_attr_colormod</a></td>
-                </tr>
-                <tr>
-                    <td>MUL</td>
-                    <td>I'm just really not sure, I would guess the same as ADD and SUB but the value is multiplied?</td>
-                </tr>
-                <tr>
-                    <td>SUB</td>
-                    <td>subtract +alpha of the layer color from the underlying color</td>
-                </tr>
-            </tbody>
-        </table>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer to update</td>
-                </tr>
-                <tr>
-                    <td>blendMode</td>
-                    <td>See: <a href="#definitions">TILEMAP_BLENDMODE_.*</a></td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
-        <code id="tilemap_draw_layer">int tilemap_draw_layer(LayerList *ll, unsigned int index);</code>
-        <p>Finally, draw a layer to the screen or render target.</p>
-        <table class="funcdef">
-            <thead>
-                <th>Name</th>
-                <th>Description</th>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>ll</td>
-                    <td>the LayerList</td>
-                </tr>
-                <tr>
-                    <td>index</td>
-                    <td>the layer index</td>
-                </tr>
-                <tr>
-                    <td>return</td>
-                    <td>0 on success, -1 on failure</td>
-                </tr>
-            </tbody>
-        </table>
-        <hr>
+                                int blendMode);</code><p><p>Set the layer blendmode. </p><p>BLEND: add -alpha of the underlying color with +alpha of the layer color ADD: add +alpha of the layer color to the underlying color MOD: See: tilemap_set_tilemap_attr_colormod MUL: I'm just really not sure, I would guess the same as ADD and SUB but the      value is multiplied? SUB: subtract +alpha of the layer color from the underlying color </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>blendMode</td><td>See: TILEMAP_BLENDMODE_.*</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_set_layer_relative">int tilemap_set_layer_relative(LayerList *ll,
+                               unsigned int index,
+                               int rel);</code><p><p>Set a layer for this layer's position and angle to be relative to, or unset a relative angle (relative to screen as usual). </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer to update</td></tr><tr><td>rel</td><td>the layer which this layer should relate to or -1 to unset</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
+<code id="tilemap_draw_layer">int tilemap_draw_layer(LayerList *ll, unsigned int index);
+
+#endif</code><p><p>Finally, draw a layer to the screen or render target. </p></p><table class="funcdef"><thead><th>Name</th><th>Description</th></thead><tbody><tr><td>ll</td><td>the LayerList</td></tr><tr><td>index</td><td>the layer index</td></tr><tr><td>return</td><td>0 on success, -1 on failure</td></tr></tbody></table><hr>
     </body>
 </html>
