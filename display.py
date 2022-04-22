@@ -411,11 +411,11 @@ class ScrollingTilemap():
         self._newy = int(y)
 
     def _setmap(self, x, y, vmx=0, vmy=0, w=0, h=0):
-        self._tm.map(vmx, vmy, self._mw, w, h, self._tilemap[y * self._mw + x:])
+        self._tm.map(vmx, vmy, self._imw, w, h, self._tilemap[y * self._mw + x:])
         if self._flags is not None:
-            self._tm.attr_flags(vmx, vmy, self._mw, w, h, self._flags[y * self._mw + x:])
+            self._tm.attr_flags(vmx, vmy, self._imw, w, h, self._flags[y * self._mw + x:])
         if self._colormod is not None:
-            self._tm.attr_colormod(vmx, vmy, self._mw, w, h, self._colormod[y * self._mw + x:])
+            self._tm.attr_colormod(vmx, vmy, self._imw, w, h, self._colormod[y * self._mw + x:])
         self._tm.update(vmx, vmy, w, h)
 
     def update(self, force=False):
@@ -542,8 +542,8 @@ class ScrollingTilemap():
         vmx = 0
         vmy = 0
         if x < self._vmx:
-            if x + w > self._vmx + self._vmw:
-                w = self._vmw
+            if x + w > self._vmx + self._imw:
+                w = self._imw
                 x = self._vmx
                 vmx = 0
             elif x + w > self._vmx:
@@ -553,15 +553,15 @@ class ScrollingTilemap():
             else:
                 return
         else: # x >= self._vmx
-            if x >= self._vmx + self._vmw:
+            if x >= self._vmx + self._imw:
                 return
-            else: # x < self._vmx + self._vmw
+            else: # x < self._vmx + self._imw
                 vmx = x - self._vmx
-                if vmx + w > self._vmw:
-                    w = self._vmw - vmx
+                if vmx + w > self._imw:
+                    w = self._imw - vmx
         if y < self._vmy:
-            if y + h > self._vmy + self._vmh:
-                h = self._vmh
+            if y + h > self._vmy + self._imh:
+                h = self._imh
                 y = self._vmy
                 vmy = 0
             elif y + h > self._vmy:
@@ -571,12 +571,12 @@ class ScrollingTilemap():
             else:
                 return
         else: # y >= self._vmy
-            if y >= self._vmy + self._vmh:
+            if y >= self._vmy + self._imh:
                 return
-            else: # y < self._vmy + self._vmh
+            else: # y < self._vmy + self._imh
                 vmy = y - self._vmy
-                if vmy + h > self._vmh:
-                    h = self._vmh - vmy
+                if vmy + h > self._imh:
+                    h = self._imh - vmy
         self._setmap(x, y, vmx, vmy, w, h)
 
     def draw(self):

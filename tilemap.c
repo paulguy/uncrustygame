@@ -911,9 +911,10 @@ int tilemap_set_tilemap_map(LayerList *ll,
         h = tm->h;
     }
 
-    if(((((unsigned int)h - 1) * (unsigned int)pitch) +
-        (unsigned int)w) > size) {
-        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap.\n", tm->name);
+    unsigned int srcsize = (((unsigned int)h - 1) * (unsigned int)pitch) +
+                           (unsigned int)w;
+    if(srcsize > size) {
+        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap. (%u > %u)\n", tm->name, srcsize, size);
         return(-1);
     }
 
@@ -963,9 +964,10 @@ int tilemap_set_tilemap_attr_flags(LayerList *ll,
         h = tm->h;
     }
 
-    if(((((unsigned int)h - 1) * (unsigned int)pitch) +
-        (unsigned int)w) > size) {
-        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap.\n", tm->name);
+    unsigned int srcsize = (((unsigned int)h - 1) * (unsigned int)pitch) +
+                           (unsigned int)w;
+    if(srcsize > size) {
+        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap. (%u > %u)\n", tm->name, srcsize, size);
         return(-1);
     }
 
@@ -1024,9 +1026,10 @@ int tilemap_set_tilemap_attr_colormod(LayerList *ll,
         h = tm->h;
     }
 
-    if(((((unsigned int)h - 1) * (unsigned int)pitch) +
-        (unsigned int)w) > size) {
-        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap.\n", tm->name);
+    unsigned int srcsize = (((unsigned int)h - 1) * (unsigned int)pitch) +
+                           (unsigned int)w;
+    if(srcsize > size) {
+        LOG_PRINTF(ll, "%s: Buffer too small to hold tilemap. (%u > %u)\n", tm->name, srcsize, size);
         return(-1);
     }
 

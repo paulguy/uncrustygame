@@ -15,6 +15,7 @@ import math
 import effects
 
 #TODO:
+# investigate key repeat with holding a drawing key
 # Preview of multiple layers with independent scale/scroll speed/center
 # layer/project Save/Load
 # mouse support?
@@ -72,7 +73,8 @@ def make_tilemap(ll, vw, vh, mw, mh, curx, cury, ts,
     if cury >= mh:
         cury = mh - 1
     stm = display.ScrollingTilemap(ll, ts, tilemap,
-                                   vw, vh, mw, mh,
+                                   vw * ts.width(), vh * ts.height(),
+                                   mw, mh,
                                    flags=flags,
                                    colormod=colormod)
     return curx, cury, stm
@@ -195,17 +197,18 @@ class Sidebar():
         self._dl.append(self._sidebarl)
         self._sbpos = 1
         self._sbtext = textbox.TextBox(self._state.ll,
-                                       width, height, width, height,
+                                       width * fw, height * self._fh,
+                                       width, height,
                                        self._state.font)
         self._sbtext.put_text(helptext, 0, 0)
         self._hpos = int(self._fh * (1 + hpos))
         self._sbtext.layer.relative(self._sidebarl)
         self._textdl = display.DisplayList(self._state.ll)
         self._textdl.append(lambda: self._sbtext.layer.pos(fw + 1, self._hpos + 1))
-        self._textdl.append(lambda: self._sbtext.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
+        self._textdl.append(lambda: self._sbtext.internal.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
         self._textdl.append(self._sbtext.draw)
         self._textdl.append(lambda: self._sbtext.layer.pos(fw, self._hpos))
-        self._textdl.append(lambda: self._sbtext.layer.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
+        self._textdl.append(lambda: self._sbtext.internal.colormod(display.make_color(255, 255, 255, SDL_ALPHA_OPAQUE)))
         self._textdl.append(self._sbtext.draw)
         self._textindex = self._dl.append(self._textdl)
 
@@ -297,7 +300,8 @@ class BorderSelector():
         self._stm = display.ScrollingTilemap(self._state.ll,
                                              self._state.font.ts,
                                              self._tilemap,
-                                             self._fvw, self._fvh,
+                                             self._fvw * self._fw,
+                                             self._fvh * self._fh,
                                              self._fmw, self._fmh)
         x, y, w, h = self._get_dims()
         make_box(self._state.font.codec, w, h, mw=self._fmw, tm=self._tilemap, offset=(self._fmw * y) + x)
@@ -404,7 +408,8 @@ class PromptScreen():
         self._dl = display.DisplayList(self._state.ll)
         text, _, w, titleh = textbox.wrap_text(self._title, vw - 2, 2)
         titletb = textbox.TextBox(self._state.ll,
-                                  vw, titleh, vw, titleh,
+                                  vw * fw, titleh * fh,
+                                  vw, titleh,
                                   self._state.font)
         titletb.layer.scale(scale, scale)
         titletb.layer.pos(int(fw * scale), int(fh * scale))
@@ -416,7 +421,8 @@ class PromptScreen():
         if self._message is not None:
             text, _, w, messageh = textbox.wrap_text(self._message, vw - 2, 5)
             message = textbox.TextBox(self._state.ll,
-                                      w, messageh, w, messageh,
+                                      w * fw, messageh * fh,
+                                      w, messageh,
                                       self._state.font)
             message.put_text(text, 0, 0)
             message.layer.relative(titletb.layer)
@@ -510,7 +516,7 @@ class ProjectScreen():
         self._fmw = int(self._vw / self._scale / self._fw)
         self._fmh = int(self._vh / self._scale / self._fh)
         self._titletb = textbox.TextBox(self._state.ll,
-                                        self._fmw, 1,
+                                        self._fmw * self._fw, 1 * self._fh,
                                         self._fmw, 1,
                                         self._state.font)
         self._set_banner(ProjectScreen.DEFAULT_BANNER)
@@ -638,7 +644,8 @@ class ProjectScreen():
                     self._errortext = "Unknown error"
                 lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
                 self._errorbox = textbox.TextBox(self._state.ll,
-                                                 w, h, w, h,
+                                                 w * self._fw, h * self._fh,
+                                                 w, h,
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._titletb.layer)
@@ -783,7 +790,7 @@ class TilemapScreen():
         self._fmw = int(self._vw / self._scale / self._fw)
         self._fmh = int(self._vh / self._scale / self._fh)
         self._titletb = textbox.TextBox(self._state.ll,
-                                        self._fmw, 1,
+                                        self._fmw * self._fw, 1 * self._fh,
                                         self._fmw, 1,
                                         self._state.font)
         put_centered_line(self._titletb, "Tilemap Settings", 0, self._fmw)
@@ -899,7 +906,8 @@ class TilemapScreen():
                     self._errortext = "Unknown error"
                 lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
                 self._errorbox = textbox.TextBox(self._state.ll,
-                                                 w, h, w, h,
+                                                 w * self._fw, h * self._fh,
+                                                 w, h,
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._titletb.layer)
@@ -1149,7 +1157,7 @@ class EditScreen():
             self._tsdesc = self._state.add_tileset(tmdesc.filename,
                                                    tmdesc.tw, tmdesc.th)
         self._tmdesc = tmdesc
-        self._tileset = self._state.tileset(self._tsdesc)
+        self._tileset = self._state.tileset_desc(self._tsdesc)
         self._tiles = self._tileset.tiles()
         codec = None
         if self._codec is not None:
@@ -1279,7 +1287,8 @@ class EditScreen():
         lines, _, _, h = textbox.wrap_text("Tile:      R:    \nX:         G:    \nY:         B:    \nR:         A:\nVF:   HF:  ", self._sidebar.width - 2, self._vh)
         self._sidebar.set_hpos(tstart + h)
         self._statustext = textbox.TextBox(self._state.ll,
-                                           self._sidebar.width - 2, h,
+                                           self._sidebar.width - 2 * self._fw,
+                                           h * self._fh,
                                            self._sidebar.width - 2, h,
                                            self._state.font)
         self._statustext.put_text(lines, 0, 0)
@@ -1449,21 +1458,27 @@ class EditScreen():
             self._undopos += 1
 
     def _check_drawing(self):
-        if self._drawing or self._puttile or self._putcolor or self._putattrib:
-            self._store_region(self._curx, self._cury, 1, 1)
         if self._drawing:
-            self._tilemap[self._cury * self._tmdesc.mw + self._curx] = self._tile
-            self._colormod[self._cury * self._tmdesc.mw + self._curx] = self._color
-            self._flags[self._cury * self._tmdesc.mw + self._curx] = self._attrib
-        else:
-            if self._puttile:
+            if self._tilemap[self._cury * self._tmdesc.mw + self._curx] != self._tile or \
+               self._colormod[self._cury * self._tmdesc.mw + self._curx] != self._color or \
+               self._flags[self._cury * self._tmdesc.mw + self._curx] != self._attrib:
+                self._store_region(self._curx, self._cury, 1, 1)
                 self._tilemap[self._cury * self._tmdesc.mw + self._curx] = self._tile
-            if self._putcolor:
                 self._colormod[self._cury * self._tmdesc.mw + self._curx] = self._color
-            if self._putattrib:
                 self._flags[self._cury * self._tmdesc.mw + self._curx] = self._attrib
-        if self._drawing or self._puttile or self._putcolor or self._putattrib:
-            self._stm.updateregion(self._curx, self._cury, 1, 1)
+                self._stm.updateregion(self._curx, self._cury, 1, 1)
+        else:
+            if (self._puttile and self._tilemap[self._cury * self._tmdesc.mw + self._curx] != self._tile) or \
+               (self._putcolor and self._colormod[self._cury * self._tmdesc.mw + self._curx] != self._color) or \
+               (self._putattrib and self._flags[self._cury * self._tmdesc.mw + self._curx] != self._attrib):
+                self._store_region(self._curx, self._cury, 1, 1)
+                if self._puttile:
+                    self._tilemap[self._cury * self._tmdesc.mw + self._curx] = self._tile
+                if self._putcolor:
+                    self._colormod[self._cury * self._tmdesc.mw + self._curx] = self._color
+                if self._putattrib:
+                    self._flags[self._cury * self._tmdesc.mw + self._curx] = self._attrib
+                self._stm.updateregion(self._curx, self._cury, 1, 1)
 
     def _up(self):
         miny = 0
@@ -1860,7 +1875,8 @@ class EditScreen():
                     self._errortext = "Unknown error"
                 lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
                 self._errorbox = textbox.TextBox(self._state.ll,
-                                                 w, h, w, h,
+                                                 w * self._fw, h * self._fh,
+                                                 w, h,
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._stm.layer)
@@ -1998,7 +2014,7 @@ class TileSelectScreen():
         self._editscreen = editscreen
         self._curx = 0
         self._cury = 0
-        self._tileset = self._state.tileset(ts)
+        self._tileset = self._state.tileset_desc(ts)
         self._tiles = self._tileset.tiles()
         if width == 0 and width < self._tiles:
             side = math.sqrt(self._tiles)
@@ -2112,7 +2128,8 @@ class ColorPickerScreen():
         vh = int(vh / scale / fh)
         self._dl = display.DisplayList(self._state.ll)
         titletb = textbox.TextBox(self._state.ll,
-                                  vw, 1, vw, 1, self._state.font)
+                                  vw * fw, 1 * fh,
+                                  vw, 1, self._state.font)
         titletb.layer.scale(scale, scale)
         titletb.layer.pos(int(fw * scale), int(fh * scale))
         put_centered_line(titletb, "Pick Color", 0, vw - 2)
@@ -2178,7 +2195,8 @@ class ColorPickerScreen():
             elif event.key.keysym.sym == SDLK_RETURN:
                 self._menu.activate_selection()
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                self._state.active_screen(self._caller)
+                if not self._menu.cancel_entry():
+                    self._state.active_screen(self._caller)
 
     def update(self, time):
         self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
@@ -2307,7 +2325,7 @@ class LayersScreen():
         self._fmw = int(self._vw / self._scale / self._fw)
         self._fmh = int(self._vh / self._scale / self._fh)
         self._titletb = textbox.TextBox(self._state.ll,
-                                        self._fmw, 1,
+                                        self._fmw * self._fw, 1 * self._fh,
                                         self._fmw, 1,
                                         self._state.font)
         self._set_banner(ProjectScreen.DEFAULT_BANNER)
@@ -2404,7 +2422,7 @@ class LayersScreen():
                     self._errortext = "Unknown error"
                 lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
                 self._errorbox = textbox.TextBox(self._state.ll,
-                                                 w, h, w, h,
+                                                 w * self._fw, h * self._fh, w, h,
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._titletb.layer)
@@ -2508,6 +2526,14 @@ class LayerScreen():
             return "None"
         return self._caller.tmdescs[self._ldesc.tilemap].name
 
+    def _get_tmdims(self):
+        if self._ldesc.tilemap < 0:
+            return 2<<31-1, 2<<31-1
+        return (self._caller.tmdescs[self._ldesc.tilemap].mw *
+                self._caller.tmdescs[self._ldesc.tilemap].tw), \
+               (self._caller.tmdescs[self._ldesc.tilemap].mh *
+                self._caller.tmdescs[self._ldesc.tilemap].th), \
+
     def _get_relname(self):
         if self._ldesc.relative < 0:
             return "None"
@@ -2521,7 +2547,7 @@ class LayerScreen():
         self._fmw = int(self._vw / self._scale / self._fw)
         self._fmh = int(self._vh / self._scale / self._fh)
         self._titletb = textbox.TextBox(self._state.ll,
-                                        self._fmw, 1,
+                                        self._fmw * self._fw, 1 * self._fh,
                                         self._fmw, 1,
                                         self._state.font)
         put_centered_line(self._titletb, "Tilemap Settings", 0, self._fmw)
@@ -2572,10 +2598,6 @@ class LayerScreen():
         self._errortext = text
         self._error = ERROR_TIME
 
-    @property
-    def name(self):
-        return self._name
-
     def resize(self):
         vw, vh = self._state.window
         scale = self._state.font_scale
@@ -2590,11 +2612,16 @@ class LayerScreen():
         if self._selecting == LayerScreenSelecting.TILEMAP:
             if self._selection is not None:
                 self._ldesc.tilemap = self._selection - 1
-                self._menu.update_value(2, self._get_tmname())
+                self._ldesc.vw, self._ldesc.vh = self._get_tmdims()
+            else:
+                self._ldesc.tilemap = -1
+            self._menu.update_value(2, self._get_tmname())
         elif self._selecting == LayerScreenSelecting.RELATIVE:
             if self._selection is not None:
                 self._ldesc.relative = self._selection - 1
-                self._menu.update_value(3, self._get_relname())
+            else:
+                self._ldesc.tilemap = -1
+            self._menu.update_value(3, self._get_relname())
         self._selecting = LayerScreenSelecting.NONE
 
     @property
@@ -2631,7 +2658,8 @@ class LayerScreen():
                     self._errortext = "Unknown error"
                 lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
                 self._errorbox = textbox.TextBox(self._state.ll,
-                                                 w, h, w, h,
+                                                 w * self._fw, h * self._fh,
+                                                 w, h,
                                                  self._state.font)
                 self._errorbox.put_text(lines, 0, 0)
                 self._errorbox.layer.relative(self._titletb.layer)
@@ -2674,7 +2702,8 @@ class LayerScreen():
             val = int(val)
         except ValueError:
             return None
-        if val < 1:
+        pw, _ = self._get_tmdims()
+        if val < 1 or val > pw:
             return None
         self._ldesc.vw = val
         return str(self._ldesc.vw)
@@ -2684,7 +2713,8 @@ class LayerScreen():
             val = int(val)
         except ValueError:
             return None
-        if val < 1:
+        _, ph = self._get_tmdims()
+        if val < 1 or val > ph:
             return None
         self._ldesc.vh = val
         return str(self._ldesc.vh)
@@ -2746,6 +2776,167 @@ class LayerScreen():
     def _delete(self, priv, sel):
         self._caller.delete()
         self._state.active_screen(self._caller)
+
+class TilemapDesc():
+    name : str = "Untitled Tilemap"
+    filename : str = FONT_FILENAME
+    mapname : str = FONT_MAPNAME
+    tw : int = FONT_WIDTH
+    th : int = FONT_HEIGHT
+    mw : int = 64
+    mh : int = 64
+    codec : str = None
+    wscale : float = FONT_SCALE
+    hscale : float = FONT_SCALE
+
+class ScrollMode(Enum):
+    NONE = 0
+    LAYER = 1
+    POSITION = 2
+
+class LayerDesc():
+    name : str = "Untitled Layer"
+    tilemap : int = -1 
+    relative : int = -1
+    vw : int = 1
+    vh : int = 1
+    scalex : float = 1.0
+    scaley : float = 1.0
+    mode : ScrollMode = ScrollMode.NONE
+    posx : int = 0
+    posy : int = 0
+
+class PreviewScreen():
+    def _get_tileset(self, num):
+        return self._state.tileset(self._tmdescs[num].filename,
+                                   self._tmdescs[num].tw,
+                                   self._tmdescs[num].th)
+
+    def _set_all(self):
+        for num, desc in enumerate(self._ldescs):
+            if desc.type != ScrollMode.NONE:
+                if isinstance(self._layers[num], cg.Layer):
+                    self._layers[num].pos(desc.posx + self._posx,
+                                          desc.posy + self._posy)
+                else:
+                    pass
+
+    def _build_screen(self):
+        self._vw, self._vh = self._state.window
+        self._layers = list()
+        for desc in self._ldescs:
+            if desc._tilemap < 0:
+                self._layers.append(cg.Layer(self._state.ll, None, "Preview Layer {}".format(desc.name)))
+            else:
+                if desc.mode == ScrollMode.LAYER:
+                    vpw = desc.vw
+                    if vpw * desc.scalex > self._vw:
+                        vpw = self._vw / desc.scalex
+                    vph = desc.vh
+                    if desc.vh * desc.scaley > self._vh:
+                        vph = self._vh / desc.scaley
+                    stm = display.ScrollingTilemap(self._state.ll,
+                        self._get_tileset(desc.tilemap),
+                        self._tilemaps[desc.tilemap],
+                        vpw, vph,
+                        self._tmdescs[desc.tilemap].mw,
+                        self._tmdescs[desc.tilemap].mh,
+                        flags=self._flagses[desc.tilemap],
+                        colormod=self._colormods[desc.tilemap],
+                        optimize=True)
+                    stm.internal.scale(desc.scalex, desc.scalex)
+                    self._layers.append(stm)
+                else:
+                    mw = self._tmdescs[desc.tilemap].mw
+                    mh = self._tmdescs[desc.tilemap].mh
+                    tm = self._get_tileset(desc.tilemap).tilemap(mw, mh,
+                        "Preview Tilemap {}".format(desc.name))
+                    tm.map(0, 0, mw, mw, mh, self._tilemaps[desc.tilemap])
+                    tm.attr_flags(0, 0, mw, mw, mh, self._flagses[desc.tilemap])
+                    tm.attr_colormod(0, 0, mw, mw, mh, self._colormods[desc.tilemap])
+                    tm.update()
+                    l = tm.layer("Preview Layer {}".format(desc.name))
+                    l.window(desc.vw, desc.vh)
+                    l.scale(desc.scalex, desc.scaley)
+                    if desc.mode == ScrollMode.NONE:
+                        l.pos(desc.posx, desc.posy)
+                    self._layers.append(l)
+
+        for num, desc in enumerate(self._ldescs):
+            if desc.mode != ScrollMode.NONE and desc.relative > 0:
+                if isinstance(self._layers[num], cg.Layer):
+                    if isinstance(self._layers[desc.relative], cg.Layer):
+                        self._layers[num].relative(self._layers[desc.relative])
+                    else:
+                        self._layers[num].relative(self._layers[desc.relative].maplayer)
+
+    def __init__(self, state, ldescs, tmdescs, tilesets, tilemaps, flagses, colormods, x, y):
+        self._state = state
+        self._ldescs = ldescs
+        self._tmdescs = tmdescs
+        self._tilesets = tilesets
+        self._tilemaps = tilemaps
+        self._posx = x
+        self._posy = y
+        self._build_screen()
+
+    def resize(self):
+        vw, vh = self._state.window
+        if self._vw != vw or self._vw != vh:
+            self._build_screen()
+
+    def active(self):
+        self.resize()
+
+    @property
+    def dl(self):
+        return self._dl
+
+    def input(self, event):
+        if event.type == SDL_TEXTINPUT:
+            self._menu.text_event(event)
+        elif event.type == SDL_KEYDOWN:
+            self._error = 0.0
+            if event.key.keysym.sym == SDLK_UP:
+                self._menu.up()
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._menu.down()
+            elif event.key.keysym.sym == SDLK_LEFT:
+                self._menu.left()
+            elif event.key.keysym.sym == SDLK_RIGHT:
+                self._menu.right()
+            elif event.key.keysym.sym == SDLK_BACKSPACE:
+                self._menu.backspace()
+            elif event.key.keysym.sym == SDLK_DELETE:
+                self._menu.delete()
+            elif event.key.keysym.sym == SDLK_RETURN:
+                self._menu.activate_selection()
+            elif event.key.keysym.sym == SDLK_ESCAPE:
+                if not self._menu.cancel_entry():
+                    self._state.active_screen(self._caller)
+
+    def update(self, time):
+        if self._error > 0.0:
+            if self._errorbox is None:
+                if len(self._errortext) == 0:
+                    self._errortext = "Unknown error"
+                lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
+                self._errorbox = textbox.TextBox(self._state.ll,
+                                                 w * self._fw, h * self._fh,
+                                                 w, h,
+                                                 self._state.font)
+                self._errorbox.put_text(lines, 0, 0)
+                self._errorbox.layer.relative(self._titletb.layer)
+                self._errorbox.layer.pos(0, int((self._fmh - h - 2) * self._fh))
+                self._dl.replace(self._errorindex, self._errorbox.draw)
+            self._error -= time
+        if self._error <= 0.0 and self._errorbox is not None:
+            self._dl.replace(self._errorindex, None)
+            self._errorbox = None
+            self._errortext = ''
+
+        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
+        self._cursorl.colormod(color)
 
 
 class MapeditState():
@@ -2883,8 +3074,11 @@ class MapeditState():
         self._tilesets[desc] = tileset
         return tileset
 
-    def tileset(self, name):
-        return self._tilesets[name]
+    def tileset_desc(self, desc):
+        return self._tilesets[desc]
+
+    def tileset(self, filename, width, height):
+        return self._tilesets[TilesetDesc(filename, width, height)]
 
     def add_tilemap(self, tm, name):
         self._tilemaps[name] = tm

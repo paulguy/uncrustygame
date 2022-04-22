@@ -347,6 +347,7 @@ class HeaderReader:
                                                   _strlist_to_html(pair.comment),
                                                   depth))
                 else:
+                    # hack to avoid the include guide being in
                     if pair.code[-1].startswith('#endif'):
                         pair.code = pair.code[:-1]
                         pair.code = _clear_trailing_blank_lines(pair.code)
@@ -361,7 +362,7 @@ class HeaderReader:
                         desc = ''
                         for arg in pair.comment[num+1:]:
                             if arg[0] == ' ':
-                                desc += ' '
+                                desc += '<br>'
                                 desc += arg.lstrip()
                             else:
                                 if name is not None:

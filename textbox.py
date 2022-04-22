@@ -210,6 +210,10 @@ class TextBox():
     def layer(self):
         return self._stm.layer
 
+    @property
+    def internal(self):
+        return self._stm.internal
+
     def clear(self):
         # fill with spaces
         self._tm[:] = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
@@ -420,7 +424,7 @@ class Menu():
         else:
             self._visibleitems = len(self._entries)
         self._tb = TextBox(self._ll,
-                           1 + w, vh,
+                           (1 + w) * self._tw, vh * self._th,
                            1 + w, ((h - 1) * self._spacing) + 1,
                            self._font, debug=True)
         self._tb.layer.relative(self._rel)
@@ -448,7 +452,7 @@ class Menu():
                 if entry.width > valuelen:
                     entry.width = valuelen
                 self._valtbs[num] = TextBox(self._ll,
-                                            entry.width, 1,
+                                            entry.width * self._tw, 1 * self._th,
                                             entry.maxlen, 1,
                                             self._font)
                 self._valtbs[num].put_text((entry.value,), 0, 0)
