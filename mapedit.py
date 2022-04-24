@@ -2309,6 +2309,8 @@ class LayerDesc():
     mode : ScrollMode = ScrollMode.NONE
     posx : int = 0
     posy : int = 0
+    scrollx : int = 0
+    scrolly : int = 0
 
 class LayersScreen():
     DEFAULT_BANNER="Layers"
@@ -2340,6 +2342,10 @@ class LayersScreen():
             self._menu.add_item(desc.name, onActivate=self._open_layer)
         self._menu.add_item("New Layer", onActivate=self._new_layer)
         self._menu.add_item("Show Preview", onActivate=self._show)
+        self._menu.add_item("", value="Preview Screen Controls")
+        self._menu.add_item("Arrows", value="Adjust Position")
+        self._menu.add_item("r", value="Reset Position")
+        self._menu.add_item("Escape", value="Return to this screen")
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
@@ -2481,8 +2487,16 @@ class LayersScreen():
         self._open_settings(len(self._descs) - 1)
 
     def _show(self, priv, sel):
-        preview = PreviewScreen(self._state, self, self._posx, self._posy)
-        self._state.active_screen(preview)
+        try:
+            preview = PreviewScreen(self._state, self, self._posx, self._posy)
+            self._state.active_screen(preview)
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            if isinstance(e, cg.CrustyException):
+                self._set_error("Couldn't open preview: {}: {}".format(e, get_error()))
+            else:
+                self._set_error("Couldn't open preview: {}".format(e))
 
     def setpos(self, x, y):
         self._posx = x
@@ -2585,6 +2599,8 @@ class LayerScreen():
         self._menu.add_item(" Position:", value="Layer is moved.")
         self._menu.add_item("X Pos", value=str(self._ldesc.posx), maxlen=5, onEnter=self._set_posx)
         self._menu.add_item("Y Pos", value=str(self._ldesc.posy), maxlen=5, onEnter=self._set_posy)
+        self._menu.add_item("X Scroll", value=str(self._ldesc.scrollx), maxlen=5, onEnter=self._set_scrollx)
+        self._menu.add_item("Y Scroll", value=str(self._ldesc.scrolly), maxlen=5, onEnter=self._set_scrolly)
         self._menu.add_item("Move", onActivate=self._move)
         self._menu.add_item("Delete", onActivate=self._delete)
         self._menu.update()
@@ -2788,6 +2804,22 @@ class LayerScreen():
         self._ldesc.posy = val
         return str(self._ldesc.posy)
 
+    def _set_scrollx(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        self._ldesc.scrollx = val
+        return str(self._ldesc.scrollx)
+
+    def _set_scrolly(self, priv, sel, val):
+        try:
+            val = int(val)
+        except ValueError:
+            return None
+        self._ldesc.scrolly = val
+        return str(self._ldesc.scrolly)
+
     def _apply(self, priv, sel):
         self._caller.apply(self._ldesc)
 
@@ -2807,13 +2839,17 @@ class PreviewScreen():
 
     def _set_all(self):
         for num, desc in enumerate(self._ldescs):
-            if desc.mode != ScrollMode.NONE:
-                if isinstance(self._layers[num], cg.Layer):
-                    self._layers[num].pos(-(desc.posx + int(self._posx)),
-                                          -(desc.posy + int(self._posy)))
+            if desc.mode == ScrollMode.LAYER:
+                self._layers[num].scroll(desc.scrollx + int(self._posx),
+                                         desc.scrolly + int(self._posy))
+                self._layers[num].update()
+            elif desc.mode == ScrollMode.POSITION:
+                if desc.tilemap < 0:
+                    self._layers[num].pos(desc.posx + int(self._posx),
+                                          desc.posy + int(self._posy))
                 else:
-                    self._layers[num].scroll(desc.posx + int(self._posx),
-                                             desc.posy + int(self._posy))
+                    self._layers[num].layer.pos(desc.posx + int(self._posx),
+                                                desc.posy + int(self._posy))
                     self._layers[num].update()
 
     def _build_screen(self):
@@ -2821,58 +2857,49 @@ class PreviewScreen():
         self._layers = list()
         for desc in self._ldescs:
             if desc.tilemap < 0:
-                self._layers.append(cg.Layer(self._state.ll, None, "Preview Layer {}".format(desc.name)))
+                l = cg.Layer(self._state.ll, None, "Preview Layer {}".format(desc.name))
+                l.scale(desc.scalex, desc.scaley)
+                l.pos(desc.posx, desc.posy)
+                self._layers.append(l)
             else:
-                if desc.mode == ScrollMode.LAYER:
-                    vpw = desc.vw
-                    if vpw * desc.scalex > self._vw:
-                        vpw = self._vw / desc.scalex
-                    vph = desc.vh
-                    if desc.vh * desc.scaley > self._vh:
-                        vph = self._vh / desc.scaley
-                    stm = display.ScrollingTilemap(self._state.ll,
-                        self._get_tileset(desc.tilemap),
-                        self._maps[desc.tilemap][0],
-                        vpw, vph,
-                        self._tmdescs[desc.tilemap].mw,
-                        self._tmdescs[desc.tilemap].mh,
-                        flags=self._maps[desc.tilemap][1],
-                        colormod=self._maps[desc.tilemap][2],
-                        optimize=True)
-                    stm.scale(desc.scalex, desc.scaley)
-                    self._layers.append(stm)
-                else:
-                    mw = self._tmdescs[desc.tilemap].mw
-                    mh = self._tmdescs[desc.tilemap].mh
-                    tm = self._get_tileset(desc.tilemap).tilemap(mw, mh,
-                        "Preview Tilemap {}".format(desc.name))
-                    tm.map(0, 0, mw, mw, mh, self._maps[desc.tilemap][0])
-                    tm.attr_flags(0, 0, mw, mw, mh, self._maps[desc.tilemap][1])
-                    tm.attr_colormod(0, 0, mw, mw, mh, self._maps[desc.tilemap][2])
-                    tm.update()
-                    l = tm.layer("Preview Layer {}".format(desc.name))
-                    l.window(desc.vw, desc.vh)
-                    l.scale(desc.scalex, desc.scaley)
-                    if desc.mode == ScrollMode.NONE:
-                        l.pos(desc.posx, desc.posy)
-                    self._layers.append(l)
+                vpw = desc.vw
+                if vpw * desc.scalex > self._vw:
+                    vpw = self._vw / desc.scalex + 1
+                vph = desc.vh
+                if desc.vh * desc.scaley > self._vh:
+                    vph = self._vh / desc.scaley + 1
+                stm = display.ScrollingTilemap(self._state.ll,
+                    self._get_tileset(desc.tilemap),
+                    self._maps[desc.tilemap][0],
+                    vpw, vph,
+                    self._tmdescs[desc.tilemap].mw,
+                    self._tmdescs[desc.tilemap].mh,
+                    flags=self._maps[desc.tilemap][1],
+                    colormod=self._maps[desc.tilemap][2],
+                    optimize=True)
+                stm.scale(desc.scalex, desc.scaley)
+                stm.layer.pos(desc.posx, desc.posy)
+                stm.scroll(desc.scrollx, desc.scrolly)
+                self._layers.append(stm)
 
         for num, desc in enumerate(self._ldescs):
-            if desc.mode != ScrollMode.NONE and desc.relative > 0:
-                if isinstance(self._layers[num], cg.Layer):
-                    if isinstance(self._layers[desc.relative], cg.Layer):
-                        self._layers[num].relative(self._layers[desc.relative])
+            if desc.relative >= 0:
+                if desc.mode != ScrollMode.LAYER:
+                    if self._ldescs[desc.relative].mode == ScrollMode.LAYER:
+                        self._layers[num].layer.relative(self._layers[desc.relative].maplayer)
                     else:
-                        self._layers[num].relative(self._layers[desc.relative].maplayer)
+                        self._layers[num].layer.relative(self._layers[desc.relative].layer)
+                else:
+                    if self._ldescs[desc.relative].mode == ScrollMode.LAYER:
+                        self._layers[num].maplayer.relative(self._layers[desc.relative].maplayer)
+                    else:
+                        self._layers[num].maplayer.relative(self._layers[desc.relative].layer)
 
         self._set_all()
 
         self._dl = display.DisplayList(self._state.ll)
         for layer in self._layers:
-            if isinstance(layer, cg.Layer):
-                self._dl.append(layer)
-            else:
-                self._dl.append(layer.draw)
+            self._dl.append(layer.draw)
 
     def __init__(self, state, caller, x, y):
         self._state = state
