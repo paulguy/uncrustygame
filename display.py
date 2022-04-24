@@ -212,7 +212,7 @@ class DisplayList():
         elif item is not None and \
            not isinstance(item, (Renderable, cg.Layer, int)) and \
            not callable(item):
-            raise TypeError("item must be DisplayList or Layer or int or None")
+            raise TypeError("item must be DisplayList or Layer or int or None or callable")
 
     def scroll(self, x, y):
         self._xscroll = int(x)
@@ -373,6 +373,7 @@ class ScrollingTilemap():
         self._mapl = cg.Layer(ll, None, "{}x{} Scrolling Relative Layer {}".format(self._pvw, self._pvh, tileset.name()))
         self._mapl.relative(self._winl)
         self.scroll(0, 0)
+        self.scale(1.0, 1.0)
         self._vmx = self._newx
         self._vmy = self._newy
         # don't bother sanity checking the buffer, just try to update it which
@@ -409,6 +410,11 @@ class ScrollingTilemap():
     def scroll(self, x, y):
         self._newx = int(x)
         self._newy = int(y)
+
+    def scale(self, x, y):
+        self._xscale = x
+        self._yscale = y
+        self._l.scale(x, y)
 
     def _setmap(self, x, y, vmx=0, vmy=0, w=0, h=0):
         self._tm.map(vmx, vmy, self._imw, w, h, self._tilemap[y * self._mw + x:])
@@ -517,7 +523,7 @@ class ScrollingTilemap():
         xwin = self._pvw
         xscroll = self._newx - (nx * self._tw)
         if self._newx < 0:
-            xpos = -self._newx
+            xpos = int(-self._newx * self._xscale)
             xwin = self._pvw + self._newx
             xscroll = 0
         if xscroll + xwin > self._imw * self._tw:
@@ -526,7 +532,7 @@ class ScrollingTilemap():
         ywin = self._pvh
         yscroll = self._newy - (ny * self._th)
         if self._newy < 0:
-            ypos = -self._newy
+            ypos = int(-self._newy * self._yscale)
             ywin = self._pvh + self._newy
             yscroll = 0
         if yscroll + ywin > self._imh * self._th:
@@ -536,7 +542,7 @@ class ScrollingTilemap():
         self._l.pos(xpos, ypos)
         self._l.window(xwin, ywin)
         self._l.scroll_pos(xscroll, yscroll)
-        self._mapl.pos(-self._newx, -self._newy)
+        self._mapl.pos(int(self._newx * -self._xscale), int(self._newy * -self._yscale))
 
     def updateregion(self, x, y, w, h):
         vmx = 0

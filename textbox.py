@@ -518,7 +518,8 @@ class Menu():
             raise ValueError("Value is longer than max value length.")
         val = array.array('I', val.encode(self._font.codec))
         self._pad_value(val, self._entries[num].maxlen)
-        self._valtbs[self._selection].put_text((val,), 0, 0)
+        self._entries[num].value = val
+        self._valtbs[num].put_text((val,), 0, 0)
 
     def _update_curvalue(self):
         self._valtbs[self._selection].put_text((self._curvalue[self._curpos:],), self._curpos, 0)

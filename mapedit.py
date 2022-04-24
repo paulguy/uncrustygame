@@ -2357,6 +2357,8 @@ class LayersScreen():
         self._error = 0.0
         self._errortext = ''
         self._errorbox = None
+        self._posx = 0
+        self._posy = 0
         self._build_screen()
 
     def _set_error(self, text):
@@ -2479,7 +2481,12 @@ class LayersScreen():
         self._open_settings(len(self._descs) - 1)
 
     def _show(self, priv, sel):
-        pass
+        preview = PreviewScreen(self._state, self, self._posx, self._posy)
+        self._state.active_screen(preview)
+
+    def setpos(self, x, y):
+        self._posx = x
+        self._posy = y
 
     def apply(self, desc):
         if desc.name != self._descs[self._selected].name:
@@ -2501,6 +2508,14 @@ class LayersScreen():
     @property
     def tmdescs(self):
         return self._caller.descs
+
+    @property
+    def editors(self):
+        return self._caller.editors
+
+    @property
+    def selected(self):
+        return self._selected
 
 class LayerScreenSelecting(Enum):
     NONE = 0
@@ -2613,12 +2628,17 @@ class LayerScreen():
             if self._selection is not None:
                 self._ldesc.tilemap = self._selection - 1
                 self._ldesc.vw, self._ldesc.vh = self._get_tmdims()
+                self._menu.update_value(4, str(self._ldesc.vw))
+                self._menu.update_value(5, str(self._ldesc.vh))
             else:
                 self._ldesc.tilemap = -1
             self._menu.update_value(2, self._get_tmname())
         elif self._selecting == LayerScreenSelecting.RELATIVE:
             if self._selection is not None:
-                self._ldesc.relative = self._selection - 1
+                if self._selection - 1 == self._caller.selected:
+                    self._set_error("Layer can't be relative to self.")
+                else:
+                    self._ldesc.relative = self._selection - 1
             else:
                 self._ldesc.tilemap = -1
             self._menu.update_value(3, self._get_relname())
@@ -2682,15 +2702,17 @@ class LayerScreen():
         self._selection = sel
 
     def _select_tilemap(self, priv, sel, val):
-        tilesets = [desc.name for desc in self._caller.tmdescs]
-        tilesets.insert(0, "None")
-        promptscreen = PromptScreen(self._state, self, "Select Tileset", tilesets, default=self._ldesc.tilemap + 1)
+        tilemaps = [desc.name for desc in self._caller.tmdescs]
+        tilemaps.insert(0, "None")
+        promptscreen = PromptScreen(self._state, self, "Select Tilemap", tilemaps, default=self._ldesc.tilemap + 1)
         self._state.active_screen(promptscreen)
         self._selecting = LayerScreenSelecting.TILEMAP
         return None
 
     def _select_relative(self, priv, sel, val):
         layers = [desc.name for desc in self._caller.layers]
+        # make sure the name in the menu reflects a name set but not applied
+        layers[self._caller.selected] = self._ldesc.name
         layers.insert(0, "None")
         promptscreen = PromptScreen(self._state, self, "Select Layer", layers, default=self._ldesc.relative + 1)
         self._state.active_screen(promptscreen)
@@ -2777,35 +2799,6 @@ class LayerScreen():
         self._caller.delete()
         self._state.active_screen(self._caller)
 
-class TilemapDesc():
-    name : str = "Untitled Tilemap"
-    filename : str = FONT_FILENAME
-    mapname : str = FONT_MAPNAME
-    tw : int = FONT_WIDTH
-    th : int = FONT_HEIGHT
-    mw : int = 64
-    mh : int = 64
-    codec : str = None
-    wscale : float = FONT_SCALE
-    hscale : float = FONT_SCALE
-
-class ScrollMode(Enum):
-    NONE = 0
-    LAYER = 1
-    POSITION = 2
-
-class LayerDesc():
-    name : str = "Untitled Layer"
-    tilemap : int = -1 
-    relative : int = -1
-    vw : int = 1
-    vh : int = 1
-    scalex : float = 1.0
-    scaley : float = 1.0
-    mode : ScrollMode = ScrollMode.NONE
-    posx : int = 0
-    posy : int = 0
-
 class PreviewScreen():
     def _get_tileset(self, num):
         return self._state.tileset(self._tmdescs[num].filename,
@@ -2814,18 +2807,20 @@ class PreviewScreen():
 
     def _set_all(self):
         for num, desc in enumerate(self._ldescs):
-            if desc.type != ScrollMode.NONE:
+            if desc.mode != ScrollMode.NONE:
                 if isinstance(self._layers[num], cg.Layer):
-                    self._layers[num].pos(desc.posx + self._posx,
-                                          desc.posy + self._posy)
+                    self._layers[num].pos(-(desc.posx + int(self._posx)),
+                                          -(desc.posy + int(self._posy)))
                 else:
-                    pass
+                    self._layers[num].scroll(desc.posx + int(self._posx),
+                                             desc.posy + int(self._posy))
+                    self._layers[num].update()
 
     def _build_screen(self):
         self._vw, self._vh = self._state.window
         self._layers = list()
         for desc in self._ldescs:
-            if desc._tilemap < 0:
+            if desc.tilemap < 0:
                 self._layers.append(cg.Layer(self._state.ll, None, "Preview Layer {}".format(desc.name)))
             else:
                 if desc.mode == ScrollMode.LAYER:
@@ -2837,23 +2832,23 @@ class PreviewScreen():
                         vph = self._vh / desc.scaley
                     stm = display.ScrollingTilemap(self._state.ll,
                         self._get_tileset(desc.tilemap),
-                        self._tilemaps[desc.tilemap],
+                        self._maps[desc.tilemap][0],
                         vpw, vph,
                         self._tmdescs[desc.tilemap].mw,
                         self._tmdescs[desc.tilemap].mh,
-                        flags=self._flagses[desc.tilemap],
-                        colormod=self._colormods[desc.tilemap],
+                        flags=self._maps[desc.tilemap][1],
+                        colormod=self._maps[desc.tilemap][2],
                         optimize=True)
-                    stm.internal.scale(desc.scalex, desc.scalex)
+                    stm.scale(desc.scalex, desc.scaley)
                     self._layers.append(stm)
                 else:
                     mw = self._tmdescs[desc.tilemap].mw
                     mh = self._tmdescs[desc.tilemap].mh
                     tm = self._get_tileset(desc.tilemap).tilemap(mw, mh,
                         "Preview Tilemap {}".format(desc.name))
-                    tm.map(0, 0, mw, mw, mh, self._tilemaps[desc.tilemap])
-                    tm.attr_flags(0, 0, mw, mw, mh, self._flagses[desc.tilemap])
-                    tm.attr_colormod(0, 0, mw, mw, mh, self._colormods[desc.tilemap])
+                    tm.map(0, 0, mw, mw, mh, self._maps[desc.tilemap][0])
+                    tm.attr_flags(0, 0, mw, mw, mh, self._maps[desc.tilemap][1])
+                    tm.attr_colormod(0, 0, mw, mw, mh, self._maps[desc.tilemap][2])
                     tm.update()
                     l = tm.layer("Preview Layer {}".format(desc.name))
                     l.window(desc.vw, desc.vh)
@@ -2870,19 +2865,30 @@ class PreviewScreen():
                     else:
                         self._layers[num].relative(self._layers[desc.relative].maplayer)
 
-    def __init__(self, state, ldescs, tmdescs, tilesets, tilemaps, flagses, colormods, x, y):
+        self._set_all()
+
+        self._dl = display.DisplayList(self._state.ll)
+        for layer in self._layers:
+            if isinstance(layer, cg.Layer):
+                self._dl.append(layer)
+            else:
+                self._dl.append(layer.draw)
+
+    def __init__(self, state, caller, x, y):
         self._state = state
-        self._ldescs = ldescs
-        self._tmdescs = tmdescs
-        self._tilesets = tilesets
-        self._tilemaps = tilemaps
+        self._caller = caller
+        self._ldescs = caller.layers
+        self._tmdescs = caller.tmdescs
+        self._maps = [(editor.tilemap, editor.flags, editor.colormod) for editor in caller.editors]
+        self._xspeed = 0.0
+        self._yspeed = 0.0
         self._posx = x
         self._posy = y
         self._build_screen()
 
     def resize(self):
         vw, vh = self._state.window
-        if self._vw != vw or self._vw != vh:
+        if self._vw != vw or self._vh != vh:
             self._build_screen()
 
     def active(self):
@@ -2892,51 +2898,62 @@ class PreviewScreen():
     def dl(self):
         return self._dl
 
+    def _movex(self, val):
+        if val < 0:
+            self._xspeed = -1.0
+        elif val > 0:
+            self._xspeed = 1.0
+        else:
+            self._xspeed = 0.0
+
+    def _movey(self, val):
+        if val < 0:
+            self._yspeed = -1.0
+        elif val > 0:
+            self._yspeed = 1.0
+        else:
+            self._yspeed = 0.0
+
     def input(self, event):
-        if event.type == SDL_TEXTINPUT:
-            self._menu.text_event(event)
-        elif event.type == SDL_KEYDOWN:
-            self._error = 0.0
+        if event.type == SDL_KEYDOWN and event.key.repeat == 0:
             if event.key.keysym.sym == SDLK_UP:
-                self._menu.up()
+                self._movey(-1)
             elif event.key.keysym.sym == SDLK_DOWN:
-                self._menu.down()
+                self._movey(1)
             elif event.key.keysym.sym == SDLK_LEFT:
-                self._menu.left()
+                self._movex(-1)
             elif event.key.keysym.sym == SDLK_RIGHT:
-                self._menu.right()
-            elif event.key.keysym.sym == SDLK_BACKSPACE:
-                self._menu.backspace()
-            elif event.key.keysym.sym == SDLK_DELETE:
-                self._menu.delete()
-            elif event.key.keysym.sym == SDLK_RETURN:
-                self._menu.activate_selection()
+                self._movex(1)
+            elif event.key.keysym.sym == SDLK_r:
+                self._posx = 0
+                self._posy = 0
+                self._set_all()
             elif event.key.keysym.sym == SDLK_ESCAPE:
-                if not self._menu.cancel_entry():
-                    self._state.active_screen(self._caller)
+                self._caller.setpos(self._posx, self._posy)
+                self._state.active_screen(self._caller)
+        elif event.type == SDL_KEYUP:
+            if event.key.keysym.sym == SDLK_UP:
+                self._movey(0)
+            elif event.key.keysym.sym == SDLK_DOWN:
+                self._movey(0)
+            elif event.key.keysym.sym == SDLK_LEFT:
+                self._movex(0)
+            elif event.key.keysym.sym == SDLK_RIGHT:
+                self._movex(0)
 
     def update(self, time):
-        if self._error > 0.0:
-            if self._errorbox is None:
-                if len(self._errortext) == 0:
-                    self._errortext = "Unknown error"
-                lines, _, w, h = textbox.wrap_text(self._errortext, self._fmw - 2, 10)
-                self._errorbox = textbox.TextBox(self._state.ll,
-                                                 w * self._fw, h * self._fh,
-                                                 w, h,
-                                                 self._state.font)
-                self._errorbox.put_text(lines, 0, 0)
-                self._errorbox.layer.relative(self._titletb.layer)
-                self._errorbox.layer.pos(0, int((self._fmh - h - 2) * self._fh))
-                self._dl.replace(self._errorindex, self._errorbox.draw)
-            self._error -= time
-        if self._error <= 0.0 and self._errorbox is not None:
-            self._dl.replace(self._errorindex, None)
-            self._errorbox = None
-            self._errortext = ''
-
-        self._cursorrad, color = update_cursor_effect(self._cursorrad, time)
-        self._cursorl.colormod(color)
+        if self._xspeed < 0:
+            self._xspeed -= time
+        elif self._xspeed > 0:
+            self._xspeed += time
+        if self._yspeed < 0:
+            self._yspeed -= time
+        elif self._yspeed > 0:
+            self._yspeed += time
+        if self._xspeed != 0 or self._yspeed != 0:
+            self._posx += self._xspeed
+            self._posy += self._yspeed
+            self._set_all()
 
 
 class MapeditState():
@@ -3079,9 +3096,6 @@ class MapeditState():
 
     def tileset(self, filename, width, height):
         return self._tilesets[TilesetDesc(filename, width, height)]
-
-    def add_tilemap(self, tm, name):
-        self._tilemaps[name] = tm
 
     def changed(self):
         self._renders = FULL_RENDERS
