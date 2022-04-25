@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from traceback import print_tb
 from enum import Enum
+import json
 import display
 import textbox
 import copy
@@ -528,6 +529,8 @@ class ProjectScreen():
         self._menu.add_item("New Tilemap", onActivate=self._new_tilemap)
         self._menu.add_item("UI Scale", value=str(self._state.font_scale), maxlen=4, onEnter=self._set_scale)
         self._menu.add_item("Preview Manager", onActivate=self._open_layers)
+        self._menu.add_item("Project Name", value=self._name, maxlen=255, onEnter=self._setname)
+        self._menu.add_item("Save", onActivate=self._save)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
@@ -539,10 +542,12 @@ class ProjectScreen():
 
     def __init__(self, state):
         self._state = state
+        self._name = "Untitled Project"
         self._descs = list()
         self._editors = list()
         self._selected = 0
         self._quitting = False
+        self._saving = False
         self._deleting = False
         self._moving = -1
         self._cursorrad = 0.0
@@ -592,10 +597,14 @@ class ProjectScreen():
             self._layers.delete_tilemap(self._selected)
         elif self._moving >= 0:
             self._set_banner("Swap with?")
+        elif self._saving:
+            self._saving = False
+            self._do_save()
 
     def set_option(self, sel):
-        if sel == 0:
-            self._quitting = True
+        if sel != 0:
+            self._quitting = False
+            self._saving = False
 
     def input(self, event):
         if event.type == SDL_TEXTINPUT:
@@ -627,6 +636,7 @@ class ProjectScreen():
                         self._moving = -1
                         self._set_banner(ProjectScreen.DEFAULT_BANNER)
                     else:
+                        self._quitting = True
                         prompt = PromptScreen(self._state, self, "Quit?", ("yes", "no"), message="Any unsaved changes will be lost, are you sure?", default=1)
                         self._state.active_screen(prompt)
 
@@ -791,6 +801,104 @@ class ProjectScreen():
     def editors(self):
         return self._editors
 
+    def _setname(self, priv, sel, val):
+        name = val.lstrip().rstrip()
+        if len(name) == 0:
+            return None
+        self._name = name
+        return self._name
+
+    def _get_filename(self):
+        return "{}.json".format(self._name)
+
+    def _save(self, priv, sel):
+        flist = list()
+        try:
+            filename = self._get_filename()
+            file = open(filename, "r")
+            file.close()
+            flist.append(filename)
+        except OSError:
+            pass
+        for num in range(len(self._editors)):
+            try:
+                filename = "{} tilemap{}.bin".format(self._name, num)
+                file = open(filename, 'r')
+                file.close()
+                flist.append(filename)
+            except OSError:
+                pass
+            try:
+                filename = "{} flags{}.bin".format(self._name, num)
+                file = open(filename, 'r')
+                file.close()
+                flist.append(filename)
+            except OSError:
+                pass
+            try:
+                filename = "{} colormod{}.bin".format(self._name, num)
+                file = open(filename, 'r')
+                file.close()
+                flist.append(filename)
+            except OSError:
+                pass
+        if len(flist) == 0:
+            self._do_save()
+        else:
+            self._saving = True
+            liststr = "{}".format(flist[0])
+            for name in flist[1:]:
+                liststr = "{}, {}".format(liststr, name)
+            prompt = PromptScreen(self._state, self, "Save?", ("yes", "no"), message="The following files exist and would be overwritten: {}".format(liststr), default=1)
+            self._state.active_screen(prompt)
+
+    def _do_save(self):
+        savedata = {'ui_scale': self._state.font_scale}
+        pscrollx, pscrolly = self._layers.scroll_pos
+        savedata['preview_scroll_x'] = pscrollx
+        savedata['preview_scroll_y'] = pscrolly
+        tilemaps = list()
+        for desc in self._descs:
+            tilemaps.append({'name': desc.name,
+                             'gfx': desc.filename,
+                             'unimap': desc.mapname,
+                             'tile_width': desc.tw,
+                             'tile_height': desc.th,
+                             'map_width': desc.mw,
+                             'map_height': desc.mh,
+                             'x_scale': desc.wscale,
+                             'y_scale': desc.hscale})
+        savedata['tilemaps'] = tilemaps
+        layers = list()
+        for layer in self._layers.layers:
+            mode = 'NONE'
+            if layer.mode == ScrollMode.POSITION:
+                mode = 'POSITION'
+            elif layer.mode == ScrollMode.LAYER:
+                mode = 'LAYER'
+            layers.append({'name': layer.name,
+                           'tilemap': layer.tilemap,
+                           'relative': layer.relative,
+                           'view_width': layer.vw,
+                           'view_height': layer.vh,
+                           'x_scale': layer.scalex,
+                           'y_scale': layer.scaley,
+                           'mode': mode,
+                           'x_pos': layer.posx,
+                           'y_pos': layer.posy,
+                           'x_scroll': layer.scrollx,
+                           'y_scroll': layer.scrolly})
+        savedata['layers'] = layers
+        with open("{}.json".format(self._name), 'w') as outfile:
+            json.dump(savedata, outfile, indent=4)
+        for num, editor in enumerate(self._editors):
+            with open("{} tilemap{}.bin".format(self._name, num), 'wb') as outfile:
+                editor.tilemap.tofile(outfile)
+            with open("{} flags{}.bin".format(self._name, num), 'wb') as outfile:
+                editor.flags.tofile(outfile)
+            with open("{} colormod{}.bin".format(self._name, num), 'wb') as outfile:
+                editor.colormod.tofile(outfile)
+
 class TilemapScreen():
     def _build_screen(self):
         self._vw, self._vh = self._state.window
@@ -934,7 +1042,10 @@ class TilemapScreen():
         self._cursorl.colormod(color)
 
     def _setname(self, priv, sel, val):
-        self._tmdesc.name = val.lstrip().rstrip()
+        name = val.lstrip().rstrip()
+        if len(name) == 0:
+            return None
+        self._tmdesc.name = name
         return self._tmdesc.name
 
     def _setfilename(self, priv, sel, val):
@@ -2574,6 +2685,10 @@ class LayersScreen():
             elif desc.tilemap == tm2:
                 desc.tilemap = tm1
 
+    @property
+    def scroll_pos(self):
+        return self._posx, self._posy
+
 class LayerScreenSelecting(Enum):
     NONE = 0
     TILEMAP = 1
@@ -2605,6 +2720,12 @@ class LayerScreen():
                 self._caller.tmdescs[self._ldesc.tilemap].tw), \
                (self._caller.tmdescs[self._ldesc.tilemap].mh *
                 self._caller.tmdescs[self._ldesc.tilemap].th), \
+
+    def _get_tmscale(self):
+        if self._ldesc.tilemap < 0:
+            return 1.0, 1.0
+        return self._caller.tmdescs[self._ldesc.tilemap].hscale, \
+               self._caller.tmdescs[self._ldesc.tilemap].wscale
 
     def _get_relname(self):
         if self._ldesc.relative < 0:
@@ -2689,6 +2810,9 @@ class LayerScreen():
                 self._ldesc.vw, self._ldesc.vh = self._get_tmdims()
                 self._menu.update_value(4, str(self._ldesc.vw))
                 self._menu.update_value(5, str(self._ldesc.vh))
+                self._ldesc.scalex, self._ldesc.scaley = self._get_tmscale()
+                self._menu.update_value(6, str(self._ldesc.scalex))
+                self._menu.update_value(7, str(self._ldesc.scaley))
             else:
                 self._ldesc.tilemap = -1
             self._menu.update_value(2, self._get_tmname())

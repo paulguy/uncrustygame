@@ -10,6 +10,10 @@ from typing import Callable
 
 MENU_DEFAULT_CURSOR = '▶'
 
+#TODO:
+# Store original string and tilemap string simultaneously, because the
+# conversion is lossy and some latin characters turn in to cyrillic.
+
 @dataclass
 class TilesetCodec():
     maxval : int
