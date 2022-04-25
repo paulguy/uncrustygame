@@ -15,15 +15,11 @@ import math
 import effects
 
 #TODO:
-# investigate key repeat with holding a drawing key
-# Preview of multiple layers with independent scale/scroll speed/center
 # layer/project Save/Load
-# mouse support?
+# mouse support
 
 # debugging options
-# enable SDL render batching, not very useful to disable but can be useful to
-# see what if any difference it makes
-# update: it actually makes a lot of difference
+# enable SDL render batching, no idea why you'd disable it
 RENDERBATCHING=True
 # enable tracing of display list processing
 TRACEVIDEO=False
@@ -593,6 +589,7 @@ class ProjectScreen():
             del self._editors[self._selected]
             self._menu.remove(self._selected)
             self._update_menu()
+            self._layers.delete_tilemap(self._selected)
         elif self._moving >= 0:
             self._set_banner("Swap with?")
 
@@ -688,6 +685,7 @@ class ProjectScreen():
             self._menu.insert_item(moving, desc1.name, onActivate=self._open_tilemap)
             self._update_menu()
             self._set_banner(ProjectScreen.DEFAULT_BANNER)
+            self._layers.swap_tilemaps(sel, moving)
         else:
             try:
                 self._open_settings(sel)
@@ -770,6 +768,18 @@ class ProjectScreen():
             raise ValueError("Item not created yet, settings must be Applied at least once.")
         self._moving = self._selected
 
+    def copy(self):
+        if self._selected >= len(self._editors):
+            raise ValueError("Item not created yet, settings must be Applied at least once.")
+        desc = copy.deepcopy(self._descs[self._selected])
+        self._descs.append(desc)
+        self._editors.append(EditScreen(self._state, self, desc,
+            tilemap=copy.copy(self._editors[self._selected].tilemap),
+            flags=copy.copy(self._editors[self._selected].flags),
+            colormod=copy.copy(self._editors[self._selected].colormod)))
+        self._menu.insert_item(len(self._descs) - 1, desc.name, onActivate=self._open_tilemap)
+        self._update_menu()
+
     def _open_layers(self, priv, sel):
         self._state.active_screen(self._layers)
 
@@ -812,6 +822,7 @@ class TilemapScreen():
         self._menu.add_item("View Y Scale", value=str(self._caller.hscale), maxlen=5, onEnter=self._set_hscale)
         self._menu.add_item("Move", onActivate=self._move)
         self._menu.add_item("Delete", onActivate=self._delete)
+        self._menu.add_item("Copy", onActivate=self._copy)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
@@ -1047,6 +1058,7 @@ class TilemapScreen():
     def _move(self, priv, sel):
         try:
             self._caller.move()
+            self._state.active_screen(self._caller)
         except Exception as e:
             print(e)
             print_tb(e.__traceback__)
@@ -1054,14 +1066,24 @@ class TilemapScreen():
                 self._set_error("Couldn't move: {}: {}".format(e, get_error()))
             else:
                 self._set_error("Couldn't move: {}".format(e))
-            return
-        self._state.active_screen(self._caller)
 
     def _delete(self, priv, sel):
         self._deleting = True
         prompt = PromptScreen(self._state, self, "Continue?", ("yes", "no"), message="This operation will delete this tilemap and it cannot be reversed, are you sure?", default=1)
         self._state.active_screen(prompt)
 
+    def _copy(self, priv, sel):
+        try:
+            self._caller.copy()
+            self._state.active_screen(self._caller)
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            if isinstance(e, cg.CrustyException):
+                self._set_error("Couldn't copy: {}: {}".format(e, get_error()))
+            else:
+                self._set_error("Couldn't copy: {}".format(e))
+        
 class EditScreen():
     MAX_UNDO=100
 
@@ -1309,7 +1331,7 @@ class EditScreen():
         self._dl.replace(self._sidebarindex, self._sidebar.dl)
         self._make_selectscreen()
 
-    def __init__(self, state, caller, tmdesc):
+    def __init__(self, state, caller, tmdesc, tilemap=None, flags=None, colormod=None):
         self._state = state
         self._caller = caller
         self._cursorrad = 0.0
@@ -1344,9 +1366,18 @@ class EditScreen():
         self._set_tmdesc(tmdesc)
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
         self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
-        self._tilemap = array.array('I', itertools.repeat(0, self._tmdesc.mw * self._tmdesc.mh))
-        self._flags = array.array('I', itertools.repeat(self._attrib, self._tmdesc.mw * self._tmdesc.mh))
-        self._colormod = array.array('I', itertools.repeat(self._color, self._tmdesc.mw * self._tmdesc.mh))
+        if tilemap is None:
+            self._tilemap = array.array('I', itertools.repeat(0, self._tmdesc.mw * self._tmdesc.mh))
+        else:
+            self._tilemap = tilemap
+        if flags is None:
+            self._flags = array.array('I', itertools.repeat(self._attrib, self._tmdesc.mw * self._tmdesc.mh))
+        else:
+            self._flags = flags
+        if colormod is None:
+            self._colormod = array.array('I', itertools.repeat(self._color, self._tmdesc.mw * self._tmdesc.mh))
+        else:
+            self._colormod = colormod
         self._errordl = display.DisplayList(self._state.ll)
         self._errordl.append(lambda: self._errorbox.layer.pos(self._fw + 1, self._errorh + 1))
         self._errordl.append(lambda: self._errorbox.layer.colormod(display.make_color(0, 0, 0, SDL_ALPHA_OPAQUE)))
@@ -2530,6 +2561,18 @@ class LayersScreen():
     @property
     def selected(self):
         return self._selected
+
+    def delete_tilemap(self, tm):
+        for desc in self._descs:
+            if desc.tilemap == tm:
+                desc.tilemap = -1
+
+    def swap_tilemaps(self, tm1, tm2):
+        for desc in self._descs:
+            if desc.tilemap == tm1:
+                desc.tilemap = tm2
+            elif desc.tilemap == tm2:
+                desc.tilemap = tm1
 
 class LayerScreenSelecting(Enum):
     NONE = 0
