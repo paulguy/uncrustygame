@@ -10,10 +10,6 @@ from typing import Callable
 
 MENU_DEFAULT_CURSOR = '▶'
 
-#TODO:
-# Store original string and tilemap string simultaneously, because the
-# conversion is lossy and some latin characters turn in to cyrillic.
-
 @dataclass
 class TilesetCodec():
     maxval : int
@@ -263,7 +259,8 @@ class TextBox():
 @dataclass
 class MenuItem():
     label: str
-    value: str
+    value_u: str
+    value_t: str
     maxlen: int
     onEnter: Callable[[object, int, str], str]
     onActivate: Callable[[object, int], None]
@@ -290,7 +287,8 @@ class Menu():
         self._cursorl = None
         self._updated = False
         self._longestlabel = 0
-        self._curvalue = None
+        self._curvalue_u = None
+        self._curvalue_t = None
         self._curpos = 0
         self._dl = display.DisplayList(self._ll, None)
         self._tbindex = self._dl.append(None)
@@ -311,28 +309,31 @@ class Menu():
         return self._selection
 
     def _pad_value(self, value, maxlen):
-        padding = array.array('I', itertools.repeat(self._space, maxlen - len(value)))
+        padding = array.array('u', itertools.repeat(' ', maxlen - len(value)))
         value.extend(padding)
 
     def _init_item(self, pos, label, value, maxlen, onEnter, onActivate, onChange):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             raise Exception("Editing the menu while text editing is unsupported.")
         if onEnter != None and onActivate != None:
             raise ValueError("Only one of onEnter and onActivate must be defined")
         if len(label) > self._vw - 1:
             raise ValueError("Label length longer than menu width.")
 
+        value_u = None
+        value_t = None
         if value is not None:
             if maxlen is None:
                 maxlen = len(value)
             else:
                 if maxlen < len(value):
                     raise ValueError("Maximum value length is less than initial value length.")
-            value = array.array('I', value.encode(self._font.codec))
-            self._pad_value(value, maxlen)
+            value_u = array.array('u', value)
+            self._pad_value(value_u, maxlen)
+            value_t = array.array('I', value_u.tounicode().encode(self._font.codec))
 
         label = array.array('I', label.encode(self._font.codec))
-        self._entries[pos] = MenuItem(label, value, maxlen, onEnter, onActivate, onChange)
+        self._entries[pos] = MenuItem(label, value_u, value_t, maxlen, onEnter, onActivate, onChange)
         self._updated = False
 
     def add_item(self, label, value=None, maxlen=None, onEnter=None, onActivate=None, onChange=None):
@@ -356,25 +357,25 @@ class Menu():
             raise e
 
     def remove(self, item):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             raise Exception("Editing the menu while text editing is unsupported.")
         del self._entries[item]
         del self._valtbs[item]
         self._updated = False
 
     def _update_cursor(self):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             self._cursorl.rotation(-90)
             pos = self._curpos
             valuelen = self._entries[self._selection].width
             halflen = valuelen // 2
             if self._curpos > halflen:
-                if self._curpos < len(self._curvalue) - halflen:
+                if self._curpos < len(self._curvalue_u) - halflen:
                     self._valtbs[self._selection].scroll((self._curpos - halflen) * self._tw, 0)
                     pos = halflen
                 else:
-                    self._valtbs[self._selection].scroll((len(self._curvalue) - valuelen) * self._tw, 0)
-                    pos = self._curpos - (len(self._curvalue) - valuelen)
+                    self._valtbs[self._selection].scroll((len(self._curvalue_u) - valuelen) * self._tw, 0)
+                    pos = self._curpos - (len(self._curvalue_u) - valuelen)
             else:
                 self._valtbs[self._selection].scroll(0, 0)
             self._cursorl.pos((1 + self._longestlabel + 1 + pos) * self._tw,
@@ -403,7 +404,7 @@ class Menu():
             self._cursorl.pos(0, y * self._spacing * self._th)
 
     def update(self):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             raise Exception("Editing the menu while text editing is unsupported.")
         self._longestlabel = 0
         for entry in self._entries:
@@ -413,7 +414,7 @@ class Menu():
         valuelen = self._vw - 1 - 1 - self._longestlabel - 1
         if valuelen <= 0:
             for entry in self._entries:
-                if entry.value is not None:
+                if entry.value_u is not None:
                     raise ValueError("No space for values.")
 
         w = self._longestlabel
@@ -451,7 +452,7 @@ class Menu():
         for num, entry in enumerate(self._entries):
             self._tb.put_text((entry.label,), 1, num * self._spacing)
             self._valtbs[num] = None
-            if entry.value is not None:
+            if entry.value_u is not None:
                 entry.width = entry.maxlen
                 if entry.width > valuelen:
                     entry.width = valuelen
@@ -459,7 +460,7 @@ class Menu():
                                             entry.width * self._tw, 1 * self._th,
                                             entry.maxlen, 1,
                                             self._font)
-                self._valtbs[num].put_text((entry.value,), 0, 0)
+                self._valtbs[num].put_text((entry.value_t,), 0, 0)
                 self._valtbs[num].layer.relative(self._tb.layer)
 
         if self._selection >= len(self._entries):
@@ -468,8 +469,29 @@ class Menu():
         self._update_cursor()
         self._updated = True
 
+    def _refresh_value(self, pos=0):
+        self._valtbs[self._selection].put_text((self._curvalue_t[pos:],), pos, 0)
+
+    def _update_value(self, num, val):
+        value_u = array.array('u', val)
+        self._pad_value(value_u, self._entries[num].maxlen)
+        self._entries[num].value_u = value_u
+        self._entries[num].value_t = array.array('I', value_u.tounicode().encode(self._font.codec))
+        self._valtbs[num].put_text((self._entries[num].value_t,), 0, 0)
+
+    def _accept_value(self, val):
+        if val is None:
+            self.cancel_entry()
+            return
+        if len(val) > self._entries[self._selection].maxlen:
+            raise ValueError("Returned value longer than max value length")
+        self._curvalue_u = None
+        self._curvalue_t = None
+        self._update_value(self._selection, val)
+        self._update_cursor()
+
     def move_selection(self, movement):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             raise Exception("Moving the selection while text editing is unsupported.")
         if not self._updated:
             raise Exception("Menu must be updated to process movement.")
@@ -484,35 +506,35 @@ class Menu():
         self._update_cursor()
 
     def up(self):
-        if self._curvalue is None:
+        if self._curvalue_u is None:
             self.move_selection(-1)
 
     def down(self):
-        if self._curvalue is None:
+        if self._curvalue_u is None:
             self.move_selection(1)
 
     def left(self):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             if self._curpos > 0:
                 self._curpos -= 1
                 self._update_cursor()
         elif self._entries[self._selection].onChange is not None:
-            if self._entries[self._selection].value is None:
+            if self._entries[self._selection].value_u is None:
                 self._entries[self._selection].onChange(self._priv, self._selection, -1)
             else:
-                val = self._entries[self._selection].onChange(self._priv, self._selection, -1, self._entries[self._selection].value.tobytes().decode(self._font.codec))
+                val = self._entries[self._selection].onChange(self._priv, self._selection, -1, self._entries[self._selection].value_u.tounicode())
                 self._accept_value(val)
 
     def right(self):
-        if self._curvalue is not None:
-            if self._curpos < len(self._curvalue):
+        if self._curvalue_u is not None:
+            if self._curpos < len(self._curvalue_u):
                 self._curpos += 1
                 self._update_cursor()
         elif self._entries[self._selection].onChange is not None:
-            if self._entries[self._selection].value is None:
+            if self._entries[self._selection].value_u is None:
                 self._entries[self._selection].onChange(self._priv, self._selection, 1)
             else:
-                val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value.tobytes().decode(self._font.codec))
+                val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value_u.tounicode())
                 self._accept_value(val)
 
     def update_value(self, num, val):
@@ -520,70 +542,53 @@ class Menu():
             raise IndexError("Item has no value.")
         if len(val) > self._entries[num].maxlen:
             raise ValueError("Value is longer than max value length.")
-        val = array.array('I', val.encode(self._font.codec))
-        self._pad_value(val, self._entries[num].maxlen)
-        self._entries[num].value = val
-        self._valtbs[num].put_text((val,), 0, 0)
-
-    def _update_curvalue(self):
-        self._valtbs[self._selection].put_text((self._curvalue[self._curpos:],), self._curpos, 0)
+        self._update_value(num, val)
 
     def backspace(self):
-        if self._curvalue is not None:
+        if self._curvalue_u is not None:
             if self._curpos > 0:
-                self._curvalue[self._curpos-1:-1] = self._curvalue[self._curpos:]
-                self._curvalue[-1] = ord(' ')
+                self._curvalue_u[self._curpos-1:-1] = self._curvalue_u[self._curpos:]
+                self._curvalue_u[-1] = ' '
+                self._curvalue_t[self._curpos-1:-1] = self._curvalue_t[self._curpos:]
+                self._curvalue_t[-1] = self._space
                 self._curpos -= 1
-                self._update_curvalue()
+                self._refresh_value(self._curpos)
                 self._update_cursor()
 
     def delete(self):
-        if self._curvalue is not None:
-            if self._curpos + 1 < len(self._curvalue):
-                self._curvalue[self._curpos:-1] = self._curvalue[self._curpos+1:]
-            self._curvalue[-1] = ord(' ')
-            self._update_curvalue()
-
-    def _accept_value(self, val):
-        if val is None:
-            self.cancel_entry()
-            return
-        if len(val) > self._entries[self._selection].maxlen:
-            raise ValueError("Returned value longer than max value length")
-        self._curvalue = array.array('I', val.encode(self._font.codec))
-        self._pad_value(self._curvalue, self._entries[self._selection].maxlen)
-        self._curpos = 0
-        self._update_curvalue()
-        self._update_cursor()
-        self._entries[self._selection].value = self._curvalue
-        self._curvalue = None
-        self._update_cursor()
+        if self._curvalue_u is not None:
+            if self._curpos + 1 < len(self._curvalue_u):
+                self._curvalue_u[self._curpos:-1] = self._curvalue_u[self._curpos+1:]
+                self._curvalue_t[self._curpos:-1] = self._curvalue_t[self._curpos+1:]
+            self._curvalue_u[-1] = ' '
+            self._curvalue_t[-1] = self._space
+            self._refresh_value(self._curpos)
 
     def activate_selection(self):
         if not self._updated:
             raise Exception("Menu must be updated to process movement.")
 
-        if self._curvalue is not None:
-            val = self._entries[self._selection].onEnter(self._priv, self._selection, self._curvalue.tobytes().decode(self._font.codec))
+        if self._curvalue_u is not None:
+            val = self._entries[self._selection].onEnter(self._priv, self._selection, self._curvalue_u.tounicode())
             self._accept_value(val)
         elif self._entries[self._selection].onActivate is not None:
-            if self._entries[self._selection].value is None:
+            if self._entries[self._selection].value_u is None:
                 self._entries[self._selection].onActivate(self._priv, self._selection)
             else:
-                val = self._entries[self._selection].onActivate(self._priv, self._selection, self._entries[self._selection].value.tobytes().decode(self._font.codec))
+                val = self._entries[self._selection].onActivate(self._priv, self._selection, self._entries[self._selection].value_u.tounicode())
                 self._accept_value(val)
         elif self._entries[self._selection].onEnter is not None:
-            self._curvalue = copy.copy(self._entries[self._selection].value)
+            self._curvalue_u = copy.copy(self._entries[self._selection].value_u)
+            self._curvalue_t = copy.copy(self._entries[self._selection].value_t)
             self._curpos = 0
             self._update_cursor()
 
     def cancel_entry(self):
-        if self._curvalue is not None:
-            self._curvalue = self._entries[self._selection].value
+        if self._curvalue_u is not None:
+            self._curvalue_u = None
+            self._curvalue_t = None
+            self._valtbs[self._selection].put_text((self._entries[self._selection].value_t,), 0, 0)
             self._curpos = 0
-            self._update_curvalue()
-            self._update_cursor()
-            self._curvalue = None
             self._update_cursor()
             return True
         else:
@@ -592,11 +597,20 @@ class Menu():
     def text_event(self, event):
         if not self._updated:
             raise Exception("Menu must be updated to process movement.")
-        if self._curvalue is not None:
-            if self._curpos < len(self._curvalue):
-                char = event.text.text.decode('utf-8')
-                self._curvalue[self._curpos+1:] = self._curvalue[self._curpos:-1]
-                self._curvalue[self._curpos:self._curpos+1] = array.array('I', char.encode(self._font.codec))
-                self._update_curvalue()
-                self._curpos += 1
-                self._update_cursor()
+        if self._curvalue_u is not None:
+            char = event.text.text.decode('utf-8')
+            val_u = array.array('u', char)
+            val_t = array.array('I', char.encode(self._font.codec))
+            added = 0
+            for num in range(len(val_u)):
+                if self._curpos < len(self._curvalue_u):
+                    self._curvalue_u[self._curpos+num+1:] = self._curvalue_u[self._curpos+num:-1]
+                    self._curvalue_u[self._curpos+num] = val_u[num]
+                    self._curvalue_t[self._curpos+num+1:] = self._curvalue_t[self._curpos+num:-1]
+                    self._curvalue_t[self._curpos+num] = val_t[num]
+                    added += 1
+                else:
+                    break
+            self._refresh_value(self._curpos)
+            self._curpos += added
+            self._update_cursor()

@@ -1,7 +1,8 @@
 from sys import stdout
 import copy
 
-#TODO: store channel number with named (or all?) parameter lists and allow calling named parameters on other channels to affect the original channel.
+#TODO:
+# arithmetic expressions parsing, with some way to take note values as a parameter
 
 FIELD_TYPE_INT = object()
 FIELD_TYPE_HEX = object()
