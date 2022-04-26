@@ -603,12 +603,15 @@ class Menu():
             val_t = array.array('I', char.encode(self._font.codec))
             added = 0
             for num in range(len(val_u)):
-                if self._curpos < len(self._curvalue_u):
+                if self._curpos+num < len(self._curvalue_u) - 1:
                     self._curvalue_u[self._curpos+num+1:] = self._curvalue_u[self._curpos+num:-1]
                     self._curvalue_u[self._curpos+num] = val_u[num]
                     self._curvalue_t[self._curpos+num+1:] = self._curvalue_t[self._curpos+num:-1]
                     self._curvalue_t[self._curpos+num] = val_t[num]
                     added += 1
+                elif self._curpos+num == len(self._curvalue_u) - 1:
+                    self._curvalue_u[self._curpos+num] = val_u[num]
+                    self._curvalue_t[self._curpos+num] = val_t[num]
                 else:
                     break
             self._refresh_value(self._curpos)
