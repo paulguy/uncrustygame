@@ -1179,6 +1179,17 @@ int tilemap_copy_block(LayerList *ll,
             return(-1);
         }
 
+        /* reset colormod, otherwise the previous value will make the copy
+         * operation do weird things. */
+        if(SDL_SetTextureColorMod(tm->tex, 255, 255, 255) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to set texture colormod.\n", tm->name);
+            return(-1);
+        }
+        if(SDL_SetTextureAlphaMod(tm->tex, 255) < 0) {
+            LOG_PRINTF(ll, "%s: Failed to set texture alphamod.\n", tm->name);
+            return(-1);
+        }
+
 #ifdef COPY_FIX
         if(valid_outside_copy != 0) {
             if(SDL_RenderCopy(ll->renderer,
@@ -1882,7 +1893,7 @@ int tilemap_draw_layer(LayerList *ll, unsigned int index) {
     }
     if(SDL_SetTextureAlphaMod(tex,
             (l->colormod & TILEMAP_AMASK) >> TILEMAP_ASHIFT) < 0) {
-        LOG_PRINTF(ll, "%s: Failed to set tile alphamod.\n", l->name);
+        LOG_PRINTF(ll, "%s: Failed to set layer alphamod.\n", l->name);
         return(-1);
     }
 

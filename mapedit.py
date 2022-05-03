@@ -506,6 +506,11 @@ class ProjectScreen():
         self._titletb.clear()
         put_centered_line(self._titletb, s, 0, self._fmw)
 
+    def _add_editor(self, desc, tilemap=None, flags=None, colormod=None):
+        self._editors.append(EditScreen(self._state, self, desc, tilemap, flags, colormod))
+        if self._menu is not None:
+            self._menu.insert_item(len(self._descs) - 1, desc.name, onActivate=self._open_tilemap)
+
     def _build_screen(self):
         self._vw, self._vh = self._state.window
         self._fw = self._state.font.ts.width()
@@ -521,9 +526,9 @@ class ProjectScreen():
         self._titletb.layer.pos(int(self._fw * self._scale),
                                 int(self._fh * self._scale))
         self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
-        self._dl = display.DisplayList(self._state.ll)
-        self._dl.append(display.Renderable(self._titletb.draw,
-                                           always=False))
+        self._dl.replace(self._titleindex,
+                         display.Renderable(self._titletb.draw,
+                                            always=False))
         self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, spacing=2, rel=self._titletb.layer)
         for desc in self._descs:
             self._menu.add_item(desc.name, onActivate=self._open_tilemap)
@@ -535,13 +540,175 @@ class ProjectScreen():
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)
-        self._dl.append(display.Renderable(self._menu.displaylist,
-                                           always=False))
+        self._dl.replace(self._menuindex,
+                         display.Renderable(self._menu.displaylist,
+                                            always=False))
         # cursor would render twice during updates but whatever.
-        self._dl.append(self._cursorl)
-        self._errorindex = self._dl.append(None)
+        self._dl.replace(self._cursorindex, self._cursorl)
 
-    def __init__(self, state):
+    def _load(self, filename):
+        data = ""
+        with open(filename, 'r') as infile:
+            data = infile.read()
+        savedata = json.loads(data)
+        try:
+            self._state.set_scale(savedata['ui_scale'])
+        except KeyError:
+            pass
+        try:
+            pscrollx, pscrolly = self._layers.scroll_pos
+            self._layers.set_scroll(pscrollx, pscrolly)
+        except KeyError:
+            pass
+        descs = list()
+        try:
+            descs = savedata['tilemaps']
+        except KeyError:
+            pass
+        for desc in descs:
+            newdesc = TilemapDesc()
+            try:
+                newdesc.name = desc['name']
+            except KeyError:
+                pass
+            try:
+                newdesc.filename = desc['gfx']
+            except KeyError:
+                pass
+            try:
+                newdesc.mapname = desc['unimap']
+            except KeyError:
+                pass
+            try:
+                newdesc.tw = desc['tile_width']
+            except KeyError:
+                pass
+            try:
+                newdesc.th = desc['tile_height']
+            except KeyError:
+                pass
+            try:
+                newdesc.mw = desc['map_width']
+            except KeyError:
+                pass
+            try:
+                newdesc.mh = desc['map_height']
+            except KeyError:
+                pass
+            try:
+                newdesc.wscale = desc['x_scale']
+            except KeyError:
+                pass
+            try:
+                newdesc.hscale = desc['y_scale']
+            except KeyError:
+                pass
+            self._descs.append(newdesc)
+        layers = list()
+        newlayers = list()
+        try:
+            layers = savedata['layers']
+        except KeyError:
+            pass
+        for layer in layers:
+            newlayer = LayerDesc()
+            try:
+                newlayer.name = layer['name']
+            except KeyError:
+                pass
+            try:
+                newlayer.tilemap = layer['tilemap']
+            except KeyError:
+                pass
+            try:
+                newlayer.relative = layer['relative']
+            except KeyError:
+                pass
+            try:
+                newlayer.vw = layer['view_width']
+            except KeyError:
+                pass
+            try:
+                newlayer.vh = layer['view_height']
+            except KeyError:
+                pass
+            try:
+                newlayer.scalex = layer['x_scale']
+            except KeyError:
+                pass
+            try:
+                newlayer.scaley = layer['y_scale']
+            except KeyError:
+                pass
+            mode = 'NONE'
+            try:
+                mode = layer['mode']
+            except KeyError:
+                pass
+            if mode == 'POSITION':
+                newlayer.mode = ScrollMode.POSITION
+            elif mode == 'LAYER':
+                newlayer.mode = ScrollMode.LAYER
+            else:
+                newlayer.mode = ScrollMode.NONE
+            try:
+                newlayer.posx = layer['x_pos']
+            except KeyError:
+                pass
+            try:
+                newlayer.posy = layer['y_pos']
+            except KeyError:
+                pass
+            try:
+                newlayer.scrollx = layer['x_scroll']
+            except KeyError:
+                pass
+            try:
+                newlayer.scrolly = layer['y_scroll']
+            except KeyError:
+                pass
+            try:
+                newlayer.colormod = layer['colormod']
+            except KeyError:
+                pass
+            try:
+                newlayer.blendmode = layer['blend_mode']
+            except KeyError:
+                pass
+            newlayers.append(newlayer)
+        for num, desc in enumerate(self._descs):
+            tilemap = None
+            try:
+                with open("{} tilemap{}.bin".format(self._name, num), 'rb') as infile:
+                    data = infile.read()
+                tilemap = array.array('I', data)
+            except Exception as e:
+                print(e)
+                print_tb(e.__traceback__)
+                self._set_error("Couldn't load tilemap: {}".format(e))
+            flags = None
+            try:
+                with open("{} flags{}.bin".format(self._name, num), 'rb') as infile:
+                    data = infile.read()
+                flags = array.array('I', data)
+            except Exception as e:
+                print(e)
+                print_tb(e.__traceback__)
+                self._set_error("Couldn't load flags: {}".format(e))
+            colormod = None
+            try:
+                with open("{} colormod{}.bin".format(self._name, num), 'rb') as infile:
+                    data = infile.read()
+                colormod = array.array('I', data)
+            except Exception as e:
+                print(e)
+                print_tb(e.__traceback__)
+                self._set_error("Couldn't load colormod: {}".format(e))
+            self._add_editor(desc, tilemap=tilemap, flags=flags, colormod=colormod)
+        for layer in newlayers:
+            self._layers.add_layer(layer)
+
+    def __init__(self, state, filename=None):
         self._state = state
         self._name = "Untitled Project"
         self._descs = list()
@@ -555,7 +722,16 @@ class ProjectScreen():
         self._error = 0.0
         self._errortext = ''
         self._errorbox = None
+        self._menu = None
+        self._dl = display.DisplayList(self._state.ll)
+        self._titleindex = self._dl.append(None)
+        self._menuindex = self._dl.append(None)
+        # cursor would render twice during updates but whatever.
+        self._cursorindex = self._dl.append(None)
+        self._errorindex = self._dl.append(None)
         self._layers = LayersScreen(self._state, self)
+        if filename is not None:
+            self._load(filename)
         self._build_screen()
 
     def _set_error(self, text):
@@ -735,8 +911,7 @@ class ProjectScreen():
 
     def apply(self, desc, force=False):
         if self._selected >= len(self._editors):
-            self._editors.append(EditScreen(self._state, self, desc))
-            self._menu.insert_item(len(self._descs) - 1, desc.name, onActivate=self._open_tilemap)
+            self._add_editor(desc)
             self._update_menu()
         else:
             self._editors[self._selected].modify(desc, force)
@@ -783,13 +958,10 @@ class ProjectScreen():
         if self._selected >= len(self._editors):
             raise ValueError("Item not created yet, settings must be Applied at least once.")
         desc = copy.deepcopy(self._descs[self._selected])
-        self._descs.append(desc)
-        self._editors.append(EditScreen(self._state, self, desc,
+        self._add_editor(desc,
             tilemap=copy.copy(self._editors[self._selected].tilemap),
             flags=copy.copy(self._editors[self._selected].flags),
-            colormod=copy.copy(self._editors[self._selected].colormod)))
-        self._menu.insert_item(len(self._descs) - 1, desc.name, onActivate=self._open_tilemap)
-        self._update_menu()
+            colormod=copy.copy(self._editors[self._selected].colormod))
 
     def _open_layers(self, priv, sel):
         self._state.active_screen(self._layers)
@@ -888,7 +1060,9 @@ class ProjectScreen():
                            'x_pos': layer.posx,
                            'y_pos': layer.posy,
                            'x_scroll': layer.scrollx,
-                           'y_scroll': layer.scrolly})
+                           'y_scroll': layer.scrolly,
+                           'colormod': layer.colormod,
+                           'blend_mode': layer.blendmode})
         savedata['layers'] = layers
         with open("{}.json".format(self._name), 'w') as outfile:
             json.dump(savedata, outfile, indent=4)
@@ -1887,7 +2061,8 @@ class EditScreen():
                         tileset = self._tileset
                         try:
                             self._tileset = self._state.reload_tileset(self._tsdesc)
-                            if self._tileset.tiles() < textbox.get_codec_max_map(self._codec):
+                            if self._codec is not None and \
+                               self._tileset.tiles() < textbox.get_codec_max_map(self._codec):
                                 raise ValueError("Tileset has insufficient tiles for tilemap codec.")
                         except Exception as e:
                             print(e)
@@ -2465,6 +2640,8 @@ class LayerDesc():
     posy : int = 0
     scrollx : int = 0
     scrolly : int = 0
+    colormod : int = 2**32-1 # 0xFFFFFFFF opaque white
+    blendmode : int = cg.TILEMAP_BLENDMODE_BLEND
 
 class LayersScreen():
     DEFAULT_BANNER="Layers"
@@ -2634,10 +2811,13 @@ class LayersScreen():
                 else:
                     self._set_error("Couldn't open layer: {}".format(e))
 
-    def _new_layer(self, priv, sel):
-        self._descs.append(LayerDesc())
+    def add_layer(self, desc):
+        self._descs.append(desc)
         self._menu.insert_item(len(self._descs) - 1, self._descs[-1].name, onActivate=self._open_layer)
         self._update_menu()
+
+    def _new_layer(self, priv, sel):
+        self.add_layer(LayerDesc())
         self._open_settings(len(self._descs) - 1)
 
     def _show(self, priv, sel):
@@ -2701,6 +2881,10 @@ class LayersScreen():
     def scroll_pos(self):
         return self._posx, self._posy
 
+    def set_scroll(self, x, y):
+        self._posx = x
+        self._posy = y
+
 class LayerScreenSelecting(Enum):
     NONE = 0
     TILEMAP = 1
@@ -2718,6 +2902,19 @@ class LayerScreen():
             return LayerScreen.SCROLL_MODE_LAYER
         elif mode == ScrollMode.POSITION:
             return LayerScreen.SCROLL_MODE_POS
+        return "Unknown"
+
+    def get_blend_mode(mode):
+        if mode == cg.TILEMAP_BLENDMODE_BLEND:
+            return "Blend"
+        elif mode == cg.TILEMAP_BLENDMODE_ADD:
+            return "Add"
+        elif mode == cg.TILEMAP_BLENDMODE_MOD:
+            return "Modulate"
+        elif mode == cg.TILEMAP_BLENDMODE_MUL:
+            return "Multiply"
+        elif mode == cg.TILEMAP_BLENDMODE_SUB:
+            return "Subtract"
         return "Unknown"
 
     def _get_tmname(self):
@@ -2777,6 +2974,8 @@ class LayerScreen():
         self._menu.add_item("Y Pos", value=str(self._ldesc.posy), maxlen=5, onEnter=self._set_posy)
         self._menu.add_item("X Scroll", value=str(self._ldesc.scrollx), maxlen=5, onEnter=self._set_scrollx)
         self._menu.add_item("Y Scroll", value=str(self._ldesc.scrolly), maxlen=5, onEnter=self._set_scrolly)
+        self._menu.add_item("Colormod", onActivate=self._set_color)
+        self._menu.add_item("Blend Mode", value=LayerScreen.get_blend_mode(self._ldesc.blendmode), maxlen=32, onActivate=self._toggle_blend_mode)
         self._menu.add_item("Move", onActivate=self._move)
         self._menu.add_item("Delete", onActivate=self._delete)
         self._menu.update()
@@ -2999,6 +3198,27 @@ class LayerScreen():
         self._ldesc.scrolly = val
         return str(self._ldesc.scrolly)
 
+    def _set_color(self, priv, sel):
+        r, g, b, a = display.unmake_color(self._ldesc.colormod)
+        colorpicker = ColorPickerScreen(self._state, self, r, g, b, a)
+        self._state.active_screen(colorpicker)
+
+    def set_color(self, r, g, b, a):
+        self._ldesc.colormod = display.make_color(r, g, b, a)
+
+    def _toggle_blend_mode(self, priv, sel, val):
+        if self._ldesc.blendmode == cg.TILEMAP_BLENDMODE_BLEND:
+            self._ldesc.blendmode = cg.TILEMAP_BLENDMODE_ADD
+        elif self._ldesc.blendmode == cg.TILEMAP_BLENDMODE_ADD:
+            self._ldesc.blendmode = cg.TILEMAP_BLENDMODE_MOD
+        elif self._ldesc.blendmode == cg.TILEMAP_BLENDMODE_MOD:
+            self._ldesc.blendmode = cg.TILEMAP_BLENDMODE_MUL
+        elif self._ldesc.blendmode == cg.TILEMAP_BLENDMODE_MUL:
+            self._ldesc.blendmode = cg.TILEMAP_BLENDMODE_SUB
+        else:
+            self._ldesc.blendmode = cg.TILEMAP_BLENDMODE_BLEND
+        return LayerScreen.get_blend_mode(self._ldesc.blendmode)
+
     def _apply(self, priv, sel):
         self._caller.apply(self._ldesc)
 
@@ -3059,6 +3279,8 @@ class PreviewScreen():
                 stm.scale(desc.scalex, desc.scaley)
                 stm.layer.pos(desc.posx, desc.posy)
                 stm.scroll(desc.scrollx, desc.scrolly)
+                stm.internal.colormod(desc.colormod)
+                stm.internal.blendmode(desc.blendmode)
                 self._layers.append(stm)
 
         for num, desc in enumerate(self._ldescs):
@@ -3325,7 +3547,10 @@ def get_viewport(renderer):
 def do_main(window, renderer, pixfmt):
     rect = get_viewport(renderer)
     state = MapeditState(renderer, pixfmt, rect.w, rect.h, FONT_FILENAME, FONT_MAPNAME, FONT_WIDTH, FONT_HEIGHT, FONT_SCALE)
-    project = ProjectScreen(state)
+    if len(argv) > 1:
+        project = ProjectScreen(state, argv[1])
+    else:
+        project = ProjectScreen(state)
     state.active_screen(project)
 
     while state.running:
