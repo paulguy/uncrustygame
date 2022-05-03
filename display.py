@@ -417,11 +417,11 @@ class ScrollingTilemap():
         self._l.scale(x, y)
 
     def _setmap(self, x, y, vmx=0, vmy=0, w=0, h=0):
-        self._tm.map(vmx, vmy, self._imw, w, h, self._tilemap[y * self._mw + x:])
+        self._tm.map(vmx, vmy, self._mw, w, h, self._tilemap[y * self._mw + x:])
         if self._flags is not None:
-            self._tm.attr_flags(vmx, vmy, self._imw, w, h, self._flags[y * self._mw + x:])
+            self._tm.attr_flags(vmx, vmy, self._mw, w, h, self._flags[y * self._mw + x:])
         if self._colormod is not None:
-            self._tm.attr_colormod(vmx, vmy, self._imw, w, h, self._colormod[y * self._mw + x:])
+            self._tm.attr_colormod(vmx, vmy, self._mw, w, h, self._colormod[y * self._mw + x:])
         self._tm.update(vmx, vmy, w, h)
 
     def update(self, force=False):

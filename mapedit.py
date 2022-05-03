@@ -16,6 +16,7 @@ import math
 import effects
 
 #TODO:
+# more layer preview attributes
 # layer/project Save/Load
 # mouse support
 
@@ -61,10 +62,6 @@ def put_centered_line(tb, line, y, mw):
 
 def make_tilemap(ll, vw, vh, mw, mh, curx, cury, ts,
                  tilemap, flags=None, colormod=None):
-    if vw > mw:
-        vw = mw
-    if vh > mh:
-        vh = mh
     if curx >= mw:
         curx = mw - 1
     if cury >= mh:
@@ -312,6 +309,10 @@ class BorderSelector():
     @property
     def layer(self):
         return self._stm.layer
+
+    @property
+    def internal(self):
+        return self._stm.internal
 
     def scroll(self, x, y):
         self._stm.scroll(x * self._tw, y * self._th)
@@ -1157,6 +1158,7 @@ class TilemapScreen():
                 self._set_error("Couldn't save settings: {}: {}".format(e, get_error()))
             else:
                 self._set_error("Couldn't save settings: {}".format(e))
+            self._editing = False
             return
         if self._editing:
             self._editing = False
@@ -1279,16 +1281,74 @@ class EditScreen():
                              self._curx * self._tmdesc.wscale * self._tmdesc.tw,
                              self._tmdesc.mw * self._tmdesc.tw * self._tmdesc.wscale)
 
+    def _make_selectscreen(self):
+        width = 0
+        if self._selectscreen is not None:
+            width = self._selectscreen.width
+        self._selectscreen = TileSelectScreen(self._state, self, self._tsdesc, width=width)
+
+    def _make_sidebar(self):
+        scale = self._state.font_scale
+        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nC - Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nV - Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nB - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu/U - Undo/Redo\np - Put Copy\ni - Insert Text\nCTRL+r - Reload\n  Tileset")
+        pwidth = self._tmdesc.tw * scale / self._fw
+        if pwidth.is_integer():
+            pwidth = int(pwidth)
+        else:
+            pwidth = int(pwidth) + 1
+        pheight = self._tmdesc.th * scale / self._fh
+        if pheight.is_integer():
+            pheight = int(pheight)
+        else:
+            pheight = int(pheight) + 1
+        tstart = pheight / scale
+        if tstart.is_integer():
+            tstart = int(tstart)
+        else:
+            tstart = int(tstart) + 1
+        tstart += 1
+        tilebgl = make_checkerboard(self._state.font, pwidth, pheight)
+        tilebgl.pos(self._fw, self._fh)
+        tilebgl.scale(1 / scale, 1 / scale)
+        tilebgl.relative(self._sidebar.layer)
+        self._sidebar.dl.append(tilebgl)
+        self._tiletm = self._tileset.tilemap(1, 1, "Preview")
+        self._tiletm.update()
+        self._tilel = self._tiletm.layer("Preview Layer")
+        self._tilel.scale(scale, scale)
+        self._tilel.relative(tilebgl)
+        self._sidebar.dl.append(self._tilel)
+        lines, _, _, h = textbox.wrap_text("Tile:      R:    \nX:         G:    \nY:         B:    \nR:         A:\nVF:   HF:  ", self._sidebar.width - 2, self._vh)
+        self._sidebar.set_hpos(tstart + h)
+        self._statustext = textbox.TextBox(self._state.ll,
+                                           self._sidebar.width - 2 * self._fw,
+                                           h * self._fh,
+                                           self._sidebar.width - 2, h,
+                                           self._state.font)
+        self._statustext.put_text(lines, 0, 0)
+        self._statustext.layer.pos(self._fw, self._fh * (1 + tstart))
+        self._statustext.layer.relative(self._sidebar.layer)
+        self._update_tile()
+        self._update_red()
+        self._update_green()
+        self._update_blue()
+        self._update_alpha()
+        self._update_hflip()
+        self._update_vflip()
+        self._update_rotation()
+        self._dl.replace(self._sidebarindex, self._sidebar.dl)
+        self._dl.replace(self._statusindex, self._statustext.draw)
+
     def _set_tmdesc(self, tmdesc):
         if self._tmdesc is not None and \
            (self._tmdesc.filename != tmdesc.filename or \
             self._tmdesc.tw != tmdesc.tw or \
             self._tmdesc.th != tmdesc.th):
-            selt._state.remove_tileset(self._tsdesc)
+            self._state.remove_tileset(self._tsdesc)
             self._tmdesc = None
         if self._tmdesc is None:
             self._tsdesc = self._state.add_tileset(tmdesc.filename,
                                                    tmdesc.tw, tmdesc.th)
+            self._make_selectscreen()
         self._tmdesc = tmdesc
         self._tileset = self._state.tileset_desc(self._tsdesc)
         self._tiles = self._tileset.tiles()
@@ -1304,6 +1364,7 @@ class EditScreen():
         vw, vh = self._state.window
         self._vw = int(vw / self._tmdesc.wscale / self._tmdesc.tw)
         self._vh = int(vh / self._tmdesc.hscale / self._tmdesc.th)
+        self._make_sidebar()
 
     def _make_stm(self):
         self._curx, self._cury, self._stm = \
@@ -1330,12 +1391,6 @@ class EditScreen():
             self._border.relative(self._stm.layer)
         self._dl.replace(self._stmindex, self._stm.draw)
         self._update_cursor()
-
-    def _make_selectscreen(self):
-        width = 0
-        if self._selectscreen is not None:
-            width = self._selectscreen.width
-        self._selectscreen = TileSelectScreen(self._state, self, self._tsdesc, width=width)
 
     def _make_border(self, x, y, w, h):
         vw = self._vw
@@ -1389,58 +1444,10 @@ class EditScreen():
         scale = self._state.font_scale
         self._fmw = int(vw / scale / self._fw)
         self._fmh = int(vh / scale / self._fh)
-        self._sidebar = Sidebar(self._state, "h - Toggle Sidebar\nESC - Quit\nArrows - Move\nSPACE - Place*\n  *=Fill Selection\nSHIFT+SPACE\n  Grab/Copy\nNumpad Plus\n  Increase Tile\nNumpad Minus\n  Decrease Tile\nc - Open Color Picker\nC - Grab/Copy Color\nCTRL+c - Place Color*\nv - Open Tile Picker\nV - Grab/Copy Tile\nCTRL+v - Place Tile*\nr - Cycle Rotation\nt - Toggle Horiz Flip\ny - Toggle Vert Flip\nB - Grab/Copy\n  Attributes\nCTRL+b\n  Place Attributes*\nq/a - Adjust Red\nw/s - Adjust Green\ne/d - Adjust Blue\nx/z - Adjust Alpha\nf - Top Left Select\ng - Bottom Right\n  Select\nu/U - Undo/Redo\np - Put Copy\ni - Insert Text\nCTRL+r - Reload\n  Tileset")
-        pwidth = self._tmdesc.tw * scale / self._fw
-        if pwidth.is_integer():
-            pwidth = int(pwidth)
-        else:
-            pwidth = int(pwidth) + 1
-        pheight = self._tmdesc.th * scale / self._fh
-        if pheight.is_integer():
-            pheight = int(pheight)
-        else:
-            pheight = int(pheight) + 1
-        tstart = pheight / scale
-        if tstart.is_integer():
-            tstart = int(tstart)
-        else:
-            tstart = int(tstart) + 1
-        tstart += 1
-        tilebgl = make_checkerboard(self._state.font, pwidth, pheight)
-        tilebgl.pos(self._fw, self._fh)
-        tilebgl.scale(1 / scale, 1 / scale)
-        tilebgl.relative(self._sidebar.layer)
-        self._sidebar.dl.append(tilebgl)
-        self._tiletm = self._tileset.tilemap(1, 1, "Preview")
-        self._tiletm.update()
-        self._tilel = self._tiletm.layer("Preview Layer")
-        self._tilel.scale(scale, scale)
-        self._tilel.relative(tilebgl)
-        self._sidebar.dl.append(self._tilel)
-        lines, _, _, h = textbox.wrap_text("Tile:      R:    \nX:         G:    \nY:         B:    \nR:         A:\nVF:   HF:  ", self._sidebar.width - 2, self._vh)
-        self._sidebar.set_hpos(tstart + h)
-        self._statustext = textbox.TextBox(self._state.ll,
-                                           self._sidebar.width - 2 * self._fw,
-                                           h * self._fh,
-                                           self._sidebar.width - 2, h,
-                                           self._state.font)
-        self._statustext.put_text(lines, 0, 0)
-        self._statustext.layer.pos(self._fw, self._fh * (1 + tstart))
-        self._statustext.layer.relative(self._sidebar.layer)
-        self._update_tile()
-        self._update_red()
-        self._update_green()
-        self._update_blue()
-        self._update_alpha()
-        self._update_hflip()
-        self._update_vflip()
-        self._update_rotation()
-        self._sidebar.dl.append(self._statustext.draw)
         self._vw = int(vw / self._tmdesc.wscale / self._tmdesc.tw)
         self._vh = int(vh / self._tmdesc.hscale / self._tmdesc.th)
+        self._make_sidebar()
         self._make_stm()
-        self._dl.replace(self._sidebarindex, self._sidebar.dl)
-        self._make_selectscreen()
 
     def __init__(self, state, caller, tmdesc, tilemap=None, flags=None, colormod=None):
         self._state = state
@@ -1474,9 +1481,19 @@ class EditScreen():
         self._errorh = 0
         self._codec = None
         self._tmdesc = None
-        self._set_tmdesc(tmdesc)
+        self._tsdesc = None
+        self._fw = self._state.font.ts.width()
+        self._fh = self._state.font.ts.height()
+        self._dl = display.DisplayList(self._state.ll)
+        self._stmindex = self._dl.append(None)
+        self._cursorindex = self._dl.append(None)
+        self._borderindex = self._dl.append(None)
+        self._sidebarindex = self._dl.append(None)
+        self._statusindex = self._dl.append(None)
+        self._errorindex = self._dl.append(None)
         self._color = display.make_color(self._red, self._green, self._blue, self._alpha)
         self._attrib = display.make_attrib(self._hflip, self._vflip, self._rotate)
+        self._set_tmdesc(tmdesc)
         if tilemap is None:
             self._tilemap = array.array('I', itertools.repeat(0, self._tmdesc.mw * self._tmdesc.mh))
         else:
@@ -1496,18 +1513,13 @@ class EditScreen():
         self._errordl.append(lambda: self._errorbox.layer.pos(self._fw, self._errorh))
         self._errordl.append(lambda: self._errorbox.layer.colormod(self._fxcolor))
         self._errordlindex2 = self._errordl.append(None)
-        self._dl = display.DisplayList(self._state.ll)
-        self._stmindex = self._dl.append(None)
-        self._cursorindex = self._dl.append(None)
-        self._borderindex = self._dl.append(None)
-        self._sidebarindex = self._dl.append(None)
-        self._errorindex = self._dl.append(None)
         self._build_screen()
 
     def __del__(self):
         if self._codec is not None:
             textbox.unload_tileset_codec(self._codec)
-        self._state.remove_tileset(self._tsdesc)
+        if self._tsdesc is not None:
+            self._state.remove_tileset(self._tsdesc)
 
     def _set_error(self, text):
         print(text)
@@ -2037,7 +2049,7 @@ class EditScreen():
         self._cursorrad, self._fxcolor = update_cursor_effect(self._cursorrad, time)
         self._cursorl.colormod(self._fxcolor)
         if self._border is not None:
-            self._border.layer.colormod(self._fxcolor)
+            self._border.internal.colormod(self._fxcolor)
         if self._errorbox is not None:
             self._errorbox.layer.colormod(self._fxcolor)
 
