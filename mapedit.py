@@ -16,8 +16,6 @@ import math
 import effects
 
 #TODO:
-# more layer preview attributes
-# layer/project Save/Load
 # mouse support
 
 # debugging options
@@ -546,10 +544,16 @@ class ProjectScreen():
         # cursor would render twice during updates but whatever.
         self._dl.replace(self._cursorindex, self._cursorl)
 
-    def _load(self, filename):
+    def _load(self):
         data = ""
-        with open(filename, 'r') as infile:
-            data = infile.read()
+        try:
+            with open("{}.json".format(self._name), 'r') as infile:
+                data = infile.read()
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            self._set_error("Couldn't load project: {}".format(e))
+            return
         savedata = json.loads(data)
         try:
             self._state.set_scale(savedata['ui_scale'])
@@ -708,9 +712,8 @@ class ProjectScreen():
         for layer in newlayers:
             self._layers.add_layer(layer)
 
-    def __init__(self, state, filename=None):
+    def __init__(self, state, name=None):
         self._state = state
-        self._name = "Untitled Project"
         self._descs = list()
         self._editors = list()
         self._selected = 0
@@ -730,8 +733,11 @@ class ProjectScreen():
         self._cursorindex = self._dl.append(None)
         self._errorindex = self._dl.append(None)
         self._layers = LayersScreen(self._state, self)
-        if filename is not None:
-            self._load(filename)
+        if name is not None:
+            self._name = name
+        else:
+            self._name = "Untitled Project"
+        self._load()
         self._build_screen()
 
     def _set_error(self, text):
@@ -2147,6 +2153,7 @@ class EditScreen():
                 elif event.key.keysym.sym == SDLK_h:
                     if self._showsidebar == 0:
                         self._dl.replace(self._sidebarindex, self._sidebar.dl)
+                        self._dl.replace(self._statusindex, self._statustext.draw)
                         self._sidebar.show_text(False)
                         self._showsidebar = 1
                     elif self._showsidebar == 1:
@@ -2154,6 +2161,7 @@ class EditScreen():
                         self._showsidebar = 2
                     else:
                         self._dl.replace(self._sidebarindex, None)
+                        self._dl.replace(self._statusindex, None)
                         self._showsidebar = 0
                 elif event.key.keysym.sym == SDLK_f:
                     if self._border is None:
