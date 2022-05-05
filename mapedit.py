@@ -14,6 +14,7 @@ import copy
 import itertools
 import math
 import effects
+import layers
 
 #TODO:
 # mouse support
@@ -484,19 +485,6 @@ class PromptScreen():
         self._caller.set_option(option)
         self._state.active_screen(self._caller)
 
-@dataclass
-class TilemapDesc():
-    name : str = "Untitled Tilemap"
-    filename : str = FONT_FILENAME
-    mapname : str = FONT_MAPNAME
-    tw : int = FONT_WIDTH
-    th : int = FONT_HEIGHT
-    mw : int = 64
-    mh : int = 64
-    codec : str = None
-    wscale : float = FONT_SCALE
-    hscale : float = FONT_SCALE
-
 class ProjectScreen():
     DEFAULT_BANNER="Project"
 
@@ -545,171 +533,24 @@ class ProjectScreen():
         self._dl.replace(self._cursorindex, self._cursorl)
 
     def _load(self):
-        data = ""
+        settings, self._descs, maps, ldescs = layers.load_map(self._name)
         try:
-            with open("{}.json".format(self._name), 'r') as infile:
-                data = infile.read()
-        except Exception as e:
-            print(e)
-            print_tb(e.__traceback__)
-            self._set_error("Couldn't load project: {}".format(e))
-            return
-        savedata = json.loads(data)
-        try:
-            self._state.set_scale(savedata['ui_scale'])
+            self._state.set_scale(settings['ui_scale'])
         except KeyError:
             pass
+        pscrollx, pscrolly = self._layers.scroll_pos
         try:
-            pscrollx, pscrolly = self._layers.scroll_pos
+            pscrollx = settings['preview_scroll_x']
+            pscrolly = settings['preview_scroll_y']
             self._layers.set_scroll(pscrollx, pscrolly)
         except KeyError:
             pass
-        descs = list()
-        try:
-            descs = savedata['tilemaps']
-        except KeyError:
-            pass
-        for desc in descs:
-            newdesc = TilemapDesc()
-            try:
-                newdesc.name = desc['name']
-            except KeyError:
-                pass
-            try:
-                newdesc.filename = desc['gfx']
-            except KeyError:
-                pass
-            try:
-                newdesc.mapname = desc['unimap']
-            except KeyError:
-                pass
-            try:
-                newdesc.tw = desc['tile_width']
-            except KeyError:
-                pass
-            try:
-                newdesc.th = desc['tile_height']
-            except KeyError:
-                pass
-            try:
-                newdesc.mw = desc['map_width']
-            except KeyError:
-                pass
-            try:
-                newdesc.mh = desc['map_height']
-            except KeyError:
-                pass
-            try:
-                newdesc.wscale = desc['x_scale']
-            except KeyError:
-                pass
-            try:
-                newdesc.hscale = desc['y_scale']
-            except KeyError:
-                pass
-            self._descs.append(newdesc)
-        layers = list()
-        newlayers = list()
-        try:
-            layers = savedata['layers']
-        except KeyError:
-            pass
-        for layer in layers:
-            newlayer = LayerDesc()
-            try:
-                newlayer.name = layer['name']
-            except KeyError:
-                pass
-            try:
-                newlayer.tilemap = layer['tilemap']
-            except KeyError:
-                pass
-            try:
-                newlayer.relative = layer['relative']
-            except KeyError:
-                pass
-            try:
-                newlayer.vw = layer['view_width']
-            except KeyError:
-                pass
-            try:
-                newlayer.vh = layer['view_height']
-            except KeyError:
-                pass
-            try:
-                newlayer.scalex = layer['x_scale']
-            except KeyError:
-                pass
-            try:
-                newlayer.scaley = layer['y_scale']
-            except KeyError:
-                pass
-            mode = 'NONE'
-            try:
-                mode = layer['mode']
-            except KeyError:
-                pass
-            if mode == 'POSITION':
-                newlayer.mode = ScrollMode.POSITION
-            elif mode == 'LAYER':
-                newlayer.mode = ScrollMode.LAYER
-            else:
-                newlayer.mode = ScrollMode.NONE
-            try:
-                newlayer.posx = layer['x_pos']
-            except KeyError:
-                pass
-            try:
-                newlayer.posy = layer['y_pos']
-            except KeyError:
-                pass
-            try:
-                newlayer.scrollx = layer['x_scroll']
-            except KeyError:
-                pass
-            try:
-                newlayer.scrolly = layer['y_scroll']
-            except KeyError:
-                pass
-            try:
-                newlayer.colormod = layer['colormod']
-            except KeyError:
-                pass
-            try:
-                newlayer.blendmode = layer['blend_mode']
-            except KeyError:
-                pass
-            newlayers.append(newlayer)
         for num, desc in enumerate(self._descs):
-            tilemap = None
-            try:
-                with open("{} tilemap{}.bin".format(self._name, num), 'rb') as infile:
-                    data = infile.read()
-                tilemap = array.array('I', data)
-            except Exception as e:
-                print(e)
-                print_tb(e.__traceback__)
-                self._set_error("Couldn't load tilemap: {}".format(e))
-            flags = None
-            try:
-                with open("{} flags{}.bin".format(self._name, num), 'rb') as infile:
-                    data = infile.read()
-                flags = array.array('I', data)
-            except Exception as e:
-                print(e)
-                print_tb(e.__traceback__)
-                self._set_error("Couldn't load flags: {}".format(e))
-            colormod = None
-            try:
-                with open("{} colormod{}.bin".format(self._name, num), 'rb') as infile:
-                    data = infile.read()
-                colormod = array.array('I', data)
-            except Exception as e:
-                print(e)
-                print_tb(e.__traceback__)
-                self._set_error("Couldn't load colormod: {}".format(e))
-            self._add_editor(desc, tilemap=tilemap, flags=flags, colormod=colormod)
-        for layer in newlayers:
+            self._add_editor(desc,
+                             tilemap=maps[num][0],
+                             flags=maps[num][1],
+                             colormod=maps[num][2])
+        for layer in ldescs:
             self._layers.add_layer(layer)
 
     def __init__(self, state, name=None):
@@ -891,7 +732,7 @@ class ProjectScreen():
                     self._set_error("Couldn't open tilemap: {}".format(e))
 
     def _new_tilemap(self, priv, sel):
-        self._descs.append(TilemapDesc())
+        self._descs.append(layers.TilemapDesc())
         try:
             self._open_settings(len(self._descs) - 1)
         except Exception as e:
@@ -1051,9 +892,9 @@ class ProjectScreen():
         layers = list()
         for layer in self._layers.layers:
             mode = 'NONE'
-            if layer.mode == ScrollMode.POSITION:
+            if layer.mode == layers.ScrollMode.POSITION:
                 mode = 'POSITION'
-            elif layer.mode == ScrollMode.LAYER:
+            elif layer.mode == layers.ScrollMode.LAYER:
                 mode = 'LAYER'
             layers.append({'name': layer.name,
                            'tilemap': layer.tilemap,
@@ -2629,28 +2470,6 @@ class ColorPickerScreen():
         self._caller.set_color(self._red, self._green, self._blue, self._alpha)
         self._state.active_screen(self._caller)
 
-class ScrollMode(Enum):
-    NONE = 0
-    LAYER = 1
-    POSITION = 2
-
-@dataclass
-class LayerDesc():
-    name : str = "Untitled Layer"
-    tilemap : int = -1 
-    relative : int = -1
-    vw : int = 1
-    vh : int = 1
-    scalex : float = 1.0
-    scaley : float = 1.0
-    mode : ScrollMode = ScrollMode.NONE
-    posx : int = 0
-    posy : int = 0
-    scrollx : int = 0
-    scrolly : int = 0
-    colormod : int = 2**32-1 # 0xFFFFFFFF opaque white
-    blendmode : int = cg.TILEMAP_BLENDMODE_BLEND
-
 class LayersScreen():
     DEFAULT_BANNER="Layers"
 
@@ -2825,12 +2644,18 @@ class LayersScreen():
         self._update_menu()
 
     def _new_layer(self, priv, sel):
-        self.add_layer(LayerDesc())
+        self.add_layer(layers.LayerDesc())
         self._open_settings(len(self._descs) - 1)
 
     def _show(self, priv, sel):
+        maps = list()
+        for editor in self._caller.editors:
+            maps.append((editor.tilemap, editor.flags, editor.colormod))
         try:
-            preview = PreviewScreen(self._state, self, self._posx, self._posy)
+            preview = PreviewScreen(self._state, self,
+                                    self._caller.descs, maps,
+                                    self._descs,
+                                    self._posx, self._posy)
             self._state.active_screen(preview)
         except Exception as e:
             print(e)
@@ -2904,11 +2729,11 @@ class LayerScreen():
     SCROLL_MODE_POS="Position Scrolling"
 
     def get_scroll_mode(mode):
-        if mode == ScrollMode.NONE:
+        if mode == layers.ScrollMode.NONE:
             return LayerScreen.SCROLL_MODE_NONE
-        elif mode == ScrollMode.LAYER:
+        elif mode == layers.ScrollMode.LAYER:
             return LayerScreen.SCROLL_MODE_LAYER
-        elif mode == ScrollMode.POSITION:
+        elif mode == layers.ScrollMode.POSITION:
             return LayerScreen.SCROLL_MODE_POS
         return "Unknown"
 
@@ -3166,12 +2991,12 @@ class LayerScreen():
         return str(self._ldesc.scaley)
 
     def _toggle_mode(self, priv, sel, val):
-        if self._ldesc.mode == ScrollMode.NONE:
-            self._ldesc.mode = ScrollMode.LAYER
-        elif self._ldesc.mode == ScrollMode.LAYER:
-            self._ldesc.mode = ScrollMode.POSITION
+        if self._ldesc.mode == layers.ScrollMode.NONE:
+            self._ldesc.mode = layers.ScrollMode.LAYER
+        elif self._ldesc.mode == layers.ScrollMode.LAYER:
+            self._ldesc.mode = layers.ScrollMode.POSITION
         else:
-            self._ldesc.mode = ScrollMode.NONE
+            self._ldesc.mode = layers.ScrollMode.NONE
         return LayerScreen.get_scroll_mode(self._ldesc.mode)
 
     def _set_posx(self, priv, sel, val):
@@ -3239,87 +3064,29 @@ class LayerScreen():
         self._state.active_screen(self._caller)
 
 class PreviewScreen():
-    def _get_tileset(self, num):
-        return self._state.tileset(self._tmdescs[num].filename,
-                                   self._tmdescs[num].tw,
-                                   self._tmdescs[num].th)
-
-    def _set_all(self):
-        for num, desc in enumerate(self._ldescs):
-            if desc.mode == ScrollMode.LAYER:
-                self._layers[num].scroll(desc.scrollx + int(self._posx),
-                                         desc.scrolly + int(self._posy))
-                self._layers[num].update()
-            elif desc.mode == ScrollMode.POSITION:
-                if desc.tilemap < 0:
-                    self._layers[num].pos(desc.posx + int(self._posx),
-                                          desc.posy + int(self._posy))
-                else:
-                    self._layers[num].layer.pos(desc.posx + int(self._posx),
-                                                desc.posy + int(self._posy))
-                    self._layers[num].update()
-
     def _build_screen(self):
         self._vw, self._vh = self._state.window
-        self._layers = list()
-        for desc in self._ldescs:
-            if desc.tilemap < 0:
-                l = cg.Layer(self._state.ll, None, "Preview Layer {}".format(desc.name))
-                l.scale(desc.scalex, desc.scaley)
-                l.pos(desc.posx, desc.posy)
-                self._layers.append(l)
-            else:
-                vpw = desc.vw
-                if vpw * desc.scalex > self._vw:
-                    vpw = self._vw / desc.scalex + 1
-                vph = desc.vh
-                if desc.vh * desc.scaley > self._vh:
-                    vph = self._vh / desc.scaley + 1
-                stm = display.ScrollingTilemap(self._state.ll,
-                    self._get_tileset(desc.tilemap),
-                    self._maps[desc.tilemap][0],
-                    vpw, vph,
-                    self._tmdescs[desc.tilemap].mw,
-                    self._tmdescs[desc.tilemap].mh,
-                    flags=self._maps[desc.tilemap][1],
-                    colormod=self._maps[desc.tilemap][2],
-                    optimize=True)
-                stm.scale(desc.scalex, desc.scaley)
-                stm.layer.pos(desc.posx, desc.posy)
-                stm.scroll(desc.scrollx, desc.scrolly)
-                stm.internal.colormod(desc.colormod)
-                stm.internal.blendmode(desc.blendmode)
-                self._layers.append(stm)
+        if self._view is None:
+            self._view = layers.MapView(self._state,
+                                        self._descs, self._maps, self._layers,
+                                        self._vw, self._vh)
+        else:
+            self._view.resize(self._vw, self._vh)
+        self._dl.replace(self._viewindex, self._view.dl)
 
-        for num, desc in enumerate(self._ldescs):
-            if desc.relative >= 0:
-                if desc.mode != ScrollMode.LAYER:
-                    if self._ldescs[desc.relative].mode == ScrollMode.LAYER:
-                        self._layers[num].layer.relative(self._layers[desc.relative].maplayer)
-                    else:
-                        self._layers[num].layer.relative(self._layers[desc.relative].layer)
-                else:
-                    if self._ldescs[desc.relative].mode == ScrollMode.LAYER:
-                        self._layers[num].maplayer.relative(self._layers[desc.relative].maplayer)
-                    else:
-                        self._layers[num].maplayer.relative(self._layers[desc.relative].layer)
-
-        self._set_all()
-
-        self._dl = display.DisplayList(self._state.ll)
-        for layer in self._layers:
-            self._dl.append(layer.draw)
-
-    def __init__(self, state, caller, x, y):
+    def __init__(self, state, caller, descs, maps, layers, x, y):
         self._state = state
         self._caller = caller
-        self._ldescs = caller.layers
-        self._tmdescs = caller.tmdescs
-        self._maps = [(editor.tilemap, editor.flags, editor.colormod) for editor in caller.editors]
+        self._descs = descs
+        self._maps = maps
+        self._layers = layers
+        self._view = None
         self._xspeed = 0.0
         self._yspeed = 0.0
         self._posx = x
         self._posy = y
+        self._dl = display.DisplayList(self._state.ll)
+        self._viewindex = self._dl.append(None)
         self._build_screen()
 
     def resize(self):
@@ -3363,7 +3130,7 @@ class PreviewScreen():
             elif event.key.keysym.sym == SDLK_r:
                 self._posx = 0
                 self._posy = 0
-                self._set_all()
+                self._view.scroll(0, 0)
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 self._caller.setpos(self._posx, self._posy)
                 self._state.active_screen(self._caller)
@@ -3389,7 +3156,7 @@ class PreviewScreen():
         if self._xspeed != 0 or self._yspeed != 0:
             self._posx += self._xspeed
             self._posy += self._yspeed
-            self._set_all()
+            self._view.scroll(self._posx, self._posy)
 
 
 class MapeditState():
