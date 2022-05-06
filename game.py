@@ -49,6 +49,30 @@ class MapScreen():
     def __init__(self, state, name):
         self._state = state
         _, self._descs, self._maps, self._layers = layers.load_map(name)
+        self._params = None
+        # get the params tilemap out
+        for num, desc in enumerate(self._descs):
+            if desc.name == 'params':
+                self._params = (self._descs[num], self._maps[num])
+                del self._descs[num]
+                del self._maps[num]
+                # take out layers which display this tilemap
+                # also repoint layers offset by this removed tilemap
+                for num2, layer in enumerate(self._layers):
+                    if layer.tilemap == num:
+                        del self._layers[num2]
+                        # remove references to this removed layer
+                        # also repoint indexes offset by this removed layer
+                        for layer in self._layers:
+                            if layer.relative == num2:
+                                layer.relative = -1
+                            elif layer.relative > num2:
+                                layer.relative -= 1
+                    elif layer.tilemap > num:
+                        layer.tilemap -= 1
+                break
+        if self._params is None:
+            raise ValueError("No 'params' map found.")
         self._view = None
         self._xspeed = 0.0
         self._yspeed = 0.0

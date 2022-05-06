@@ -890,28 +890,28 @@ class ProjectScreen():
                              'x_scale': desc.wscale,
                              'y_scale': desc.hscale})
         savedata['tilemaps'] = tilemaps
-        layers = list()
+        layerslist = list()
         for layer in self._layers.layers:
             mode = 'NONE'
             if layer.mode == layers.ScrollMode.POSITION:
                 mode = 'POSITION'
             elif layer.mode == layers.ScrollMode.LAYER:
                 mode = 'LAYER'
-            layers.append({'name': layer.name,
-                           'tilemap': layer.tilemap,
-                           'relative': layer.relative,
-                           'view_width': layer.vw,
-                           'view_height': layer.vh,
-                           'x_scale': layer.scalex,
-                           'y_scale': layer.scaley,
-                           'mode': mode,
-                           'x_pos': layer.posx,
-                           'y_pos': layer.posy,
-                           'x_scroll': layer.scrollx,
-                           'y_scroll': layer.scrolly,
-                           'colormod': layer.colormod,
-                           'blend_mode': layer.blendmode})
-        savedata['layers'] = layers
+            layerslist.append({'name': layer.name,
+                               'tilemap': layer.tilemap,
+                               'relative': layer.relative,
+                               'view_width': layer.vw,
+                               'view_height': layer.vh,
+                               'x_scale': layer.scalex,
+                               'y_scale': layer.scaley,
+                               'mode': mode,
+                               'x_pos': layer.posx,
+                               'y_pos': layer.posy,
+                               'x_scroll': layer.scrollx,
+                               'y_scroll': layer.scrolly,
+                               'colormod': layer.colormod,
+                               'blend_mode': layer.blendmode})
+        savedata['layers'] = layerslist
         with open("{}.json".format(self._name), 'w') as outfile:
             json.dump(savedata, outfile, indent=4)
         for num, editor in enumerate(self._editors):
