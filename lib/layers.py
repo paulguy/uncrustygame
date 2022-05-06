@@ -3,10 +3,10 @@ import json
 import array
 from dataclasses import dataclass
 from enum import Enum
-import display
+import lib.display as display
 
-FONT_FILENAME="cdemo/font.bmp"
-FONT_MAPNAME="font.txt"
+FONT_FILENAME="gfx/font.bmp"
+FONT_MAPNAME="gfx/font.txt"
 FONT_WIDTH=8
 FONT_HEIGHT=8
 FONT_SCALE=2.0
@@ -174,15 +174,27 @@ def load_map(name):
         newlayers.append(newlayer)
     maps = list()
     for num, desc in enumerate(newdescs):
-        with open("{} tilemap{}.bin".format(name, num), 'rb') as infile:
-            data = infile.read()
-        tilemap = array.array('I', data)
-        with open("{} flags{}.bin".format(name, num), 'rb') as infile:
-            data = infile.read()
-        flags = array.array('I', data)
-        with open("{} colormod{}.bin".format(name, num), 'rb') as infile:
-            data = infile.read()
-        colormod = array.array('I', data)
+        tilemap = None
+        try:
+            with open("{} tilemap{}.bin".format(name, num), 'rb') as infile:
+                data = infile.read()
+            tilemap = array.array('I', data)
+        except:
+            pass
+        flags = None
+        try:
+            with open("{} flags{}.bin".format(name, num), 'rb') as infile:
+                data = infile.read()
+            flags = array.array('I', data)
+        except:
+            pass
+        colormod = None
+        try:
+            with open("{} colormod{}.bin".format(name, num), 'rb') as infile:
+                data = infile.read()
+            colormod = array.array('I', data)
+        except:
+            pass
         maps.append((tilemap, flags, colormod))
 
     return globalsettings, newdescs, maps, newlayers

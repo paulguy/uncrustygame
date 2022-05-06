@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from traceback import print_tb
 from enum import Enum
 import json
-import display
-import textbox
 import copy
 import itertools
 import math
-import effects
-import layers
+import lib.display as display
+import lib.textbox as textbox
+import lib.effects as effects
+import lib.layers as layers
 
 #TODO:
 # mouse support
@@ -27,11 +27,6 @@ TRACEVIDEO=False
 
 RES_WIDTH=1024
 RES_HEIGHT=768
-FONT_FILENAME="cdemo/font.bmp"
-FONT_MAPNAME="font.txt"
-FONT_WIDTH=8
-FONT_HEIGHT=8
-FONT_SCALE=2.0
 ERROR_TIME=10.0
 FULL_RENDERS = 2
 
@@ -533,7 +528,13 @@ class ProjectScreen():
         self._dl.replace(self._cursorindex, self._cursorl)
 
     def _load(self):
-        settings, self._descs, maps, ldescs = layers.load_map(self._name)
+        try:
+            settings, self._descs, maps, ldescs = layers.load_map(self._name)
+        except Exception as e:
+            print(e)
+            print_tb(e.__traceback__)
+            self._set_error("Couldn't load project: {}".format(e))
+            return
         try:
             self._state.set_scale(settings['ui_scale'])
         except KeyError:
@@ -3321,7 +3322,10 @@ def get_viewport(renderer):
 
 def do_main(window, renderer, pixfmt):
     rect = get_viewport(renderer)
-    state = MapeditState(renderer, pixfmt, rect.w, rect.h, FONT_FILENAME, FONT_MAPNAME, FONT_WIDTH, FONT_HEIGHT, FONT_SCALE)
+    state = MapeditState(renderer, pixfmt, rect.w, rect.h,
+                         layers.FONT_FILENAME, layers.FONT_MAPNAME,
+                         layers.FONT_WIDTH, layers.FONT_HEIGHT,
+                         layers.FONT_SCALE)
     if len(argv) > 1:
         project = ProjectScreen(state, argv[1])
     else:

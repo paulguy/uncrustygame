@@ -415,7 +415,7 @@ def main(filename):
 <html>
     <head>
         <title>{} Documentation</title>
-        <link href="uncrustygame.css" rel="stylesheet">
+        <link href="htmldoc_files/uncrustygame.css" rel="stylesheet">
     </head>
     <body>
         <img src="cdemo/title.bmp">""".format(filename)

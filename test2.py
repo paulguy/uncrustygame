@@ -5,14 +5,14 @@ import array
 import time
 import random
 from itertools import islice, count, repeat
-import sequencer as seq
-import audio
 from traceback import print_tb
 from sys import argv
 import numpy
-import display
-import effects
-import waves
+import lib.audio as audio
+import lib.sequencer as seq
+import lib.display as display
+import lib.effects as effects
+import lib.waves as waves
 
 # debugging options
 # enable SDL render batching, not very useful to disable but can be useful to
@@ -26,7 +26,7 @@ TRACEAUDIO=True
 RES_WIDTH=1920
 RES_HEIGHT=1080
 
-DEFAULT_SEQ = "test3.crustysequence"
+DEFAULT_SEQ = "seq/test3.crustysequence"
 DEFAULT_WAV = "output.wav"
 
 WAVEFORM_HARMONICS = 8
@@ -147,7 +147,7 @@ def do_main(window, renderer, pixfmt):
         print("Got different renderer back from layerlist")
 
     ts1 = cg.Tileset(ll, 32, 32, sdl_blue, 16, 16, "Blue")
-    ts2 = cg.Tileset(ll, "cdemo/font.bmp", 8, 8, None)
+    ts2 = cg.Tileset(ll, "gfx/font.bmp", 8, 8, None)
     surface = SDL_CreateRGBSurfaceWithFormat(0, 64, 64, 32, pixfmt)
     ts3 = cg.Tileset(ll, surface, 64, 64, "Square")
     SDL_FreeSurface(surface)
@@ -192,7 +192,7 @@ def do_main(window, renderer, pixfmt):
     colorrad = 0.0
     colorrad2 = 0.25
 
-    text = ll.tileset("cdemo/font.bmp", 8, 8, None)
+    text = ll.tileset("gfx/font.bmp", 8, 8, None)
     tm1 = ll.tilemap(text, 8, 8, "DVD Video")
     tm1.map(2, 2, 5, 5, 2, array.array('u', "oediV DVD "))
     tm1.attr_flags(2, 2, 0, 5, 2, array.array('I', (cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180, cg.TILEMAP_ROTATE_180)))

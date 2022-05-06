@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from traceback import print_tb
 from enum import Enum
 import json
-import display
-import textbox
 import copy
 import itertools
 import math
-import effects
-import layers
+import lib.display as display
+import lib.textbox as textbox
+import lib.effects as effects
+import lib.layers as layers
 
 # debugging options
 # enable SDL render batching, no idea why you'd disable it
@@ -292,7 +292,7 @@ def do_main(window, renderer, pixfmt):
                       layers.FONT_FILENAME, layers.FONT_MAPNAME,
                       layers.FONT_WIDTH, layers.FONT_HEIGHT,
                       layers.FONT_SCALE)
-    mapscreen = MapScreen(state, "Example")
+    mapscreen = MapScreen(state, "maps/Example")
     state.active_screen(mapscreen)
 
     while state.running:

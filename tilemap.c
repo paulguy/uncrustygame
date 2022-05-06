@@ -608,10 +608,9 @@ static void scan_tileset_refs(LayerList *ll, int index) {
 
     LOG_PRINTF(ll, "Scanning for references...\n");
     for(i = 0; i < ll->tilemapsmem; i++) {
-        if(ll->tilemap[i].map != NULL) {
-            if(ll->tilemap[i].tileset == index) {
-                LOG_PRINTF(ll, " %u %s\n", i, ll->tilemap[i].name);
-            }
+        if(ll->tilemap[i].map != NULL &&
+           ll->tilemap[i].tileset == index) {
+            LOG_PRINTF(ll, " %u %s\n", i, ll->tilemap[i].name);
         }
     }
 }
@@ -798,7 +797,8 @@ static void scan_tilemap_refs(LayerList *ll, int index) {
 
     LOG_PRINTF(ll, "Scanning for references...\n");
     for(i = 0; i < ll->layersmem; i++) {
-        if(ll->layer[i].tilemap == index) {
+        if(ll->layer[i].inUse &&
+           ll->layer[i].tilemap == index) {
             LOG_PRINTF(ll, " %u %s\n", i, ll->layer[i].name);
         }
     }

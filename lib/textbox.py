@@ -2,11 +2,11 @@ from sdl2 import *
 import crustygame as cg
 import array
 import itertools
-import display
 import codecs
 import copy
 from dataclasses import dataclass
 from typing import Callable
+import lib.display as display
 
 MENU_DEFAULT_CURSOR = '▶'
 

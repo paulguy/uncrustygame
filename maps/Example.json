@@ -5,7 +5,7 @@
     "tilemaps": [
         {
             "name": "bg",
-            "gfx": "tiles.bmp",
+            "gfx": "gfx/tiles.bmp",
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
@@ -16,7 +16,7 @@
         },
         {
             "name": "lights",
-            "gfx": "tiles.bmp",
+            "gfx": "gfx/tiles.bmp",
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
@@ -27,7 +27,7 @@
         },
         {
             "name": "shadows",
-            "gfx": "tiles.bmp",
+            "gfx": "gfx/tiles.bmp",
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
@@ -38,8 +38,8 @@
         },
         {
             "name": "params",
-            "gfx": "cdemo/font.bmp",
-            "unimap": "font.txt",
+            "gfx": "gfx/font.bmp",
+            "unimap": "gfx/font.txt",
             "tile_width": 8,
             "tile_height": 8,
             "map_width": 32,

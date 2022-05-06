@@ -1240,7 +1240,7 @@ int main(int argc, char **argv) {
 
     gs.hudTilemap = -1;
     gs.hud = -1;
-    if(load_graphic(gs.ll, "font.bmp",
+    if(load_graphic(gs.ll, "../gfx/font.bmp",
                     8, 8,
                     &font, &(gs.hudTilemap), &(gs.hud),
                     NULL,
@@ -1590,6 +1590,9 @@ int main(int argc, char **argv) {
     tilemap_free_layer(gs.ll, gs.goreSprite);
     tilemap_free_layer(gs.ll, gs.spawnerSprite);
     tilemap_free_layer(gs.ll, gs.catlayer);
+    if(gs.catState == CAT_RESTING) {
+        tilemap_free_layer(gs.ll, gs.zzzlayer);
+    }
     tilemap_free_tilemap(gs.ll, gs.tilemap);
     tilemap_free_tileset(gs.ll, gs.tileset);
     layerlist_free(gs.ll);

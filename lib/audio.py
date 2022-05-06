@@ -1,7 +1,7 @@
 import array
 import crustygame as cg
-import sequencer as seq
 from dataclasses import dataclass
+import lib.sequencer as seq
 
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
