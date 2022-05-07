@@ -414,7 +414,7 @@ class ScrollingTilemap():
     def scale(self, x, y):
         self._xscale = x
         self._yscale = y
-        self._l.scale(x, y)
+        self._winl.scale(x, y)
 
     def _setmap(self, x, y, vmx=0, vmy=0, w=0, h=0):
         self._tm.map(vmx, vmy, self._mw, w, h, self._tilemap[y * self._mw + x:])
@@ -523,7 +523,7 @@ class ScrollingTilemap():
         xwin = self._pvw
         xscroll = self._newx - (nx * self._tw)
         if self._newx < 0:
-            xpos = int(-self._newx * self._xscale)
+            xpos = -int(self._newx)
             xwin = self._pvw + self._newx
             xscroll = 0
         if xscroll + xwin > self._imw * self._tw:
@@ -532,7 +532,7 @@ class ScrollingTilemap():
         ywin = self._pvh
         yscroll = self._newy - (ny * self._th)
         if self._newy < 0:
-            ypos = int(-self._newy * self._yscale)
+            ypos = -int(self._newy)
             ywin = self._pvh + self._newy
             yscroll = 0
         if yscroll + ywin > self._imh * self._th:
@@ -542,7 +542,8 @@ class ScrollingTilemap():
         self._l.pos(xpos, ypos)
         self._l.window(xwin, ywin)
         self._l.scroll_pos(xscroll, yscroll)
-        self._mapl.pos(int(self._newx * -self._xscale), int(self._newy * -self._yscale))
+        self._mapl.pos(-int(self._newx * self._xscale),
+                       -int(self._newy * self._yscale))
 
     def updateregion(self, x, y, w, h):
         vmx = 0

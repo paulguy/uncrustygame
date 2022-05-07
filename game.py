@@ -22,8 +22,8 @@ RENDERBATCHING=True
 # enable tracing of display list processing
 TRACEVIDEO=False
 
-RES_WIDTH=1024
-RES_HEIGHT=768
+RES_WIDTH=640
+RES_HEIGHT=480
 ERROR_TIME=10.0
 FULL_RENDERS = 2
 
@@ -48,7 +48,7 @@ class MapScreen():
 
     def __init__(self, state, name):
         self._state = state
-        _, self._descs, self._maps, self._layers = layers.load_map(name)
+        _, self._descs, self._maps, self._layers, _, _ = layers.load_map(name)
         self._params = None
         # get the params tilemap out
         for num, desc in enumerate(self._descs):
@@ -73,6 +73,13 @@ class MapScreen():
                 break
         if self._params is None:
             raise ValueError("No 'params' map found.")
+        playerdesc = self._state.add_tileset("gfx/face.bmp", 16, 16)
+        playerts = self._state.tileset_desc(playerdesc)
+        playertm = playerts.tilemap(1, 1, "Player Tilemap")
+        playertm.map(0, 0, 1, 1, 1, array.array('I', (0,)))
+        playertm.update()
+        self._playerl = playertm.layer("Player Layer")
+        self._playerl.scale(2.0, 2.0)
         self._view = None
         self._xspeed = 0.0
         self._yspeed = 0.0
@@ -80,6 +87,7 @@ class MapScreen():
         self._posy = 0
         self._dl = display.DisplayList(self._state.ll)
         self._viewindex = self._dl.append(None)
+        self._dl.append(self._playerl)
         self._build_screen()
 
     def resize(self):

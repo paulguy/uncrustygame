@@ -529,20 +529,25 @@ class ProjectScreen():
 
     def _load(self):
         try:
-            settings, self._descs, maps, ldescs = layers.load_map(self._name)
+            self._settings, self._descs, maps, ldescs, \
+                self._extradescparams, self._extralayerparams = \
+                layers.load_map(self._name)
         except Exception as e:
             print(e)
             print_tb(e.__traceback__)
             self._set_error("Couldn't load project: {}".format(e))
             return
         try:
-            self._state.set_scale(settings['ui_scale'])
+            self._state.set_scale(self._settings['ui_scale'])
+            del self._settings['ui_scale']
         except KeyError:
             pass
         pscrollx, pscrolly = self._layers.scroll_pos
         try:
-            pscrollx = settings['preview_scroll_x']
-            pscrolly = settings['preview_scroll_y']
+            pscrollx = self._settings['preview_scroll_x']
+            del self._settings['preview_scroll_x']
+            pscrolly = self._settings['preview_scroll_y']
+            del self._settings['preview_scroll_y']
             self._layers.set_scroll(pscrollx, pscrolly)
         except KeyError:
             pass
@@ -621,7 +626,7 @@ class ProjectScreen():
             self._update_menu()
             self._layers.delete_tilemap(self._selected)
         elif self._moving >= 0:
-            self._set_banner("Swap with?")
+            self._set_banner("Move where?")
         elif self._saving:
             self._saving = False
             self._do_save()
@@ -706,21 +711,20 @@ class ProjectScreen():
                 return
             moving = self._moving
             self._moving = -1
-            desc1 = self._descs[sel]
-            editor1 = self._editors[sel]
-            desc2 = self._descs[moving]
-            editor2 = self._editors[moving]
-            self._descs[sel] = desc2
-            self._editors[sel] = editor2
-            self._descs[moving] = desc1
-            self._editors[moving] = editor1
-            self._menu.remove(sel)
-            self._menu.insert_item(sel, desc2.name, onActivate=self._open_tilemap)
-            self._menu.remove(moving)
-            self._menu.insert_item(moving, desc1.name, onActivate=self._open_tilemap)
-            self._update_menu()
             self._set_banner(ProjectScreen.DEFAULT_BANNER)
-            self._layers.swap_tilemaps(sel, moving)
+            desc = self._descs[moving]
+            editor = self._editors[moving]
+            extras = self._extradescparams[moving]
+            del self._descs[moving]
+            del self._editors[moving]
+            del self._extradescparams[moving]
+            self._menu.remove(moving)
+            self._descs.insert(sel, desc)
+            self._editors.insert(sel, editor)
+            self._extradescparams.insert(sel, extras)
+            self._menu.insert_item(sel, desc.name, onActivate=self._open_tilemap)
+            self._update_menu()
+            self._layers.swap_tilemaps(moving, sel)
         else:
             try:
                 self._open_settings(sel)
@@ -874,43 +878,48 @@ class ProjectScreen():
             self._state.active_screen(prompt)
 
     def _do_save(self):
-        savedata = {'ui_scale': self._state.font_scale}
+        savedata = copy.copy(self._settings)
+        savedata['ui_scale'] = self._state.font_scale
         pscrollx, pscrolly = self._layers.scroll_pos
         savedata['preview_scroll_x'] = pscrollx
         savedata['preview_scroll_y'] = pscrolly
         tilemaps = list()
-        for desc in self._descs:
-            tilemaps.append({'name': desc.name,
-                             'gfx': desc.filename,
-                             'unimap': desc.mapname,
-                             'tile_width': desc.tw,
-                             'tile_height': desc.th,
-                             'map_width': desc.mw,
-                             'map_height': desc.mh,
-                             'x_scale': desc.wscale,
-                             'y_scale': desc.hscale})
+        for num, desc in enumerate(self._descs):
+            tmdata = copy.copy(self._extradescparams[num])
+            tmdata['name'] = desc.name
+            tmdata['gfx'] = desc.filename
+            tmdata['unimap'] = desc.mapname
+            tmdata['tile_width'] = desc.tw
+            tmdata['tile_height'] = desc.th
+            tmdata['map_width'] = desc.mw
+            tmdata['map_height'] = desc.mh
+            tmdata['x_scale'] = desc.wscale
+            tmdata['y_scale'] = desc.hscale
+            tilemaps.append(tmdata)
         savedata['tilemaps'] = tilemaps
         layerslist = list()
-        for layer in self._layers.layers:
+        for num, layer in enumerate(self._layers.layers):
             mode = 'NONE'
             if layer.mode == layers.ScrollMode.POSITION:
                 mode = 'POSITION'
             elif layer.mode == layers.ScrollMode.LAYER:
                 mode = 'LAYER'
-            layerslist.append({'name': layer.name,
-                               'tilemap': layer.tilemap,
-                               'relative': layer.relative,
-                               'view_width': layer.vw,
-                               'view_height': layer.vh,
-                               'x_scale': layer.scalex,
-                               'y_scale': layer.scaley,
-                               'mode': mode,
-                               'x_pos': layer.posx,
-                               'y_pos': layer.posy,
-                               'x_scroll': layer.scrollx,
-                               'y_scroll': layer.scrolly,
-                               'colormod': layer.colormod,
-                               'blend_mode': layer.blendmode})
+            ldata = copy.copy(self._extralayerparams[num])
+            ldata['name'] = layer.name
+            ldata['tilemap'] = layer.tilemap
+            ldata['relative'] = layer.relative
+            ldata['view_width'] = layer.vw
+            ldata['view_height'] = layer.vh
+            ldata['x_scale'] = layer.scalex
+            ldata['y_scale'] = layer.scaley
+            ldata['mode'] = mode
+            ldata['x_pos'] = layer.posx
+            ldata['y_pos'] = layer.posy
+            ldata['x_scroll'] = layer.scrollx
+            ldata['y_scroll'] = layer.scrolly
+            ldata['colormod'] = layer.colormod
+            ldata['blend_mode'] = layer.blendmode
+            layerslist.append(ldata)
         savedata['layers'] = layerslist
         with open("{}.json".format(self._name), 'w') as outfile:
             json.dump(savedata, outfile, indent=4)
@@ -921,6 +930,11 @@ class ProjectScreen():
                 editor.flags.tofile(outfile)
             with open("{} colormod{}.bin".format(self._name, num), 'wb') as outfile:
                 editor.colormod.tofile(outfile)
+
+    def swap_layers(self, src, dst):
+        extras = self._extralayerparams[src]
+        del self._extralayerparams[src]
+        self._extralayerparams[dst] = extras
 
 class TilemapScreen():
     def _build_screen(self):
@@ -2489,7 +2503,7 @@ class LayersScreen():
                                         self._fmw * self._fw, 1 * self._fh,
                                         self._fmw, 1,
                                         self._state.font)
-        self._set_banner(ProjectScreen.DEFAULT_BANNER)
+        self._set_banner(LayersScreen.DEFAULT_BANNER)
         self._titletb.layer.pos(int(self._fw * self._scale),
                                 int(self._fh * self._scale))
         self._titletb.layer.scale(self._state.font_scale, self._state.font_scale)
@@ -2558,7 +2572,7 @@ class LayersScreen():
             self._menu.remove(self._selected)
             self._update_menu()
         elif self._moving >= 0:
-            self._set_banner("Swap with?")
+            self._set_banner("Move where?")
 
     def input(self, event):
         if event.type == SDL_KEYDOWN:
@@ -2618,16 +2632,16 @@ class LayersScreen():
                 return
             moving = self._moving
             self._moving = -1
-            desc1 = self._descs[sel]
-            desc2 = self._descs[moving]
-            self._descs[sel] = desc2
-            self._descs[moving] = desc1
-            self._menu.remove(sel)
-            self._menu.insert_item(sel, desc2.name, onActivate=self._open_layer)
+            self._set_banner(LayersScreen.DEFAULT_BANNER)
+            desc = self._descs[moving]
+            del self._descs[moving]
             self._menu.remove(moving)
-            self._menu.insert_item(moving, desc1.name, onActivate=self._open_layer)
+            if sel > moving:
+                sel -= 1
+            self._descs.insert(sel, desc)
+            self._menu.insert_item(sel, desc.name, onActivate=self._open_layer)
             self._update_menu()
-            self._set_banner(ProjectScreen.DEFAULT_BANNER)
+            self._caller.swap_layers(moving, sel)
         else:
             try:
                 self._open_settings(sel)
@@ -2704,12 +2718,13 @@ class LayersScreen():
             if desc.tilemap == tm:
                 desc.tilemap = -1
 
-    def swap_tilemaps(self, tm1, tm2):
+    def swap_tilemaps(self, src, dst):
+        mappings = list(range(len(self._caller.descs)))
+        del mappings[src]
+        mappings.insert(dst, src)
         for desc in self._descs:
-            if desc.tilemap == tm1:
-                desc.tilemap = tm2
-            elif desc.tilemap == tm2:
-                desc.tilemap = tm1
+            if desc.tilemap >= 0:
+                desc.tilemap = mappings.index(desc.tilemap)
 
     @property
     def scroll_pos(self):
@@ -2858,8 +2873,6 @@ class LayerScreen():
                 self._ldesc.scalex, self._ldesc.scaley = self._get_tmscale()
                 self._menu.update_value(6, str(self._ldesc.scalex))
                 self._menu.update_value(7, str(self._ldesc.scaley))
-            else:
-                self._ldesc.tilemap = -1
             self._menu.update_value(2, self._get_tmname())
         elif self._selecting == LayerScreenSelecting.RELATIVE:
             if self._selection is not None:
@@ -3070,7 +3083,8 @@ class PreviewScreen():
         if self._view is None:
             self._view = layers.MapView(self._state,
                                         self._descs, self._maps, self._layers,
-                                        self._vw, self._vh)
+                                        self._vw, self._vh,
+                                        self._posx, self._posy)
         else:
             self._view.resize(self._vw, self._vh)
         self._dl.replace(self._viewindex, self._view.dl)

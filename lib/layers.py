@@ -51,13 +51,10 @@ def load_map(name):
     with open("{}.json".format(name), 'r') as infile:
         data = infile.read()
     savedata = json.loads(data)
-    globalsettings = dict()
-    for key in savedata.keys():
-        if key != 'tilemaps' and key != 'layers':
-            globalsettings[key] = savedata[key]
     descs = list()
     try:
         descs = savedata['tilemaps']
+        del savedata['tilemaps']
     except KeyError:
         pass
     newdescs = list()
@@ -65,38 +62,47 @@ def load_map(name):
         newdesc = TilemapDesc()
         try:
             newdesc.name = desc['name']
+            del desc['name']
         except KeyError:
             pass
         try:
             newdesc.filename = desc['gfx']
+            del desc['gfx']
         except KeyError:
             pass
         try:
             newdesc.mapname = desc['unimap']
+            del desc['unimap']
         except KeyError:
             pass
         try:
             newdesc.tw = desc['tile_width']
+            del desc['tile_width']
         except KeyError:
             pass
         try:
             newdesc.th = desc['tile_height']
+            del desc['tile_height']
         except KeyError:
             pass
         try:
             newdesc.mw = desc['map_width']
+            del desc['map_width']
         except KeyError:
             pass
         try:
             newdesc.mh = desc['map_height']
+            del desc['map_height']
         except KeyError:
             pass
         try:
             newdesc.wscale = desc['x_scale']
+            del desc['x_scale']
         except KeyError:
             pass
         try:
             newdesc.hscale = desc['y_scale']
+            del desc['y_scale']
         except KeyError:
             pass
         newdescs.append(newdesc)
@@ -104,41 +110,50 @@ def load_map(name):
     newlayers = list()
     try:
         layers = savedata['layers']
+        del savedata['layers']
     except KeyError:
         pass
     for layer in layers:
         newlayer = LayerDesc()
         try:
             newlayer.name = layer['name']
+            del layer['name']
         except KeyError:
             pass
         try:
             newlayer.tilemap = layer['tilemap']
+            del layer['tilemap']
         except KeyError:
             pass
         try:
             newlayer.relative = layer['relative']
+            del layer['relative']
         except KeyError:
             pass
         try:
             newlayer.vw = layer['view_width']
+            del layer['view_width']
         except KeyError:
             pass
         try:
             newlayer.vh = layer['view_height']
+            del layer['view_height']
         except KeyError:
             pass
         try:
             newlayer.scalex = layer['x_scale']
+            del layer['x_scale']
         except KeyError:
             pass
         try:
             newlayer.scaley = layer['y_scale']
+            del layer['y_scale']
         except KeyError:
             pass
         mode = 'NONE'
         try:
             mode = layer['mode']
+            del layer['mode']
         except KeyError:
             pass
         if mode == 'POSITION':
@@ -149,26 +164,32 @@ def load_map(name):
             newlayer.mode = ScrollMode.NONE
         try:
             newlayer.posx = layer['x_pos']
+            del layer['x_pos']
         except KeyError:
             pass
         try:
             newlayer.posy = layer['y_pos']
+            del layer['y_pos']
         except KeyError:
             pass
         try:
             newlayer.scrollx = layer['x_scroll']
+            del layer['x_scroll']
         except KeyError:
             pass
         try:
             newlayer.scrolly = layer['y_scroll']
+            del layer['y_scroll']
         except KeyError:
             pass
         try:
             newlayer.colormod = layer['colormod']
+            del layer['colormod']
         except KeyError:
             pass
         try:
             newlayer.blendmode = layer['blend_mode']
+            del layer['blend_mode']
         except KeyError:
             pass
         newlayers.append(newlayer)
@@ -197,7 +218,7 @@ def load_map(name):
             pass
         maps.append((tilemap, flags, colormod))
 
-    return globalsettings, newdescs, maps, newlayers
+    return savedata, newdescs, maps, newlayers, descs, layers
 
 class MapView():
     def _get_tileset(self, num):
@@ -209,9 +230,13 @@ class MapView():
     def _set_all(self):
         for num, desc in enumerate(self._ldescs):
             if desc.mode == ScrollMode.LAYER:
-                self._layers[num].scroll(desc.scrollx + int(self._posx),
-                                         desc.scrolly + int(self._posy))
-                self._layers[num].update()
+                if desc.tilemap < 0:
+                    self._layers[num].pos(-(desc.posx + int(self._posx)),
+                                          -(desc.posy + int(self._posy)))
+                else:
+                    self._layers[num].scroll((desc.scrollx + int(self._posx)) / desc.scalex,
+                                             (desc.scrolly + int(self._posy)) / desc.scaley)
+                    self._layers[num].update()
             elif desc.mode == ScrollMode.POSITION:
                 if desc.tilemap < 0:
                     self._layers[num].pos(desc.posx + int(self._posx),
@@ -227,7 +252,10 @@ class MapView():
             if desc.tilemap < 0:
                 l = cg.Layer(self._state.ll, None, "Preview Layer {}".format(desc.name))
                 l.scale(desc.scalex, desc.scaley)
-                l.pos(desc.posx, desc.posy)
+                if desc.mode == ScrollMode.LAYER:
+                    l.pos(-desc.posx, -desc.posy)
+                else:
+                    l.pos(desc.posx, desc.posy)
                 self._layers.append(l)
             else:
                 vpw = desc.vw
@@ -254,16 +282,18 @@ class MapView():
 
         for num, desc in enumerate(self._ldescs):
             if desc.relative >= 0:
-                if desc.mode != ScrollMode.LAYER:
+                layer = self._layers[num]
+                if desc.tilemap >= 0:
+                    layer = layer.layer
+
+                rlayer = self._layers[desc.relative]
+                if self._ldescs[desc.relative].tilemap >= 0:
                     if self._ldescs[desc.relative].mode == ScrollMode.LAYER:
-                        self._layers[num].layer.relative(self._layers[desc.relative].maplayer)
+                        rlayer = rlayer.layer
                     else:
-                        self._layers[num].layer.relative(self._layers[desc.relative].layer)
-                else:
-                    if self._ldescs[desc.relative].mode == ScrollMode.LAYER:
-                        self._layers[num].maplayer.relative(self._layers[desc.relative].maplayer)
-                    else:
-                        self._layers[num].maplayer.relative(self._layers[desc.relative].layer)
+                        rlayer = rlayer.maplayer
+
+                layer.relative(rlayer)
 
         self._set_all()
 
@@ -295,3 +325,21 @@ class MapView():
         self._posx = x
         self._posy = y
         self._set_all()
+
+    @property
+    def layer(self):
+        """
+        Return the first layer for use of relative placement of sprites on top
+        of this map.
+        
+        Which means that the first layer should be the correct relative
+        position and scale that sprites would be placed to.
+        """
+        layer = self._layers[0]
+        if self._ldescs[0].tilemap >= 0:
+            if self._ldescs[0].mode == ScrollMode.LAYER:
+                layer = layer.layer
+            else:
+                layer = layer.maplayer
+
+        return layer
