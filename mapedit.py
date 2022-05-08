@@ -845,28 +845,29 @@ class ProjectScreen():
             flist.append(filename)
         except OSError:
             pass
-        for num in range(len(self._editors)):
-            try:
-                filename = "{} tilemap{}.bin".format(self._name, num)
-                file = open(filename, 'r')
-                file.close()
-                flist.append(filename)
-            except OSError:
-                pass
-            try:
-                filename = "{} flags{}.bin".format(self._name, num)
-                file = open(filename, 'r')
-                file.close()
-                flist.append(filename)
-            except OSError:
-                pass
-            try:
-                filename = "{} colormod{}.bin".format(self._name, num)
-                file = open(filename, 'r')
-                file.close()
-                flist.append(filename)
-            except OSError:
-                pass
+        for num, editor in enumerate(self._editors):
+            if editor.changed:
+                try:
+                    filename = "{} tilemap{}.bin".format(self._name, num)
+                    file = open(filename, 'r')
+                    file.close()
+                    flist.append(filename)
+                except OSError:
+                    pass
+                try:
+                    filename = "{} flags{}.bin".format(self._name, num)
+                    file = open(filename, 'r')
+                    file.close()
+                    flist.append(filename)
+                except OSError:
+                    pass
+                try:
+                    filename = "{} colormod{}.bin".format(self._name, num)
+                    file = open(filename, 'r')
+                    file.close()
+                    flist.append(filename)
+                except OSError:
+                    pass
         if len(flist) == 0:
             self._do_save()
         else:
@@ -924,12 +925,14 @@ class ProjectScreen():
         with open("{}.json".format(self._name), 'w') as outfile:
             json.dump(savedata, outfile, indent=4)
         for num, editor in enumerate(self._editors):
-            with open("{} tilemap{}.bin".format(self._name, num), 'wb') as outfile:
-                editor.tilemap.tofile(outfile)
-            with open("{} flags{}.bin".format(self._name, num), 'wb') as outfile:
-                editor.flags.tofile(outfile)
-            with open("{} colormod{}.bin".format(self._name, num), 'wb') as outfile:
-                editor.colormod.tofile(outfile)
+            if editor.changed:
+                with open("{} tilemap{}.bin".format(self._name, num), 'wb') as outfile:
+                    editor.tilemap.tofile(outfile)
+                with open("{} flags{}.bin".format(self._name, num), 'wb') as outfile:
+                    editor.flags.tofile(outfile)
+                with open("{} colormod{}.bin".format(self._name, num), 'wb') as outfile:
+                    editor.colormod.tofile(outfile)
+                editor.saved()
 
     def swap_layers(self, src, dst):
         extras = self._extralayerparams[src]
@@ -1516,6 +1519,7 @@ class EditScreen():
         self._errorbox = None
         self._errorh = 0
         self._codec = None
+        self._changed = False
         self._tmdesc = None
         self._tsdesc = None
         self._fw = self._state.font.ts.width()
@@ -1625,7 +1629,11 @@ class EditScreen():
         if change.flags is not None:
             for num in range(change.h):
                 self._flags[(self._tmdesc.mw*(change.y+num))+change.x:(self._tmdesc.mw*(change.y+num))+change.x+change.w] = change.flags[change.w*num:(change.w*num)+change.w]
-        self._stm.updateregion(change.x, change.y, change.w+1, change.h+1)
+        if change.tilemap is not None and \
+           change.colormod is not None and \
+           change.flags is not None:
+            self._stm.updateregion(change.x, change.y, change.w+1, change.h+1)
+            self._changed = True
 
     def _do_undo(self):
         if self._undopos >= 0:
@@ -1657,6 +1665,7 @@ class EditScreen():
                 self._colormod[self._cury * self._tmdesc.mw + self._curx] = self._color
                 self._flags[self._cury * self._tmdesc.mw + self._curx] = self._attrib
                 self._stm.updateregion(self._curx, self._cury, 1, 1)
+                self._changed = True
         else:
             if (self._puttile and self._tilemap[self._cury * self._tmdesc.mw + self._curx] != self._tile) or \
                (self._putcolor and self._colormod[self._cury * self._tmdesc.mw + self._curx] != self._color) or \
@@ -1669,6 +1678,7 @@ class EditScreen():
                 if self._putattrib:
                     self._flags[self._cury * self._tmdesc.mw + self._curx] = self._attrib
                 self._stm.updateregion(self._curx, self._cury, 1, 1)
+                self._changed = True
 
     def _up(self):
         miny = 0
@@ -2141,6 +2151,13 @@ class EditScreen():
     def colormod(self):
         return self._colormod
 
+    @property
+    def changed(self):
+        return self._changed
+
+    def saved(self):
+        self._changed = False
+
 class TileSelectScreen():
     def _update_cursor(self):
         self._curpos, _, xscroll, yscroll, x, y = \
@@ -2569,6 +2586,11 @@ class LayersScreen():
         if self._deleting:
             self._deleting = False
             del self._descs[self._selected]
+            for desc in self._descs:
+                if desc.relative == self._selected:
+                    desc.relative = -1
+                elif desc.relative > self._selected:
+                    desc.relative -= 1
             self._menu.remove(self._selected)
             self._update_menu()
         elif self._moving >= 0:

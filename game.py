@@ -24,6 +24,7 @@ TRACEVIDEO=False
 
 RES_WIDTH=640
 RES_HEIGHT=480
+SCALE=2.0
 ERROR_TIME=10.0
 FULL_RENDERS = 2
 
@@ -38,10 +39,13 @@ class TilesetDesc():
 class MapScreen():
     def _build_screen(self):
         self._vw, self._vh = self._state.window
+        self._playerl.pos(int((self._vw - 16) / SCALE / 2),
+                          int((self._vh - 16) / SCALE / 2))
         if self._view is None:
             self._view = layers.MapView(self._state,
                                         self._descs, self._maps, self._layers,
                                         self._vw, self._vh)
+            self._playerl.relative(self._view.layer)
         else:
             self._view.resize(self._vw, self._vh)
         self._dl.replace(self._viewindex, self._view.dl)
@@ -73,13 +77,15 @@ class MapScreen():
                 break
         if self._params is None:
             raise ValueError("No 'params' map found.")
+        for layer in self._layers:
+            layer.scalex = SCALE
+            layer.scaley = SCALE
         playerdesc = self._state.add_tileset("gfx/face.bmp", 16, 16)
         playerts = self._state.tileset_desc(playerdesc)
         playertm = playerts.tilemap(1, 1, "Player Tilemap")
         playertm.map(0, 0, 1, 1, 1, array.array('I', (0,)))
         playertm.update()
         self._playerl = playertm.layer("Player Layer")
-        self._playerl.scale(2.0, 2.0)
         self._view = None
         self._xspeed = 0.0
         self._yspeed = 0.0
