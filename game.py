@@ -24,7 +24,8 @@ TRACEVIDEO=False
 
 RES_WIDTH=640
 RES_HEIGHT=480
-SCALE=2.0
+VIEW_WIDTH=320
+VIEW_HEIGHT=240
 ERROR_TIME=10.0
 FULL_RENDERS = 2
 
@@ -39,8 +40,8 @@ class TilesetDesc():
 class MapScreen():
     def _build_screen(self):
         self._vw, self._vh = self._state.window
-        self._playerl.pos(int((self._vw - 16) / SCALE / 2),
-                          int((self._vh - 16) / SCALE / 2))
+        self._playerl.pos(int((self._vw - 16) / 2),
+                          int((self._vh - 16) / 2))
         if self._view is None:
             self._view = layers.MapView(self._state,
                                         self._descs, self._maps, self._layers,
@@ -78,8 +79,8 @@ class MapScreen():
         if self._params is None:
             raise ValueError("No 'params' map found.")
         for layer in self._layers:
-            layer.scalex = SCALE
-            layer.scaley = SCALE
+            layer.scalex = 1.0
+            layer.scaley = 1.0
         playerdesc = self._state.add_tileset("gfx/face.bmp", 16, 16)
         playerts = self._state.tileset_desc(playerdesc)
         playertm = playerts.tilemap(1, 1, "Player Tilemap")
@@ -96,13 +97,8 @@ class MapScreen():
         self._dl.append(self._playerl)
         self._build_screen()
 
-    def resize(self):
-        vw, vh = self._state.window
-        if self._vw != vw or self._vh != vh:
-            self._build_screen()
-
     def active(self):
-        self.resize()
+        pass
 
     @property
     def dl(self):
@@ -168,7 +164,15 @@ class MapScreen():
 class GameState():
     RESIZE_COOLDOWN = 0.25
 
+    def _set_size(self):
+        if SDL_RenderSetLogicalSize(self._renderer, self._vw, self._vh) < 0:
+            raise Exception("SDL_RenderSetLogicalSize: {}".format(SDL_GetError()))
+
     def __init__(self, renderer, pixfmt, vw, vh, font_filename, font_mapname, font_width, font_height, font_scale):
+        self._renderer = renderer
+        self._vw = int(vw)
+        self._vh = int(vh)
+        self._set_size()
         sdlfmt = SDL_AllocFormat(pixfmt)
         self._ll = cg.LayerList(renderer, pixfmt, log_cb_return, None)
         self._dl = display.DisplayList(self._ll)
@@ -182,8 +186,6 @@ class GameState():
         self._resizing = 0.0
         self._extratime = 0.0
         self._renders = FULL_RENDERS
-        self._vw = int(vw)
-        self._vh = int(vh)
         self._font_scale = font_scale
         ts = self._ll.tileset(font_filename, font_width, font_height, "font")
         codec = textbox.load_tileset_codec(font_mapname, ts.tiles())
@@ -230,8 +232,6 @@ class GameState():
             self.stop()
         elif event.type == SDL_WINDOWEVENT and \
              event.window.event == SDL_WINDOWEVENT_RESIZED:
-            self._vw = event.window.data1
-            self._vh = event.window.data2
             self._resizing = GameState.RESIZE_COOLDOWN
 
     def _input(self, event):
@@ -246,9 +246,6 @@ class GameState():
                 display.clear(self._ll, None, 0, 0, 0, SDL_ALPHA_OPAQUE)
                 self._resizing -= time
                 if self._resizing <= 0.0:
-                    self._screen.resize()
-                    # the displaylist may have changed
-                    self._dl.replace(self._screenindex, self._screen.dl)
                     self.changed()
             else:
                 self._screen.update(time + self._extratime)
@@ -319,14 +316,8 @@ def get_error():
     crustyerror = ''
     return error
 
-def get_viewport(renderer):
-    rect = SDL_Rect()
-    SDL_RenderGetViewport(renderer, rect)
-    return rect
-
 def do_main(window, renderer, pixfmt):
-    rect = get_viewport(renderer)
-    state = GameState(renderer, pixfmt, rect.w, rect.h,
+    state = GameState(renderer, pixfmt, VIEW_WIDTH, VIEW_HEIGHT,
                       layers.FONT_FILENAME, layers.FONT_MAPNAME,
                       layers.FONT_WIDTH, layers.FONT_HEIGHT,
                       layers.FONT_SCALE)
