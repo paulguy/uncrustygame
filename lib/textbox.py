@@ -537,6 +537,26 @@ class Menu():
                 val = self._entries[self._selection].onChange(self._priv, self._selection, 1, self._entries[self._selection].value_u.tounicode())
                 self._accept_value(val)
 
+    def home(self):
+        self._selection = 0
+        self._update_cursor()
+
+    def end(self):
+        self._selection = len(self._entries) -1
+        self._update_cursor()
+
+    def page_up(self):
+        self._selection -= self._visibleitems
+        if self._selection < 0:
+            self._selection = 0
+        self._update_cursor()
+
+    def page_down(self):
+        self._selection += self._visibleitems
+        if self._selection > len(self._entries) - 1:
+            self._selection = len(self._entries) - 1
+        self._update_cursor()
+
     def update_value(self, num, val):
         if self._valtbs[num] is None:
             raise IndexError("Item has no value.")

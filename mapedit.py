@@ -452,6 +452,14 @@ class PromptScreen():
                 self._menu.up()
             elif event.key.keysym.sym == SDLK_DOWN:
                 self._menu.down()
+            elif event.key.keysym.sym == SDLK_HOME:
+                self._menu.home()
+            elif event.key.keysym.sym == SDLK_END:
+                self._menu.end()
+            elif event.key.keysym.sym == SDLK_PAGEUP:
+                self._menu.page_up()
+            elif event.key.keysym.sym == SDLK_PAGEDOWN:
+                self._menu.page_down()
             elif event.key.keysym.sym == SDLK_RETURN:
                 self._menu.activate_selection()
             elif event.key.keysym.sym == SDLK_ESCAPE:
@@ -650,6 +658,14 @@ class ProjectScreen():
                 self._menu.left()
             elif event.key.keysym.sym == SDLK_RIGHT:
                 self._menu.right()
+            elif event.key.keysym.sym == SDLK_HOME:
+                self._menu.home()
+            elif event.key.keysym.sym == SDLK_END:
+                self._menu.end()
+            elif event.key.keysym.sym == SDLK_PAGEUP:
+                self._menu.page_up()
+            elif event.key.keysym.sym == SDLK_PAGEDOWN:
+                self._menu.page_down()
             elif event.key.keysym.sym == SDLK_BACKSPACE:
                 self._menu.backspace()
             elif event.key.keysym.sym == SDLK_DELETE:
@@ -1048,6 +1064,14 @@ class TilemapScreen():
                 self._menu.left()
             elif event.key.keysym.sym == SDLK_RIGHT:
                 self._menu.right()
+            elif event.key.keysym.sym == SDLK_HOME:
+                self._menu.home()
+            elif event.key.keysym.sym == SDLK_END:
+                self._menu.end()
+            elif event.key.keysym.sym == SDLK_PAGEUP:
+                self._menu.page_up()
+            elif event.key.keysym.sym == SDLK_PAGEDOWN:
+                self._menu.page_down()
             elif event.key.keysym.sym == SDLK_BACKSPACE:
                 self._menu.backspace()
             elif event.key.keysym.sym == SDLK_DELETE:
@@ -2398,6 +2422,14 @@ class ColorPickerScreen():
                 self._menu.left()
             elif event.key.keysym.sym == SDLK_RIGHT:
                 self._menu.right()
+            elif event.key.keysym.sym == SDLK_HOME:
+                self._menu.home()
+            elif event.key.keysym.sym == SDLK_END:
+                self._menu.end()
+            elif event.key.keysym.sym == SDLK_PAGEUP:
+                self._menu.page_up()
+            elif event.key.keysym.sym == SDLK_PAGEDOWN:
+                self._menu.page_down()
             elif event.key.keysym.sym == SDLK_BACKSPACE:
                 self._menu.backspace()
             elif event.key.keysym.sym == SDLK_DELETE:
@@ -2604,6 +2636,14 @@ class LayersScreen():
                 self._menu.up()
             elif event.key.keysym.sym == SDLK_DOWN:
                 self._menu.down()
+            elif event.key.keysym.sym == SDLK_HOME:
+                self._menu.home()
+            elif event.key.keysym.sym == SDLK_END:
+                self._menu.end()
+            elif event.key.keysym.sym == SDLK_PAGEUP:
+                self._menu.page_up()
+            elif event.key.keysym.sym == SDLK_PAGEDOWN:
+                self._menu.page_down()
             elif event.key.keysym.sym == SDLK_RETURN:
                 if self._moving >= 0 and \
                    self._menu.selection >= len(self._descs):
@@ -2924,6 +2964,14 @@ class LayerScreen():
                 self._menu.left()
             elif event.key.keysym.sym == SDLK_RIGHT:
                 self._menu.right()
+            elif event.key.keysym.sym == SDLK_HOME:
+                self._menu.home()
+            elif event.key.keysym.sym == SDLK_END:
+                self._menu.end()
+            elif event.key.keysym.sym == SDLK_PAGEUP:
+                self._menu.page_up()
+            elif event.key.keysym.sym == SDLK_PAGEDOWN:
+                self._menu.page_down()
             elif event.key.keysym.sym == SDLK_BACKSPACE:
                 self._menu.backspace()
             elif event.key.keysym.sym == SDLK_DELETE:
