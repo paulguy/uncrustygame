@@ -1,5 +1,10 @@
 CrustyTracker
 2 2
+tag tuning=1.0 ; makes note value parsing available before sequence
+macro TEST4=$C4
+macro TEST3=($a * 3)
+macro TEST2=(1 + 2 * 3) ASDF
+macro TEST=(1 + 2 * 3)
 include macros.txt
 include modular.txt
 macro MAXREQ=1000

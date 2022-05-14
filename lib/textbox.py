@@ -214,12 +214,16 @@ class TextBox():
     def internal(self):
         return self._stm.internal
 
-    def clear(self):
+    def clear(self, x=0, y=0, w=0, h=0):
+        if w * h == 0:
+            w = self._mw
+            h = self._mh
+        size = w * h
         # fill with spaces
-        self._tm[:] = array.array('I', itertools.repeat(ord(' '), self._mw * self._mh))
-        self._stm.updateregion(0, 0, self._mw, self._mh)
+        self._tm[y*self._mw+h:y*self._mw+h+size] = array.array('I', itertools.repeat(ord(' '), w*h))
+        self._stm.updateregion(x, y, w, h)
 
-    def put_text(self, lines, x, y):
+    def put_text(self, lines, x=0, y=0):
         x = int(x)
         y = int(y)
         w = self._mw - x
@@ -245,7 +249,7 @@ class TextBox():
 
     def put_char(self, char, x, y):
         if isinstance(char, str):
-            char = char.encode(self._font.codec)
+            char = array.array('I', char.encode(self._font.codec))[0]
         self._tm[y*self._mw+x] = char
         self._stm.updateregion(x, y, 1, 1)
 

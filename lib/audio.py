@@ -2,6 +2,7 @@ import array
 import crustygame as cg
 from dataclasses import dataclass
 import lib.sequencer as seq
+from py_expression_eval import Parser
 
 CHANNEL_TYPE_SILENCE = "silence"
 CHANNEL_TYPE_PLAYER = "player"
@@ -15,6 +16,109 @@ def _create_float_array(iterable):
         a[item[0]] = item[1]
 
     return(a)
+
+_parser = Parser()
+
+def get_speed(speed, tunes):
+    tune = 0.0
+    # frequency
+    try:
+        tune = float(speed)
+    except ValueError:
+        # note
+        char = 0
+
+        note = _NOTES.index(speed[char].lower())
+        octave = 0
+
+        if len(speed) > char + 1:
+            if speed[char+1] == '#':
+                char += 1
+                note += 1
+                if note == 12:
+                    octave = 1
+                    note = 0
+            elif speed[char+1] == 'b':
+                char += 1
+                note -= 1
+                if note == -1:
+                    octave = -1
+                    note = 11
+
+        if len(speed) > char + 1:
+            if speed[char+1].isdigit() or \
+               speed[char+1] == '-' or \
+               speed[char+1] == '+':
+                curchar = char
+                numlen = 0
+                if speed[curchar+1].isdigit():
+                    numlen += 1
+                curchar += 1
+                while len(speed) > curchar + 1:
+                    if speed[curchar+1].isdigit():
+                        numlen += 1;
+                    else:
+                        break
+                    curchar += 1
+                if numlen > 0:
+                    octave = int(speed[char+1:curchar+1]) - 4 + octave
+                    char = curchar
+                else:
+                    raise ValueError("Sign with no number.")
+
+        tune = tunes[note] * (2 ** octave)
+
+        if len(speed) > char + 1:
+            if speed[char+1] == '*':
+                char += 1
+                if len(speed) > char + 1:
+                    try:
+                        detune = float(speed[char+1:])
+                        tune = tune * (2 ** (detune / 12))
+                    except ValueError:
+                        pass
+                else:
+                    raise ValueError("'*' with no detune.")
+            else:
+                raise ValueError("Junk after speed/note value.")
+
+    return tune
+
+def eval_exprs(line):
+    parens = 0
+    pos = 0
+    newline = ""
+    while pos < len(line):
+        if parens > 0:
+            try:
+                idx = line[pos:].index('(')
+                pos += idx+1
+                parens += 1
+            except ValueError:
+                pass
+            try:
+                idx = line[pos:].index(')')
+                pos += idx+1
+                parens -= 1
+                if parens == 0:
+                    expr = line[sindex:pos]
+                    result = str(float(_parser.parse(expr).evaluate({})))
+                    newline += result
+            except ValueError:
+                pass
+        else:
+            try:
+                sindex = line[pos:].index('(')
+                sindex += pos
+                pos = sindex+1
+                parens = 1
+                newline += line[:sindex]
+            except ValueError:
+                newline += line[pos:]
+                break
+    if parens > 0:
+        raise ValueError("Unclosed parenthesis: {}".format(line[sindex:]))
+    return newline
 
 _NOTES = "c d ef g a b"
 
@@ -47,9 +151,13 @@ class MacroReader():
         self._macros = dict()
         self._line = None
         self._lines = startLine
+        self._tunes = None
 
         if macros != None:
             self.add_macros(macros)
+
+    def set_tunes(self, tunes):
+        self._tunes = tunes
 
     @property
     def curline(self):
@@ -90,6 +198,31 @@ class MacroReader():
                 except ValueError:
                     raise ValueError("Macro {} has arg {} not found in body.".format(macro, arg))
             self._macros[macro] = macros[macro]
+
+    def _replace_note_vals(self, line):
+        if self._tunes is None:
+            return line
+        pos = 0
+        newline = ""
+        while pos < len(line):
+            try:
+                idx = line[pos:].index('$')
+                newline += line[pos:pos+idx]
+                sidx = -1
+                try:
+                    sidx = line[pos+idx:].index(' ')
+                    sidx += pos+idx
+                except ValueError:
+                    pass
+                speed = get_speed(line[pos+idx+1:sidx], self._tunes)
+                newline += str(float(speed))
+                if sidx == -1:
+                    break
+                pos = sidx
+            except ValueError:
+                newline += line[pos:]
+                break
+        return newline
 
     def readline(self):
         """
@@ -156,6 +289,8 @@ class MacroReader():
             self._line = None
         else:
             self._line = self._line[1:]
+        line = self._replace_note_vals(line)
+        line = eval_exprs(line)
         if self._trace:
             print("-> {}".format(line))
         return line
@@ -285,6 +420,9 @@ class AudioSequencer():
                 elif linetype == 'tag':
                     tagline = line.split('=', maxsplit=1)
                     self._tag[tagline[0]] = tagline[1]
+                    if tagline[0] == 'tuning':
+                        self._tune()
+                        infile.set_tunes(self._tunes)
                 elif linetype == 'buffer':
                     if line.lower() == 'external':
                         if not isinstance(buffer[extBuf], cg.Buffer):
@@ -324,6 +462,8 @@ class AudioSequencer():
                         infile.add_macros(macros)
                 else:
                     raise Exception("Invalid line type {}".format(linetype))
+            self._tune()
+            infile.set_tunes(self._tunes)
             if self._trace:
                 print(infile.macros)
                 print(self._tag)
@@ -465,7 +605,6 @@ class AudioSequencer():
         except Exception as e:
             print("Exception on line {} in {}.".format(infile.curline, infile.name))
             raise e
-        self._tune()
         self._loaded = False
         self._ended = False
 
@@ -499,71 +638,6 @@ class AudioSequencer():
             self._tunes = [float(x) for x in tuning]
         else:
             raise ValueError("'tuning' tag must be some detune or all 12 note detunings.")
-
-    def _get_speed(self, speed, inrate, outrate):
-        tune = 0.0
-        # frequency
-        try:
-            tune = float(speed)
-        except ValueError:
-            # note
-            char = 0
-
-            note = _NOTES.index(speed[char].lower())
-            octave = 0
-
-            if len(speed) > char + 1:
-                if speed[char+1] == '#':
-                    char += 1
-                    note += 1
-                    if note == 12:
-                        octave = 1
-                        note = 0
-                elif speed[char+1] == 'b':
-                    char += 1
-                    note -= 1
-                    if note == -1:
-                        octave = -1
-                        note = 11
-
-            if len(speed) > char + 1:
-                if speed[char+1].isdigit() or \
-                   speed[char+1] == '-' or \
-                   speed[char+1] == '+':
-                    curchar = char
-                    numlen = 0
-                    if speed[curchar+1].isdigit():
-                        numlen += 1
-                    curchar += 1
-                    while len(speed) > curchar + 1:
-                        if speed[curchar+1].isdigit():
-                            numlen += 1;
-                        else:
-                            break
-                        curchar += 1
-                    if numlen > 0:
-                        octave = int(speed[char+1:curchar+1]) - 4 + octave
-                        char = curchar
-                    else:
-                        raise ValueError("Sign with no number.")
-
-            tune = self._tunes[note] * (2 ** octave)
-
-            if len(speed) > char + 1:
-                if speed[char+1] == '*':
-                    char += 1
-                    if len(speed) > char + 1:
-                        try:
-                            detune = float(speed[char+1:])
-                            tune = tune * (2 ** (detune / 12))
-                        except ValueError:
-                            pass
-                    else:
-                        raise ValueError("'*' with no detune.")
-                else:
-                    raise ValueError("Junk after speed/note value.")
-
-        return (outrate / inrate) * tune
 
     def _update_silence(self, silence, status):
         if status[0] != None:
@@ -650,7 +724,7 @@ class AudioSequencer():
         if status[7] != None:
             p.volume_mode(status[7])
         if status[8] != None:
-            p.speed(self._get_speed(status[8], player.inBuf.rate, player.outBuf.rate))
+            p.speed((player.outBuf.rate / player.inBuf.rate) * get_speed(status[8], self._tunes))
         if status[9] != None:
             buf = status[9]
             if buf >= self._seqChannels:

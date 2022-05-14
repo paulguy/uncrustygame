@@ -29,6 +29,16 @@ VIEW_HEIGHT=240
 ERROR_TIME=10.0
 FULL_RENDERS = 2
 
+PLAYER_GFX = "gfx/face.bmp"
+PLAYER_WIDTH=16
+PLAYER_HEIGHT=16
+PLAYER_MAXSPEED=15
+PLAYER_ACCEL=6
+PLAYER_GRAVITY=3
+#PLAYER_GRAVITY=0
+PLAYER_BRAKING=3
+PLAYER_MINSPEED=0.001
+
 crustyerror = ''
 
 @dataclass(frozen=True)
@@ -37,11 +47,348 @@ class TilesetDesc():
     width : int
     height : int
 
+class NoHit(Exception):
+    pass
+
+def next_hit(x1, y1, x2, y2, tw, th):
+    if x2 < x1:
+        xdiff = x1 - (int(x1 / tw) * tw)
+        # set to tw so when it hits and comes back to here, it'll continue
+        # rather than get stuck
+        if xdiff == 0:
+            xdiff = tw
+        if y2 < y1:
+            ydiff = y1 - (int(y1 / th) * th)
+            if ydiff == 0:
+                ydiff = th
+            if x1 - x2 < xdiff and y1 - y2 < ydiff:
+                raise NoHit()
+            slope = (x1 - x2) / (y1 - y2)
+            if slope * ydiff > xdiff:
+                return -xdiff, -(slope * xdiff)
+            else:
+                return -(slope * ydiff), -ydiff
+        elif y2 > y1:
+            ydiff = (int(y1 / th + 1) * th) - y1
+            if ydiff == 0:
+                ydiff = th
+            if x1 - x2 < xdiff and y2 - y1 < ydiff:
+                raise NoHit()
+            slope = (x1 - x2) / (y2 - y1)
+            if slope * ydiff > xdiff:
+                return -xdiff, slope * xdiff
+            else:
+                return -(slope * ydiff), ydiff
+        else:
+            if x1 - x2 < xdiff:
+                raise NoHit()
+            return -xdiff, 0
+    if x2 > x1:
+        xdiff = (int(x1 / tw + 1) * tw) - x1
+        if xdiff == 0:
+            xdiff = tw
+        if y2 < y1:
+            ydiff = y1 - (int(y1 / th) * th)
+            if ydiff == 0:
+                ydiff = th
+            if x2 - x1 < xdiff and y1 - y2 < ydiff:
+                raise NoHit()
+            slope = (x2 - x1) / (y1 - y2)
+            if slope * ydiff > xdiff:
+                return xdiff, -(slope * xdiff)
+            else:
+                return slope * ydiff, -ydiff
+        elif y2 > y1:
+            ydiff = (int(y1 / th + 1) * th) - y1
+            if ydiff == 0:
+                ydiff = th
+            if x2 - x1 < xdiff and y2 - y1 < ydiff:
+                raise NoHit()
+            slope = (x2 - x1) / (y2 - y1)
+            if slope * ydiff > xdiff:
+                return xdiff, slope * xdiff
+            else:
+                return slope * ydiff, ydiff
+        else:
+            if x2 - x1 < xdiff:
+                raise NoHit()
+            return xdiff, 0
+    else:
+        if y2 < y1:
+            ydiff = y1 - (int(y1 / th) * th)
+            if ydiff == 0:
+                ydiff = th
+            if y1 - y2 < ydiff:
+                raise NoHit()
+            return 0, -ydiff
+        elif y2 > y1:
+            ydiff = (int(y1 / th + 1) * th) - y1
+            if ydiff == 0:
+                ydiff = th
+            if y2 - y1 < ydiff:
+                raise NoHit()
+            return 0, ydiff
+        else:
+            raise NoHit()
+
+def collision(x1, y1, x2, y2, tw, th):
+    cx = 0
+    cy = 0
+    if x2 < x1:
+        cx = (x1 % tw) - (x1 - x2)
+        if cx > 0:
+            cx = 0
+    elif x2 > x1:
+        cx = (x2 - x1) - (tw - (x1 % tw))
+        if cx < 0:
+            cx = 0
+    if y2 < y1:
+        cy = (y1 % th) - (y1 - y2)
+        if cy > 0:
+            cy = 0
+    elif y2 > y1:
+        cy = (y2 - y1) - (th - (y1 % th))
+        if cy < 0:
+            cy = 0
+    return cx, cy
+
 class MapScreen():
+    def _param(self, x, y):
+        return self._params[1][0][int(y) * self._params[0].mw + int(x)]
+
+    def _first_hit(self, x, y, dx, dy, cur):
+        nx = 0
+        ny = 0
+        while True:
+            try:
+                hx, hy = next_hit(x + nx, y + ny,
+                                  x + dx, y + dy,
+                                  self._tw, self._th)
+                nx += hx
+                ny += hy
+                px = int((x + nx) / self._tw)
+                if dx < 0:
+                    px -= 1
+                py = int((y + ny) / self._th)
+                if dy < 0:
+                    py -= 1
+                hit = self._param(px, py)
+                if hit != cur:
+                    return hit, nx, ny
+            except NoHit:
+                break
+        return None, dx, dy 
+
+    def _move_player(self):
+        dx = self._pspeedx
+        dy = self._pspeedy
+        while dx != 0 or dy != 0:
+            dx2 = dx
+            dy2 = dy
+            x = self._playerx + dx
+            y = self._playery + dy
+            if dx2 > 0:
+                if dy2 > 0:
+                    ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    hb, xb, yb = self._first_hit(self._playerx,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    print("{} {} {}".format(ht, hc, hb))
+                    if hb is not None and xb < dx2:
+                        dx2 = xb
+                        dx = 0
+                        self._pspeedx = 0
+                    if ht is not None and yt < dy2:
+                        dy2 = yt
+                        dy = 0
+                        self._pspeedy = 0
+                    if hc is not None:
+                        if xc < dx2:
+                            dx2 = xc
+                            dx = 0
+                            self._pspeedx = 0
+                        if yc < dy2:
+                            dy2 = yc
+                            dy = 0
+                            self._pspeedy = 0
+                elif dy2 < 0:
+                    ht, xt, yt = self._first_hit(self._playerx, self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    if hb is not None and xb < dx2:
+                        dx2 = xb
+                        dx = 0
+                        self._pspeedx = 0
+                    # greater is less negative
+                    if ht is not None and yt > dy2:
+                        dy2 = yt
+                        dy = 0
+                        self._pspeedy = 0
+                    if hc is not None:
+                        if xc < dx2:
+                            dx2 = xc
+                            dx = 0
+                            self._pspeedx = 0
+                        if yc > dy2:
+                            dy2 = yc
+                            dy = 0
+                            self._pspeedy = 0
+                else:
+                    ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    if ht is not None and xt < dx:
+                        dx2 = xt
+                        dx = 0
+                        self._pspeedx = 0
+                    if hb is not None and xb < dx:
+                        dx2 = xb
+                        dx = 0
+                        self._pspeedx = 0
+            elif dx2 < 0:
+                if dy2 > 0:
+                    ht, xt, yt = self._first_hit(self._playerx, self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hc, xc, yc = self._first_hit(self._playerx,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    if ht is not None and xt > dx2:
+                        dx2 = xt
+                        dx = 0
+                        self._pspeedx = 0
+                    if hb is not None and yb < dy2:
+                        dy2 = yb
+                        dy = 0
+                        self._pspeedy = 0
+                    if hc is not None:
+                        if xc > dx2:
+                            dx2 = xc
+                            dx = 0
+                            self._pspeedx = 0
+                        if yc < dy2:
+                            dy2 = yc
+                            dy = 0
+                            self._pspeedy = 0
+                elif dy2 < 0:
+                    ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hc, xc, yc = self._first_hit(self._playerx, self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hb, xb, yb = self._first_hit(self._playerx,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    if hb is not None and xb > dx2:
+                        dx2 = xb
+                        dx = 0
+                        self._pspeedx = 0
+                    if ht is not None and yt > dy2:
+                        dy2 = yt
+                        dy = 0
+                        self._pspeedy = 0
+                    if hc is not None:
+                        if xc > dx2:
+                            dx2 = xc
+                            dx = 0
+                            self._pspeedx = 0
+                        if yc > dy2:
+                            dy2 = yc
+                            dy = 0
+                            self._pspeedy = 0
+                else:
+                    ht, xt, yt = self._first_hit(self._playerx, self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hb, xb, yb = self._first_hit(self._playerx,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    if ht is not None and xt > dx2:
+                        dx2 = xt
+                        dx = 0
+                        self._pspeedx = 0
+                    if hb is not None and xb > dx2:
+                        dx2 = xb
+                        dx = 0
+                        self._pspeedx = 0
+            else:
+                if dy2 > 0:
+                    hl, xl, yl = self._first_hit(self._playerx,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery + PLAYER_HEIGHT,
+                                                 dx2, dy2,
+                                                 0)
+                    if hl is not None and yl < dy2:
+                        dy2 = yl
+                        dy = 0
+                        self._pspeedy = 0
+                    if hr is not None and yr < dy2:
+                        dy2 = yr
+                        dy = 0
+                        self._pspeedy = 0
+                elif dy2 < 0:
+                    hl, xl, yl = self._first_hit(self._playerx, self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                 self._playery,
+                                                 dx2, dy2,
+                                                 0)
+                    if hl is not None and yl > dy2:
+                        dy2 = yl
+                        dy = 0
+                        self._pspeedy = 0
+                    if hr is not None and yr > dy2:
+                        dy2 = yr
+                        dy = 0
+                        self._pspeedy = 0
+            self._playerx += dx2
+            self._playery += dy2
+            dx -= dx2
+            dy -= dy2
+
+    def _update_scroll(self):
+        self._view.scroll(round(self._playerx - self._centerx),
+                          round(self._playery - self._centery))
+        self._playerl.pos(round(self._centerx), round(self._centery))
+
     def _build_screen(self):
         self._vw, self._vh = self._state.window
-        self._playerl.pos(int((self._vw - 16) / 2),
-                          int((self._vh - 16) / 2))
+        self._centerx = (self._vw - PLAYER_WIDTH) / 2
+        self._centery = (self._vh - PLAYER_HEIGHT) / 2
         if self._view is None:
             self._view = layers.MapView(self._state,
                                         self._descs, self._maps, self._layers,
@@ -49,11 +396,18 @@ class MapScreen():
             self._playerl.relative(self._view.layer)
         else:
             self._view.resize(self._vw, self._vh)
+        self._update_scroll()
         self._dl.replace(self._viewindex, self._view.dl)
+        self._tb = textbox.TextBox(self._state.ll,
+                                   32 * self._state.font.ts.width(),
+                                   4 * self._state.font.ts.height(),
+                                   32, 4, self._state.font)
+        self._tb.internal.colormod(display.make_color(255, 255, 255, 96))
+        self._dl.replace(self._tbindex, self._tb.draw)
 
     def __init__(self, state, name):
         self._state = state
-        _, self._descs, self._maps, self._layers, _, _ = layers.load_map(name)
+        settings, self._descs, self._maps, self._layers, _, _ = layers.load_map(name)
         self._params = None
         # get the params tilemap out
         for num, desc in enumerate(self._descs):
@@ -78,23 +432,29 @@ class MapScreen():
                 break
         if self._params is None:
             raise ValueError("No 'params' map found.")
+        self._tw = self._params[0].tw
+        self._th = self._params[0].th
         for layer in self._layers:
             layer.scalex = 1.0
             layer.scaley = 1.0
-        playerdesc = self._state.add_tileset("gfx/face.bmp", 16, 16)
+        playerdesc = self._state.add_tileset(PLAYER_GFX,
+                                             PLAYER_WIDTH, PLAYER_HEIGHT)
         playerts = self._state.tileset_desc(playerdesc)
         playertm = playerts.tilemap(1, 1, "Player Tilemap")
         playertm.map(0, 0, 1, 1, 1, array.array('I', (0,)))
         playertm.update()
         self._playerl = playertm.layer("Player Layer")
         self._view = None
-        self._xspeed = 0.0
-        self._yspeed = 0.0
-        self._posx = 0
-        self._posy = 0
+        self._pdirx = 0.0
+        self._pdiry = 1.0
+        self._pspeedx = 0.0
+        self._pspeedy = 0.0
+        self._playerx = settings['player_x']
+        self._playery = settings['player_y']
         self._dl = display.DisplayList(self._state.ll)
         self._viewindex = self._dl.append(None)
         self._dl.append(self._playerl)
+        self._tbindex = self._dl.append(None)
         self._build_screen()
 
     def active(self):
@@ -104,61 +464,53 @@ class MapScreen():
     def dl(self):
         return self._dl
 
-    def _movex(self, val):
-        if val < 0:
-            self._xspeed = -1.0
-        elif val > 0:
-            self._xspeed = 1.0
-        else:
-            self._xspeed = 0.0
-
-    def _movey(self, val):
-        if val < 0:
-            self._yspeed = -1.0
-        elif val > 0:
-            self._yspeed = 1.0
-        else:
-            self._yspeed = 0.0
-
     def input(self, event):
         if event.type == SDL_KEYDOWN and event.key.repeat == 0:
-            if event.key.keysym.sym == SDLK_UP:
-                self._movey(-1)
-            elif event.key.keysym.sym == SDLK_DOWN:
-                self._movey(1)
-            elif event.key.keysym.sym == SDLK_LEFT:
-                self._movex(-1)
+            if event.key.keysym.sym == SDLK_LEFT:
+                self._pdirx = -1
             elif event.key.keysym.sym == SDLK_RIGHT:
-                self._movex(1)
-            elif event.key.keysym.sym == SDLK_r:
-                self._posx = 0
-                self._posy = 0
-                self._view.scroll(0, 0)
+                self._pdirx = 1
+            elif event.key.keysym.sym == SDLK_SPACE:
+                self._pspeedy = -5
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 self._state.stop()
         elif event.type == SDL_KEYUP:
-            if event.key.keysym.sym == SDLK_UP:
-                self._movey(0)
-            elif event.key.keysym.sym == SDLK_DOWN:
-                self._movey(0)
-            elif event.key.keysym.sym == SDLK_LEFT:
-                self._movex(0)
+            if event.key.keysym.sym == SDLK_LEFT:
+                if self._pdirx < 0:
+                    self._pdirx = 0
             elif event.key.keysym.sym == SDLK_RIGHT:
-                self._movex(0)
+                if self._pdirx > 0:
+                    self._pdirx = 0
 
     def update(self, time):
-        if self._xspeed < 0:
-            self._xspeed -= time
-        elif self._xspeed > 0:
-            self._xspeed += time
-        if self._yspeed < 0:
-            self._yspeed -= time
-        elif self._yspeed > 0:
-            self._yspeed += time
-        if self._xspeed != 0 or self._yspeed != 0:
-            self._posx += self._xspeed
-            self._posy += self._yspeed
-            self._view.scroll(self._posx, self._posy)
+        if self._pdirx < 0:
+            self._pspeedx -= time * \
+                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                PLAYER_ACCEL
+        elif self._pdirx > 0:
+            self._pspeedx += time * \
+                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                PLAYER_ACCEL
+        else:
+            self._pspeedx /= PLAYER_BRAKING
+        if abs(self._pspeedx) < PLAYER_MINSPEED:
+            self._pspeedx = 0
+        if self._pdiry < 0:
+            self._pspeedy -= time * \
+                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                PLAYER_GRAVITY
+        elif self._pdiry > 0:
+            self._pspeedy += time * \
+                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                PLAYER_GRAVITY
+        if abs(self._pspeedy) < PLAYER_MINSPEED:
+            self._pspeedy = 0
+        if self._pspeedx != 0 or self._pspeedy != 0:
+            self._move_player()
+            self._update_scroll()
+        status, _, _, _ = textbox.wrap_text("{}\n{}\n{}\n{}".format(self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 4)
+        self._tb.clear(0, 0, 32, 4)
+        self._tb.put_text(status)
 
 
 class GameState():
