@@ -5,8 +5,8 @@ macro TEST4=$C4
 macro TEST3=($a * 3)
 macro TEST2=(1 + 2 * 3) ASDF
 macro TEST=(1 + 2 * 3)
-include macros.txt
-include modular.txt
+include seq/macros.txt
+include seq/modular.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
 macro LFOINBUF=2

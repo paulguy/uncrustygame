@@ -10,4 +10,5 @@ setup (name = 'crustygame',
        version = '1.0',
        description = 'CrustyGame',
        ext_modules = [crustygame],
-       install_requires = ['PySDL2', 'py_expression_eval == 0.3.14'])
+       install_requires = ['PySDL2',
+                           'py_expression_eval == 0.3.14'])

@@ -1,9 +1,6 @@
 from sys import stdout
 import copy
 
-#TODO:
-# arithmetic expressions parsing, with some way to take note values as a parameter
-
 FIELD_TYPE_INT = object()
 FIELD_TYPE_HEX = object()
 FIELD_TYPE_FLOAT = object()
