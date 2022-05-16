@@ -19,10 +19,12 @@ def _create_float_array(iterable):
 
 _parser = Parser()
 
+_NOTES = "c d ef g a b"
+
 def get_speed(speed, tunes):
     tune = 0.0
-    # frequency
     try:
+        # frequency
         tune = float(speed)
     except ValueError:
         # note
@@ -89,38 +91,47 @@ def eval_exprs(line):
     pos = 0
     newline = ""
     while pos < len(line):
+        print(newline)
+        print("{} {}".format(parens, line[pos:]))
         if parens > 0:
+            lidx = None
+            ridx = None
             try:
-                idx = line[pos:].index('(')
-                pos += idx+1
-                parens += 1
+                lidx = line[pos:].index('(')
             except ValueError:
                 pass
             try:
-                idx = line[pos:].index(')')
-                pos += idx+1
-                parens -= 1
-                if parens == 0:
-                    expr = line[sindex:pos]
-                    result = str(float(_parser.parse(expr).evaluate({})))
-                    newline += result
+                ridx = line[pos:].index(')')
             except ValueError:
                 pass
+            if lidx is None and ridx is None:
+                break
+            if lidx is not None:
+                if ridx is None or lidx < ridx:
+                    pos += lidx+1
+                    parens += 1
+            if ridx is not None:
+                if lidx is None or ridx < lidx:
+                    pos += ridx+1
+                    parens -= 1
+                    if parens == 0:
+                        expr = line[sindex:pos]
+                        result = str(float(_parser.parse(expr).evaluate({})))
+                        newline += result
         else:
             try:
                 sindex = line[pos:].index('(')
                 sindex += pos
+                newline += line[pos:sindex]
                 pos = sindex+1
                 parens = 1
-                newline += line[:sindex]
-            except ValueError:
+            except ValueError as e:
                 newline += line[pos:]
                 break
+    print(newline)
     if parens > 0:
         raise ValueError("Unclosed parenthesis: {}".format(line[sindex:]))
     return newline
-
-_NOTES = "c d ef g a b"
 
 class _MacroReaderIterator():
     def __init__(self, reader):
@@ -138,7 +149,7 @@ class MacroReader():
     replacements, but it won't be dealing with large files.
     """
 
-    def __init__(self, file, startLine=0, trace=False, macros=None):
+    def __init__(self, file, startLine=0, trace=False, macros=None, macrofile=False):
         """
         Accepts a file or somethign with a readline() function as well as a
         list of macros which is a tuple of a name, list of argument names, and
@@ -152,6 +163,7 @@ class MacroReader():
         self._line = None
         self._lines = startLine
         self._tunes = None
+        self._macrofile = macrofile
 
         if macros != None:
             self.add_macros(macros)
@@ -205,10 +217,14 @@ class MacroReader():
         pos = 0
         newline = ""
         while pos < len(line):
+            idx = None
             try:
                 idx = line[pos:].index('$')
+            except ValueError:
+                pass
+            if idx is not None:
                 newline += line[pos:pos+idx]
-                sidx = -1
+                sidx = None
                 try:
                     sidx = line[pos+idx:].index(' ')
                     sidx += pos+idx
@@ -216,10 +232,10 @@ class MacroReader():
                     pass
                 speed = get_speed(line[pos+idx+1:sidx], self._tunes)
                 newline += str(float(speed))
-                if sidx == -1:
+                if sidx is None:
                     break
                 pos = sidx
-            except ValueError:
+            else:
                 newline += line[pos:]
                 break
         return newline
@@ -289,8 +305,12 @@ class MacroReader():
             self._line = None
         else:
             self._line = self._line[1:]
+        print(line)
         line = self._replace_note_vals(line)
-        line = eval_exprs(line)
+        # don't evaluate expressions in macro definitions
+        if not self._macrofile and \
+           not line.lower().startswith("macro "):
+            line = eval_exprs(line)
         if self._trace:
             print("-> {}".format(line))
         return line
@@ -453,7 +473,7 @@ class AudioSequencer():
                         raise Exception("Invalid channel type: {}".format(channel))
                 elif linetype == 'include':
                     with open(line, 'r') as macrofile:
-                        macrofile = MacroReader(macrofile, trace=trace, macros=infile.macros)
+                        macrofile = MacroReader(macrofile, trace=trace, macros=infile.macros, macrofile=True)
                         try:
                             macros = read_macros(macrofile)
                         except Exception as e:

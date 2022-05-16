@@ -71,6 +71,16 @@ P_STARTENV _BASE_VOL _ATK_SPD _ATK_LEN _DKY_SPD _DKY_LEN _SUS_SPD _MAX_SUS=44800
    408000a0 0.0 0.0 0 0 \ ; input buffer end was reached, do silence
   40000000 -1.0 \ ; override buffer end event to reset value to end if it reached the end
  40800000 -1.0 0.0 ; input buffer reached end before ATK_LEN, hold
+; make an envelope with key scaling.  pass note in and a modification value.
+; speed will be increased (or decreased if mod is negative) and length will be
+; decreased (or increased if mod is negative) for higher pitch notes, about
+; middle C being 1.0 by default.
+P_KS_STARTENV _BASE_VOL _ATK_SPD _ATK_MOD _NOTE _ATK_LEN _DKY_SPD _DKY_LEN _SUS_SPD _MAX_SUS=448001a0 0.0 _BASE_VOL (_ATK_SPD * $_NOTE * _ATK_MOD) (_ATK_LEN / $_NOTE / _ATK_MOD) \
+ 8001a0 -_DKY_SPD _DKY_LEN \ ; ATK_LEN was met, start decay now
+  800120 -_SUS_SPD _MAX_SUS \ ; decay length was met, start sustain
+   408000a0 0.0 0.0 0 0 \ ; input buffer end was reached, do silence
+  40000000 -1.0 \ ; override buffer end event to reset value to end if it reached the end
+ 40800000 -1.0 0.0 ; input buffer reached end before ATK_LEN, hold
 ; trigger envelope release
 P_RELENV _REL_SPD _MAX_REL=8001a0 -_REL_SPD _MAX_REL 0 \
  40800020 0.0 0.0 0
