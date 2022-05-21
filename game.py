@@ -33,11 +33,14 @@ PLAYER_GFX = "gfx/face.bmp"
 PLAYER_WIDTH=16
 PLAYER_HEIGHT=16
 PLAYER_MAXSPEED=15
+PLAYER_JUMP_POWER=5
 PLAYER_ACCEL=6
 PLAYER_GRAVITY=3
 #PLAYER_GRAVITY=0
 PLAYER_BRAKING=3
 PLAYER_MINSPEED=0.001
+EDGE_FUDGE=0.01
+EDGE_FUDGIER=EDGE_FUDGE/10
 
 crustyerror = ''
 
@@ -46,6 +49,10 @@ class TilesetDesc():
     filename : str
     width : int
     height : int
+
+class PlayerState(Enum):
+    AIR = 0,
+    GROUND = 1
 
 class NoHit(Exception):
     pass
@@ -65,7 +72,7 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x1 - x2) / (y1 - y2)
             if slope * ydiff > xdiff:
-                return -xdiff, -(slope * xdiff)
+                return -xdiff, -((1 / slope) * xdiff)
             else:
                 return -(slope * ydiff), -ydiff
         elif y2 > y1:
@@ -76,7 +83,7 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x1 - x2) / (y2 - y1)
             if slope * ydiff > xdiff:
-                return -xdiff, slope * xdiff
+                return -xdiff, (1 / slope) * xdiff
             else:
                 return -(slope * ydiff), ydiff
         else:
@@ -95,7 +102,7 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x2 - x1) / (y1 - y2)
             if slope * ydiff > xdiff:
-                return xdiff, -(slope * xdiff)
+                return xdiff, -((1 / slope) * xdiff)
             else:
                 return slope * ydiff, -ydiff
         elif y2 > y1:
@@ -106,7 +113,7 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x2 - x1) / (y2 - y1)
             if slope * ydiff > xdiff:
-                return xdiff, slope * xdiff
+                return xdiff, (1 / slope) * xdiff
             else:
                 return slope * ydiff, ydiff
         else:
@@ -154,7 +161,10 @@ def collision(x1, y1, x2, y2, tw, th):
 
 class MapScreen():
     def _param(self, x, y):
-        return self._params[1][0][int(y) * self._params[0].mw + int(x)]
+        try:
+            return self._params[1][0][int(y) * self._params[0].mw + int(x)]
+        except IndexError as e:
+            raise IndexError("Out of bounds: {} {}".format(x, y))
 
     def _first_hit(self, x, y, dx, dy, cur):
         nx = 0
@@ -167,218 +177,406 @@ class MapScreen():
                 nx += hx
                 ny += hy
                 px = int((x + nx) / self._tw)
-                if dx < 0:
+                if dx < 0 and (x + nx) % self._tw == 0:
                     px -= 1
                 py = int((y + ny) / self._th)
-                if dy < 0:
+                if dy < 0 and (y + ny) % self._th == 0:
                     py -= 1
-                hit = self._param(px, py)
+                try:
+                    hit = self._param(px, py)
+                except IndexError as e:
+                    print("{} {} {} {}".format(x, y, dx, dy))
+                    print("{} {} {} {}".format(nx, ny, hx, hy))
+                    raise e
                 if hit != cur:
                     return hit, nx, ny
             except NoHit:
                 break
         return None, dx, dy 
 
+    def _collision_left(self):
+        h, x, y = self._first_hit(self._playerx,
+                                  self._playery,
+                                  -self._tw, 0,
+                                  0)
+        if h is not None and x > -EDGE_FUDGE:
+            return True
+        h, x, y = self._first_hit(self._playerx,
+                                  self._playery + PLAYER_HEIGHT,
+                                  -self._tw, 0,
+                                  0)
+        if h is not None and x > -EDGE_FUDGE:
+            return True
+        return False
+
+    def _collision_right(self):
+        h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                  self._playery,
+                                  self._tw, 0,
+                                  0)
+        if h is not None and x < EDGE_FUDGE:
+            return True
+        h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                  self._playery + PLAYER_HEIGHT,
+                                  self._tw, 0,
+                                  0)
+        if h is not None and x < EDGE_FUDGE:
+            return True
+        return False
+
+    def _collision_up(self):
+        h, x, y = self._first_hit(self._playerx,
+                                  self._playery,
+                                  0, -self._th,
+                                  0)
+        if h is not None and y > -EDGE_FUDGE:
+            return True
+        h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                  self._playery,
+                                  0, -self._th,
+                                  0)
+        if h is not None and y > -EDGE_FUDGE:
+            return True
+        return False
+
+    def _collision_down(self):
+        h, x, y = self._first_hit(self._playerx,
+                                  self._playery + PLAYER_HEIGHT,
+                                  0, self._th,
+                                  0)
+        if h is not None and y < EDGE_FUDGE:
+            return True
+        h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                  self._playery + PLAYER_HEIGHT,
+                                  0, self._th,
+                                  0)
+        if h is not None and y < EDGE_FUDGE:
+            return True
+        return False
+
     def _move_player(self):
         dx = self._pspeedx
         dy = self._pspeedy
+        movedx = 0
+        movedy = 0
         while dx != 0 or dy != 0:
             dx2 = dx
             dy2 = dy
             x = self._playerx + dx
             y = self._playery + dy
-            if dx2 > 0:
-                if dy2 > 0:
-                    ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+            if self._pstate == PlayerState.AIR:
+                if dx2 > 0:
+                    if dy2 > 0:
+                        ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery,
+                                                     dx2, dy2,
+                                                     0)
+                        hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, dy2,
+                                                     0)
+                        hb, xb, yb = self._first_hit(self._playerx,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, dy2,
+                                                     0)
+                        if hb is not None and xb < dx2:
+                            if xb > EDGE_FUDGE:
+                                dx2 = xb - EDGE_FUDGIER
+                            elif self._collision_right():
+                                dx2 = 0
+                                dx = 0
+                        if ht is not None and yt < dy2:
+                            if yt > EDGE_FUDGE:
+                                dy2 = yt - EDGE_FUDGIER
+                            elif self._collision_down():
+                                dy2 = 0
+                                self._pstate = PlayerState.GROUND
+                        if hc is not None:
+                            if xc < dx2:
+                                if xc > EDGE_FUDGE:
+                                    dx2 = xc - EDGE_FUDGIER
+                                elif self._collision_right():
+                                    dx2 = 0
+                                    dx = 0
+                            if yc < dy2:
+                                if yc > EDGE_FUDGE:
+                                    dy2 = yc - EDGE_FUDGIER
+                                elif self._collision_down():
+                                    dy2 = 0
+                                    self._pstate = PlayerState.GROUND
+                    elif dy2 < 0:
+                        ht, xt, yt = self._first_hit(self._playerx, self._playery,
+                                                     dx2, dy2,
+                                                     0)
+                        hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery,
+                                                     dx2, dy2,
+                                                     0)
+                        hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, dy2,
+                                                     0)
+                        if hb is not None and xb < dx2:
+                            if xb > EDGE_FUDGE:
+                                dx2 = xb - EDGE_FUDGIER
+                            elif self._collision_right():
+                                dx2 = 0
+                                dx = 0
+                        # greater is less negative
+                        if ht is not None and yt > dy2:
+                            if yt < -EDGE_FUDGE:
+                                dy2 = yt + EDGE_FUDGIER
+                            elif self._collision_up():
+                                dy2 = 0
+                                dy = 0
+                        if hc is not None:
+                            if xc < dx2:
+                                if xc > EDGE_FUDGE:
+                                    dx2 = xc - EDGE_FUDGIER
+                                elif self._collision_right():
+                                    dx2 = 0
+                                    dx = 0
+                            if yc > dy2:
+                                if yc < -EDGE_FUDGE:
+                                    dy2 = yc + EDGE_FUDGIER
+                                elif self._collision_up():
+                                    dy2 = 0
+                                    dy = 0
+                    else:
+                        ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery,
+                                                     dx2, 0,
+                                                     0)
+                        hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, 0,
+                                                     0)
+                        if ht is not None and xt < dx:
+                            if xt > EDGE_FUDGE:
+                                dx2 = xt - EDGE_FUDGIER
+                            else:
+                                dx2 = 0
+                                dx = 0
+                        if hb is not None and xb < dx:
+                            if xb > EDGE_FUDGE:
+                                dx2 = xb - EDGE_FUDGIER
+                            else:
+                                dx2 = 0
+                                dx = 0
+                elif dx2 < 0:
+                    if dy2 > 0:
+                        ht, xt, yt = self._first_hit(self._playerx, self._playery,
+                                                     dx2, dy2,
+                                                     0)
+                        hc, xc, yc = self._first_hit(self._playerx,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, dy2,
+                                                     0)
+                        hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, dy2,
+                                                     0)
+                        if ht is not None and xt > dx2:
+                            if xt < -EDGE_FUDGE:
+                                dx2 = xt + EDGE_FUDGIER
+                            elif self._collision_left():
+                                dx2 = 0
+                                dx = 0
+                        if hb is not None and yb < dy2:
+                            if yb > EDGE_FUDGE:
+                                dy2 = yb - EDGE_FUDGIER
+                            elif self._collision_down():
+                                dy2 = 0
+                                self._pstate = PlayerState.GROUND
+                        if hc is not None:
+                            if xc > dx2:
+                                if xc < -EDGE_FUDGE:
+                                    dx2 = xc + EDGE_FUDGIER
+                                elif self._collision_left():
+                                    dx2 = 0
+                                    dx = 0
+                            if yc < dy2:
+                                if yc > EDGE_FUDGE:
+                                    dy2 = yc - EDGE_FUDGIER
+                                elif self._collision_down():
+                                    dy2 = 0
+                                    self._pstate = PlayerState.GROUND
+                    elif dy2 < 0:
+                        ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery,
+                                                     dx2, dy2,
+                                                     0)
+                        hc, xc, yc = self._first_hit(self._playerx, self._playery,
+                                                     dx2, dy2,
+                                                     0)
+                        hb, xb, yb = self._first_hit(self._playerx,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, dy2,
+                                                     0)
+                        if hb is not None and xb > dx2:
+                            if xb < -EDGE_FUDGE:
+                                dx2 = xb + EDGE_FUDGIER
+                            elif self._collision_left():
+                                dx2 = 0
+                                dx = 0
+                        if ht is not None and yt > dy2:
+                            if yt < -EDGE_FUDGE:
+                                dy2 = yt + EDGE_FUDGIER
+                            elif self._collision_up():
+                                dy2 = 0
+                                dy = 0
+                        if hc is not None:
+                            if xc > dx2:
+                                if xc < -EDGE_FUDGE:
+                                    dx2 = xc + EDGE_FUDGIER
+                                elif self._collision_left():
+                                    dx2 = 0
+                                    dx = 0
+                            if yc > dy2:
+                                if yc < -EDGE_FUDGE:
+                                    dy2 = yc + EDGE_FUDGIER
+                                elif self._collision_up():
+                                    dy2 = 0
+                                    dy = 0
+                    else:
+                        ht, xt, yt = self._first_hit(self._playerx, self._playery,
+                                                     dx2, 0,
+                                                     0)
+                        hb, xb, yb = self._first_hit(self._playerx,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     dx2, 0,
+                                                     0)
+                        if ht is not None and xt > dx2:
+                            if xt < -EDGE_FUDGE:
+                                dx2 = xt + EDGE_FUDGIER
+                            else:
+                                dx2 = 0
+                                dx = 0
+                        if hb is not None and xb > dx2:
+                            if xb < -EDGE_FUDGE:
+                                dx2 = xb + EDGE_FUDGIER
+                            else:
+                                dx2 = 0
+                                dx = 0
+                else:
+                    if dy2 > 0:
+                        hl, xl, yl = self._first_hit(self._playerx,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     0, dy2,
+                                                     0)
+                        hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery + PLAYER_HEIGHT,
+                                                     0, dy2,
+                                                     0)
+                        if hl is not None and yl < dy2:
+                            if yl > EDGE_FUDGE:
+                                dy2 = yl - EDGE_FUDGIER
+                            else:
+                                dy2 = 0
+                                self._pstate = PlayerState.GROUND
+                        if hr is not None and yr < dy2:
+                            if yr > EDGE_FUDGE:
+                                dy2 = yr - EDGE_FUDGIER
+                            else:
+                                dy2 = 0
+                                self._pstate = PlayerState.GROUND
+                    elif dy2 < 0:
+                        hl, xl, yl = self._first_hit(self._playerx, self._playery,
+                                                     0, dy2,
+                                                     0)
+                        hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                                     self._playery,
+                                                     0, dy2,
+                                                     0)
+                        if hl is not None and yl > dy2:
+                            if yl < -EDGE_FUDGE:
+                                dy2 = yl + EDGE_FUDGIER
+                            else:
+                                dy2 = 0
+                                dy = 0
+                        if hr is not None and yr > dy2:
+                            if yr < -EDGE_FUDGE:
+                                dy2 = yr + EDGE_FUDGIER
+                            else:
+                                dy2 = 0
+                                dy = 0
+            elif self._pstate == PlayerState.GROUND:
+                hl, xl, yl = self._first_hit(self._playerx,
+                                             self._playery + PLAYER_HEIGHT,
+                                             0, EDGE_FUDGE,
+                                             0)
+                hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
+                                             self._playery + PLAYER_HEIGHT,
+                                             0, EDGE_FUDGE,
+                                             0)
+                if hl is None and hr is None:
+                    self._pspeedy = 0
+                    self._pstate = PlayerState.AIR
+                    continue
+                dy = 0
+                dy2 = 0
+                if dx < 0:
+                    ht, xt, yt = self._first_hit(self._playerx,
                                                  self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
+                                                 dx2, 0,
                                                  0)
                     hb, xb, yb = self._first_hit(self._playerx,
                                                  self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
+                                                 dx2, 0,
                                                  0)
-                    print("{} {} {}".format(ht, hc, hb))
-                    if hb is not None and xb < dx2:
-                        dx2 = xb
-                        dx = 0
-                        self._pspeedx = 0
-                    if ht is not None and yt < dy2:
-                        dy2 = yt
-                        dy = 0
-                        self._pspeedy = 0
-                    if hc is not None:
-                        if xc < dx2:
-                            dx2 = xc
+                    if ht is not None and xt > dx:
+                        if xt < -EDGE_FUDGE:
+                            dx2 = xt + EDGE_FUDGIER
+                        else:
+                            dx2 = 0
                             dx = 0
-                            self._pspeedx = 0
-                        if yc < dy2:
-                            dy2 = yc
-                            dy = 0
-                            self._pspeedy = 0
-                elif dy2 < 0:
-                    ht, xt, yt = self._first_hit(self._playerx, self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    if hb is not None and xb < dx2:
-                        dx2 = xb
-                        dx = 0
-                        self._pspeedx = 0
-                    # greater is less negative
-                    if ht is not None and yt > dy2:
-                        dy2 = yt
-                        dy = 0
-                        self._pspeedy = 0
-                    if hc is not None:
-                        if xc < dx2:
-                            dx2 = xc
+                    if hb is not None and xb > dx:
+                        if xb < -EDGE_FUDGE:
+                            dx2 = xb + EDGE_FUDGIER
+                        else:
+                            dx2 = 0
                             dx = 0
-                            self._pspeedx = 0
-                        if yc > dy2:
-                            dy2 = yc
-                            dy = 0
-                            self._pspeedy = 0
-                else:
+                elif dx > 0:
                     ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                  self._playery,
-                                                 dx2, dy2,
+                                                 dx2, 0,
                                                  0)
                     hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                  self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
+                                                 dx2, 0,
                                                  0)
                     if ht is not None and xt < dx:
-                        dx2 = xt
-                        dx = 0
-                        self._pspeedx = 0
+                        if xt > EDGE_FUDGE:
+                            dx2 = xt - EDGE_FUDGIER
+                        else:
+                            dx2 = 0
+                            dx = 0
                     if hb is not None and xb < dx:
-                        dx2 = xb
-                        dx = 0
-                        self._pspeedx = 0
-            elif dx2 < 0:
-                if dy2 > 0:
-                    ht, xt, yt = self._first_hit(self._playerx, self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hc, xc, yc = self._first_hit(self._playerx,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    if ht is not None and xt > dx2:
-                        dx2 = xt
-                        dx = 0
-                        self._pspeedx = 0
-                    if hb is not None and yb < dy2:
-                        dy2 = yb
-                        dy = 0
-                        self._pspeedy = 0
-                    if hc is not None:
-                        if xc > dx2:
-                            dx2 = xc
+                        if xb > EDGE_FUDGE:
+                            dx2 = xb - EDGE_FUDGIER
+                        else:
+                            dx2 = 0
                             dx = 0
-                            self._pspeedx = 0
-                        if yc < dy2:
-                            dy2 = yc
-                            dy = 0
-                            self._pspeedy = 0
-                elif dy2 < 0:
-                    ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hc, xc, yc = self._first_hit(self._playerx, self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hb, xb, yb = self._first_hit(self._playerx,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    if hb is not None and xb > dx2:
-                        dx2 = xb
-                        dx = 0
-                        self._pspeedx = 0
-                    if ht is not None and yt > dy2:
-                        dy2 = yt
-                        dy = 0
-                        self._pspeedy = 0
-                    if hc is not None:
-                        if xc > dx2:
-                            dx2 = xc
-                            dx = 0
-                            self._pspeedx = 0
-                        if yc > dy2:
-                            dy2 = yc
-                            dy = 0
-                            self._pspeedy = 0
-                else:
-                    ht, xt, yt = self._first_hit(self._playerx, self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hb, xb, yb = self._first_hit(self._playerx,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    if ht is not None and xt > dx2:
-                        dx2 = xt
-                        dx = 0
-                        self._pspeedx = 0
-                    if hb is not None and xb > dx2:
-                        dx2 = xb
-                        dx = 0
-                        self._pspeedx = 0
-            else:
-                if dy2 > 0:
-                    hl, xl, yl = self._first_hit(self._playerx,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, dy2,
-                                                 0)
-                    if hl is not None and yl < dy2:
-                        dy2 = yl
-                        dy = 0
-                        self._pspeedy = 0
-                    if hr is not None and yr < dy2:
-                        dy2 = yr
-                        dy = 0
-                        self._pspeedy = 0
-                elif dy2 < 0:
-                    hl, xl, yl = self._first_hit(self._playerx, self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery,
-                                                 dx2, dy2,
-                                                 0)
-                    if hl is not None and yl > dy2:
-                        dy2 = yl
-                        dy = 0
-                        self._pspeedy = 0
-                    if hr is not None and yr > dy2:
-                        dy2 = yr
-                        dy = 0
-                        self._pspeedy = 0
+
             self._playerx += dx2
             self._playery += dy2
+            movedx += dx2
+            movedy += dy2
             dx -= dx2
+            if (self._pspeedx < 0 and dx >= -EDGE_FUDGE) or \
+               (self._pspeedx > 0 and dx <= EDGE_FUDGE):
+                dx = 0
             dy -= dy2
+            if (self._pspeedy < 0 and dy >= -EDGE_FUDGE) or \
+               (self._pspeedy > 0 and dy <= EDGE_FUDGE):
+                dy = 0
+
+        if (self._pspeedx < 0 and movedx >= -EDGE_FUDGE) or \
+           (self._pspeedx > 0 and movedx <= EDGE_FUDGE):
+            self._pspeedx = 0
+        if (self._pspeedy < 0 and movedy >= -EDGE_FUDGE) or \
+           (self._pspeedy > 0 and movedy <= EDGE_FUDGE):
+            self._pspeedy = 0
 
     def _update_scroll(self):
         self._view.scroll(round(self._playerx - self._centerx),
@@ -447,10 +645,12 @@ class MapScreen():
         self._view = None
         self._pdirx = 0.0
         self._pdiry = 1.0
+        self._pstate = PlayerState.AIR
         self._pspeedx = 0.0
         self._pspeedy = 0.0
         self._playerx = settings['player_x']
         self._playery = settings['player_y']
+        self._move_player()
         self._dl = display.DisplayList(self._state.ll)
         self._viewindex = self._dl.append(None)
         self._dl.append(self._playerl)
@@ -471,7 +671,7 @@ class MapScreen():
             elif event.key.keysym.sym == SDLK_RIGHT:
                 self._pdirx = 1
             elif event.key.keysym.sym == SDLK_SPACE:
-                self._pspeedy = -5
+                self._pdiry = -1
             elif event.key.keysym.sym == SDLK_ESCAPE:
                 self._state.stop()
         elif event.type == SDL_KEYUP:
@@ -483,31 +683,35 @@ class MapScreen():
                     self._pdirx = 0
 
     def update(self, time):
+        # TODO: Macro recording/playback for testing/demos
         if self._pdirx < 0:
-            self._pspeedx -= time * \
-                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
-                PLAYER_ACCEL
+            if not self._collision_left():
+                self._pspeedx -= time * \
+                    ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                    PLAYER_ACCEL
         elif self._pdirx > 0:
-            self._pspeedx += time * \
-                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
-                PLAYER_ACCEL
+            if not self._collision_right():
+                self._pspeedx += time * \
+                    ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                    PLAYER_ACCEL
         else:
             self._pspeedx /= PLAYER_BRAKING
         if abs(self._pspeedx) < PLAYER_MINSPEED:
             self._pspeedx = 0
         if self._pdiry < 0:
-            self._pspeedy -= time * \
-                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
-                PLAYER_GRAVITY
-        elif self._pdiry > 0:
+            if self._pstate == PlayerState.GROUND:
+                self._pstate = PlayerState.AIR
+                self._pspeedy = -PLAYER_JUMP_POWER
+            self._pdiry = 0
+        if self._pstate == PlayerState.AIR:
             self._pspeedy += time * \
-                ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                ((PLAYER_MAXSPEED - self._pspeedy) / PLAYER_MAXSPEED) * \
                 PLAYER_GRAVITY
         if abs(self._pspeedy) < PLAYER_MINSPEED:
             self._pspeedy = 0
-        if self._pspeedx != 0 or self._pspeedy != 0:
-            self._move_player()
-            self._update_scroll()
+        self._move_player()
+        self._update_scroll()
+
         status, _, _, _ = textbox.wrap_text("{}\n{}\n{}\n{}".format(self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 4)
         self._tb.clear(0, 0, 32, 4)
         self._tb.put_text(status)
