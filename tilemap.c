@@ -1457,29 +1457,31 @@ int tilemap_add_layer(LayerList *ll,
     int w, h;
     Tilemap *tm;
     Tileset *ts;
-    if(tilemap < 0) {
+    if(tilemap < 0 && tex == NULL) {
         w = 0;
         h = 0;
         tex = NULL;
         tm = NULL;
         ts = NULL;
-    } else if(tex == NULL) {
-        tm = get_tilemap(ll, tilemap);
-        if(tm == NULL) {
-            return(-1);
-        }
-        ts = get_tileset(ll, tm->tileset);
-        if(ts == NULL) {
-            return(-1);
-        }
-        w = tm->w * ts->tw;
-        h = tm->h * ts->th;
     } else {
-        tm = NULL;
-        ts = NULL;
-        if(SDL_QueryTexture(tex, (Uint32 *)(&junk), &junk, &w, &h) < 0) {
-            LOG_PRINTF(ll, "Failed to query texture dimensions.\n");
-            return(-1);
+        if(tex == NULL) {
+            tm = get_tilemap(ll, tilemap);
+            if(tm == NULL) {
+                return(-1);
+            }
+            ts = get_tileset(ll, tm->tileset);
+            if(ts == NULL) {
+                return(-1);
+            }
+            w = tm->w * ts->tw;
+            h = tm->h * ts->th;
+        } else {
+            tm = NULL;
+            ts = NULL;
+            if(SDL_QueryTexture(tex, (Uint32 *)(&junk), &junk, &w, &h) < 0) {
+                LOG_PRINTF(ll, "Failed to query texture dimensions.\n");
+                return(-1);
+            }
         }
     }
 
