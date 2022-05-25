@@ -91,8 +91,6 @@ def eval_exprs(line):
     pos = 0
     newline = ""
     while pos < len(line):
-        print(newline)
-        print("{} {}".format(parens, line[pos:]))
         if parens > 0:
             lidx = None
             ridx = None
@@ -128,7 +126,6 @@ def eval_exprs(line):
             except ValueError as e:
                 newline += line[pos:]
                 break
-    print(newline)
     if parens > 0:
         raise ValueError("Unclosed parenthesis: {}".format(line[sindex:]))
     return newline
@@ -305,7 +302,6 @@ class MacroReader():
             self._line = None
         else:
             self._line = self._line[1:]
-        print(line)
         line = self._replace_note_vals(line)
         # don't evaluate expressions in macro definitions
         if not self._macrofile and \
@@ -1366,12 +1362,28 @@ class AudioSystem():
                            _audio_system_frame, self,
                            log_cb_return, log_cb_priv,
                            rate, channels, fragsize, audformat)
+        self._histo = [0]
         self._sequences = list()
         self._fragment_size = self._s.fragment_size()
         self._fragments = 0
         self._inc_fragments()
         self._error = None
         self._trace = trace
+        self._lastunderrun = -1
+
+    def print_latency(self):
+        print("Latency Histogram")
+        print("frag  samples  ms  count")
+        for num, val in enumerate(self._histo):
+            print("{}  {}  {:.03}  {}".format(num,
+                                              num*self._fragment_size,
+                                              num*self._fragment_size/self._s.rate()*1000.0,
+                                              val),
+                  end='')
+            if num == self._fragments:
+                print(' *')
+            else:
+                print()
 
     def print_full_stats(self):
         """
@@ -1416,18 +1428,39 @@ class AudioSystem():
         """
         return self._s.buffer(audioType, data, size, name)
 
-    def _inc_fragments(self):
+    def _set_fragments(self):
         self._s.enabled(False)
-        self._fragments += 1
         self._s.fragments(self._fragments)
+
+    def _inc_fragments(self):
+        self._fragments += 1
+        if len(self._histo) < self._fragments + 1:
+            self._histo.append(0)
+        self._lastunderrun = 0
+        self._set_fragments()
 
     def _frame_cb(self):
         try:
             if self._s.underrun():
                 self._inc_fragments()
                 self._s.enabled(True)
+            else:
+                self._histo[self._fragments] += 1
+                if self._lastunderrun > -1:
+                    self._lastunderrun += self._s.needed()
+                    # try to return to the most stable latency in case of
+                    # hitches
+                    if self._lastunderrun >= self._s.rate():
+                        maxval = sorted(self._histo)[-1]
+                        val = self._histo.index(maxval)
+                        if val != self._fragments:
+                            self._fragments = val
+                            self._set_fragments()
+                            self._s.enabled(True)
+                        self._lastunderrun = -1
 
             needed = self._s.needed()
+
             if self._trace and len(self._sequences) > 0:
                 print("=== Audio Callback {} ===".format(needed))
             if needed > 0:

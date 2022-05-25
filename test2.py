@@ -19,9 +19,9 @@ import lib.waves as waves
 # see what if any difference it makes
 RENDERBATCHING=True
 # enable tracing of display list processing
-TRACEVIDEO=False
+TRACEVIDEO=True
 # enable tracing of audio sequencer processing
-TRACEAUDIO=True
+TRACEAUDIO=False
 
 RES_WIDTH=1920
 RES_HEIGHT=1080
@@ -91,6 +91,11 @@ class Scope():
 
     def update(self):
         first, second = self._get_buffers()
+        # can't reproduce the hang/memory leak but it seems to happen within
+        # SDL_RenderDrawLinesF (within libSDL itself), and it seems to be
+        # related to broken values/uninitialized memory so just clip it.
+        first.clip(-1.0, 1.0)
+        second.clip(-1.0, 1.0)
 
         if len(first) < self._w and len(first) != 0:
             pos = len(first) * 2 + 1
@@ -250,9 +255,11 @@ def do_main(window, renderer, pixfmt):
     scene.append(lambda: stm.draw())
     oscdl = display.DisplayList(ll, None)
     oscdl.append(lambda: osc2l.scale(1.0, 1.0))
+    oscdl.append(lambda: osc2l.blendmode(cg.TILEMAP_BLENDMODE_BLEND))
     oscdl.append(osc1dl)
     oscdl.append(osc2dl)
     oscdl.append(lambda: osc2l.scale(RES_WIDTH/320, RES_HEIGHT/240))
+    oscdl.append(lambda: osc2l.blendmode(cg.TILEMAP_BLENDMODE_ADD))
     oscdl.append(osc2l)
     oscid = scene.append(None)
     l1dl = display.DisplayList(ll, ts2)
@@ -479,6 +486,8 @@ def do_main(window, renderer, pixfmt):
         scopel= None
         scoper= None
         seq = None
+
+    aud.print_latency()
 
 def main():
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
