@@ -159,6 +159,12 @@ def collision(x1, y1, x2, y2, tw, th):
             cy = 0
     return cx, cy
 
+class GameInputMode(Enum):
+    NORMAL = 0,
+    RECORD = 1,
+    PLAY = 2,
+    PLAYSTOP = 3
+
 class MapScreen():
     def _param(self, x, y):
         try:
@@ -214,6 +220,7 @@ class MapScreen():
                                   self._playery,
                                   self._tw, 0,
                                   0)
+        print("{} {}".format(h, x))
         if h is not None and x < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
@@ -331,11 +338,14 @@ class MapScreen():
                                 dy = 0
                         if hc is not None:
                             if xc < dx2:
+                                print(self._playerx)
+                                print(dx2)
                                 if xc > EDGE_FUDGE:
                                     dx2 = xc - EDGE_FUDGIER
                                 elif self._collision_right():
                                     dx2 = 0
                                     dx = 0
+                                print(dx2)
                             if yc > dy2:
                                 if yc < -EDGE_FUDGE:
                                     dy2 = yc + EDGE_FUDGIER
@@ -583,6 +593,19 @@ class MapScreen():
                           round(self._playery - self._centery))
         self._playerl.pos(round(self._centerx), round(self._centery))
 
+    def _read_demo_line(self):
+        try:
+            self._nexttime, self._nextpdirx, self._nextpdiry = \
+                self._file.readline().split()
+        except ValueError:
+            self._file.close()
+            self._file = None
+            self._mode = GameInputMode.NORMAL
+            return
+        self._nexttime = float(self._nexttime)
+        self._nextpdirx = int(self._nextpdirx)
+        self._nextpdiry = int(self._nextpdiry)
+
     def _build_screen(self):
         self._vw, self._vh = self._state.window
         self._centerx = (self._vw - PLAYER_WIDTH) / 2
@@ -603,7 +626,7 @@ class MapScreen():
         self._tb.internal.colormod(display.make_color(255, 255, 255, 96))
         self._dl.replace(self._tbindex, self._tb.draw)
 
-    def __init__(self, state, name):
+    def __init__(self, state, name, mode=GameInputMode.NORMAL, file=None):
         self._state = state
         settings, self._descs, self._maps, self._layers, _, _ = layers.load_map(name)
         self._params = None
@@ -643,14 +666,26 @@ class MapScreen():
         playertm.update()
         self._playerl = playertm.layer("Player Layer")
         self._view = None
-        self._pdirx = 0.0
-        self._pdiry = 1.0
+        self._pdirx = 0
+        self._pdiry = 0
         self._pstate = PlayerState.AIR
         self._pspeedx = 0.0
         self._pspeedy = 0.0
         self._playerx = settings['player_x']
         self._playery = settings['player_y']
         self._move_player()
+        self._mode = mode
+        self._curtime = 0
+        self._playstop = False
+        if self._mode == GameInputMode.PLAYSTOP:
+            self._playstop = True
+            self._mode = GameInputMode.PLAY
+        if self._mode == GameInputMode.RECORD:
+            self._file = open(file, 'w')
+        elif self._mode == GameInputMode.PLAY:
+            self._file = open(file, 'r')
+            self._lasttime = 0
+            self._read_demo_line()
         self._dl = display.DisplayList(self._state.ll)
         self._viewindex = self._dl.append(None)
         self._dl.append(self._playerl)
@@ -665,25 +700,32 @@ class MapScreen():
         return self._dl
 
     def input(self, event):
-        if event.type == SDL_KEYDOWN and event.key.repeat == 0:
-            if event.key.keysym.sym == SDLK_LEFT:
-                self._pdirx = -1
-            elif event.key.keysym.sym == SDLK_RIGHT:
-                self._pdirx = 1
-            elif event.key.keysym.sym == SDLK_SPACE:
-                self._pdiry = -1
-            elif event.key.keysym.sym == SDLK_ESCAPE:
-                self._state.stop()
-        elif event.type == SDL_KEYUP:
-            if event.key.keysym.sym == SDLK_LEFT:
-                if self._pdirx < 0:
-                    self._pdirx = 0
-            elif event.key.keysym.sym == SDLK_RIGHT:
-                if self._pdirx > 0:
-                    self._pdirx = 0
+        if self._mode == GameInputMode.PLAY:
+            if event.type == SDL_KEYDOWN:
+                if event.key.keysym.sym == SDLK_ESCAPE:
+                    self._file.close()
+                    self._state.stop()
+        else:
+            if event.type == SDL_KEYDOWN and event.key.repeat == 0:
+                if event.key.keysym.sym == SDLK_LEFT:
+                    self._pdirx = -1
+                elif event.key.keysym.sym == SDLK_RIGHT:
+                    self._pdirx = 1
+                elif event.key.keysym.sym == SDLK_SPACE:
+                    self._pdiry = -1
+                elif event.key.keysym.sym == SDLK_ESCAPE:
+                    if self._file is not None:
+                        self._file.close()
+                    self._state.stop()
+            elif event.type == SDL_KEYUP:
+                if event.key.keysym.sym == SDLK_LEFT:
+                    if self._pdirx < 0:
+                        self._pdirx = 0
+                elif event.key.keysym.sym == SDLK_RIGHT:
+                    if self._pdirx > 0:
+                        self._pdirx = 0
 
-    def update(self, time):
-        # TODO: Macro recording/playback for testing/demos
+    def _do_movement(self, time):
         if self._pdirx < 0:
             if not self._collision_left():
                 self._pspeedx -= time * \
@@ -716,6 +758,27 @@ class MapScreen():
         self._tb.clear(0, 0, 32, 4)
         self._tb.put_text(status)
 
+    def update(self, time):
+        self._curtime += time
+        if self._mode == GameInputMode.RECORD:
+            self._file.write("{} {} {}\n".format(self._curtime,
+                                                 self._pdirx,
+                                                 self._pdiry))
+        elif self._mode == GameInputMode.PLAY:
+            while self._curtime >= self._nexttime:
+                time = self._nexttime - self._lasttime
+                self._lasttime = self._nexttime
+                self._pdirx = self._nextpdirx
+                self._pdiry = self._nextpdiry
+                self._do_movement(time)
+                self._read_demo_line()
+                if self._mode == GameInputMode.NORMAL:
+                    if self._playstop:
+                        self._state.stop()
+                    break
+            return
+
+        self._do_movement(time)
 
 class GameState():
     RESIZE_COOLDOWN = 0.25
@@ -877,7 +940,18 @@ def do_main(window, renderer, pixfmt):
                       layers.FONT_FILENAME, layers.FONT_MAPNAME,
                       layers.FONT_WIDTH, layers.FONT_HEIGHT,
                       layers.FONT_SCALE)
-    mapscreen = MapScreen(state, "maps/Example")
+    mode = GameInputMode.NORMAL
+    file = None
+    if argv[1] == 'record':
+        mode = GameInputMode.RECORD
+        file = argv[2]
+    elif argv[1] == 'play':
+        mode = GameInputMode.PLAY
+        file = argv[2]
+    elif argv[1] == 'playstop':
+        mode = GameInputMode.PLAYSTOP
+        file = argv[2]
+    mapscreen = MapScreen(state, "maps/Example", mode, file)
     state.active_screen(mapscreen)
 
     while state.running:

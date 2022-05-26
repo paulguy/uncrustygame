@@ -19,9 +19,9 @@ import lib.waves as waves
 # see what if any difference it makes
 RENDERBATCHING=True
 # enable tracing of display list processing
-TRACEVIDEO=True
+TRACEVIDEO=False
 # enable tracing of audio sequencer processing
-TRACEAUDIO=False
+TRACEAUDIO=True
 
 RES_WIDTH=1920
 RES_HEIGHT=1080

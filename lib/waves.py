@@ -8,8 +8,8 @@ BASE_FREQ = 20
 FILTERS_PER_DECADE = 100
 DECADES = 3
 SLICES = FILTERS_PER_DECADE * DECADES
-MIN_TRANS_WIDTH = 80
-TRANS_WIDTH_DIV = 500
+MIN_TRANS_WIDTH = BASE_FREQ * 2
+TRANS_WIDTH_DIV = 10
 
 class LogSlope():
     def __init__(self, start, end, num):
@@ -81,6 +81,7 @@ def make_filter(rate, lowpass):
                     mul = (10 ** dec) + (((10 ** (dec + 1)) - (10 ** dec)) ** (i / FILTERS_PER_DECADE)) - 1.0
                     freq = BASE_FREQ * mul
                     transwidth = (((mul - 1) / TRANS_WIDTH_DIV) + 1) * MIN_TRANS_WIDTH
+                    print("{} {}".format(mul, transwidth))
                     pos = (dec * FILTERS_PER_DECADE * FILTER_TAPS) + (i * FILTER_TAPS)
 #                    filt[pos:pos + FILTER_TAPS] = \
 #                        signal.remez(FILTER_TAPS,
@@ -89,10 +90,12 @@ def make_filter(rate, lowpass):
                     if lowpass:
                         filt[pos:pos + FILTER_TAPS] = \
                              signal.firwin(FILTER_TAPS, freq,
+                                           width=transwidth,
                                            pass_zero=lowpass, fs=rate)
                     else:
                         filt[pos:pos + FILTER_TAPS] = \
                              signal.firwin(FILTER_TAPS, (freq, rate/2-1),
+                                           width=transwidth,
                                            pass_zero=lowpass, fs=rate)
                     print("{} / {}".format(dec * FILTERS_PER_DECADE + i + 1, maxval), end='\r')
         except Exception as e:

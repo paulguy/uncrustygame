@@ -1,7 +1,7 @@
 CrustyTracker
 2 2
-include macros.txt
-include modular.txt
+include seq/macros.txt
+include seq/modular.txt
 macro MAXREQ=1000
 tag max-request=MAXREQ
 macro LFOINBUF=2
