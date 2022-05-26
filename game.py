@@ -191,8 +191,6 @@ class MapScreen():
                 try:
                     hit = self._param(px, py)
                 except IndexError as e:
-                    print("{} {} {} {}".format(x, y, dx, dy))
-                    print("{} {} {} {}".format(nx, ny, hx, hy))
                     raise e
                 if hit != cur:
                     return hit, nx, ny
@@ -220,7 +218,6 @@ class MapScreen():
                                   self._playery,
                                   self._tw, 0,
                                   0)
-        print("{} {}".format(h, x))
         if h is not None and x < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
@@ -287,17 +284,17 @@ class MapScreen():
                                                      dx2, dy2,
                                                      0)
                         if hb is not None and xb < dx2:
-                            if xb > EDGE_FUDGE:
-                                dx2 = xb - EDGE_FUDGIER
-                            elif self._collision_right():
-                                dx2 = 0
-                                dx = 0
-                        if ht is not None and yt < dy2:
-                            if yt > EDGE_FUDGE:
-                                dy2 = yt - EDGE_FUDGIER
+                            if yb > EDGE_FUDGE:
+                                dy2 = yb - EDGE_FUDGIER
                             elif self._collision_down():
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
+                        if ht is not None and yt < dy2:
+                            if xt > EDGE_FUDGE:
+                                dx2 = xt - EDGE_FUDGIER
+                            elif self._collision_right():
+                                dx2 = 0
+                                dx = 0
                         if hc is not None:
                             if xc < dx2:
                                 if xc > EDGE_FUDGE:
@@ -338,14 +335,11 @@ class MapScreen():
                                 dy = 0
                         if hc is not None:
                             if xc < dx2:
-                                print(self._playerx)
-                                print(dx2)
                                 if xc > EDGE_FUDGE:
                                     dx2 = xc - EDGE_FUDGIER
                                 elif self._collision_right():
                                     dx2 = 0
                                     dx = 0
-                                print(dx2)
                             if yc > dy2:
                                 if yc < -EDGE_FUDGE:
                                     dy2 = yc + EDGE_FUDGIER
