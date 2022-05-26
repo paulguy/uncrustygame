@@ -685,6 +685,8 @@ class MapScreen():
         elif self._mode == GameInputMode.PLAY:
             self._file = open(file, 'r')
             self._lasttime = 0
+            self._pause = False
+            self._step = False
             self._read_demo_line()
         self._dl = display.DisplayList(self._state.ll)
         self._viewindex = self._dl.append(None)
@@ -705,6 +707,11 @@ class MapScreen():
                 if event.key.keysym.sym == SDLK_ESCAPE:
                     self._file.close()
                     self._state.stop()
+                elif event.key.keysym.sym == SDLK_PERIOD:
+                    self._pause = True
+                    self._step = True
+                elif event.key.keysym.sym == SDLK_SPACE:
+                    self._pause = not self._pause
         else:
             if event.type == SDL_KEYDOWN and event.key.repeat == 0:
                 if event.key.keysym.sym == SDLK_LEFT:
@@ -758,25 +765,38 @@ class MapScreen():
         self._tb.clear(0, 0, 32, 4)
         self._tb.put_text(status)
 
+    def _play_step(self, time):
+        time = self._nexttime - self._lasttime
+        self._lasttime = self._nexttime
+        self._pdirx = self._nextpdirx
+        self._pdiry = self._nextpdiry
+        self._do_movement(time)
+        self._read_demo_line()
+        if self._mode == GameInputMode.NORMAL:
+            if self._playstop:
+                self._state.stop()
+            return False
+        return True
+
     def update(self, time):
-        self._curtime += time
         if self._mode == GameInputMode.RECORD:
+            self._curtime += time
             self._file.write("{} {} {}\n".format(self._curtime,
                                                  self._pdirx,
                                                  self._pdiry))
         elif self._mode == GameInputMode.PLAY:
-            while self._curtime >= self._nexttime:
-                time = self._nexttime - self._lasttime
-                self._lasttime = self._nexttime
-                self._pdirx = self._nextpdirx
-                self._pdiry = self._nextpdiry
-                self._do_movement(time)
-                self._read_demo_line()
-                if self._mode == GameInputMode.NORMAL:
-                    if self._playstop:
-                        self._state.stop()
-                    break
+            if self._pause:
+                if self._step == True:
+                    self._step = False
+                    self._play_step(time)
+            else:
+                self._curtime += time
+                while self._curtime >= self._nexttime:
+                    if not self._play_step(time):
+                        break
             return
+        else:
+            self._curtime += time
 
         self._do_movement(time)
 
