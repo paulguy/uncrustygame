@@ -6,7 +6,7 @@ from sys import argv
 import time
 from dataclasses import dataclass
 from traceback import print_tb
-from enum import Enum
+from enum import Enum, IntEnum
 import json
 import copy
 import itertools
@@ -50,9 +50,20 @@ class TilesetDesc():
     width : int
     height : int
 
+class CollisionType(IntEnum):
+    AIR = 0,
+    SOLID = 1,
+    WATER = 2
+
 class PlayerState(Enum):
     AIR = 0,
     GROUND = 1
+
+class GameInputMode(Enum):
+    NORMAL = 0,
+    RECORD = 1,
+    PLAY = 2,
+    PLAYSTOP = 3
 
 class NoHit(Exception):
     pass
@@ -72,9 +83,9 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x1 - x2) / (y1 - y2)
             if slope * ydiff > xdiff:
-                return -xdiff, -((1 / slope) * xdiff)
+                return CollisionType.AIR, -xdiff, -((1 / slope) * xdiff)
             else:
-                return -(slope * ydiff), -ydiff
+                return CollisionType.AIR, -(slope * ydiff), -ydiff
         elif y2 > y1:
             ydiff = (int(y1 / th + 1) * th) - y1
             if ydiff == 0:
@@ -83,13 +94,13 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x1 - x2) / (y2 - y1)
             if slope * ydiff > xdiff:
-                return -xdiff, (1 / slope) * xdiff
+                return CollisionType.AIR, -xdiff, (1 / slope) * xdiff
             else:
-                return -(slope * ydiff), ydiff
+                return CollisionType.AIR, -(slope * ydiff), ydiff
         else:
             if x1 - x2 < xdiff:
                 raise NoHit()
-            return -xdiff, 0
+            return CollisionType.AIR, -xdiff, 0
     if x2 > x1:
         xdiff = (int(x1 / tw + 1) * tw) - x1
         if xdiff == 0:
@@ -102,9 +113,9 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x2 - x1) / (y1 - y2)
             if slope * ydiff > xdiff:
-                return xdiff, -((1 / slope) * xdiff)
+                return CollisionType.AIR, xdiff, -((1 / slope) * xdiff)
             else:
-                return slope * ydiff, -ydiff
+                return CollisionType.AIR, slope * ydiff, -ydiff
         elif y2 > y1:
             ydiff = (int(y1 / th + 1) * th) - y1
             if ydiff == 0:
@@ -113,13 +124,13 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x2 - x1) / (y2 - y1)
             if slope * ydiff > xdiff:
-                return xdiff, (1 / slope) * xdiff
+                return CollisionType.AIR, xdiff, (1 / slope) * xdiff
             else:
-                return slope * ydiff, ydiff
+                return CollisionType.AIR, slope * ydiff, ydiff
         else:
             if x2 - x1 < xdiff:
                 raise NoHit()
-            return xdiff, 0
+            return CollisionType.AIR, xdiff, 0
     else:
         if y2 < y1:
             ydiff = y1 - (int(y1 / th) * th)
@@ -127,14 +138,14 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 ydiff = th
             if y1 - y2 < ydiff:
                 raise NoHit()
-            return 0, -ydiff
+            return CollisionType.AIR, 0, -ydiff
         elif y2 > y1:
             ydiff = (int(y1 / th + 1) * th) - y1
             if ydiff == 0:
                 ydiff = th
             if y2 - y1 < ydiff:
                 raise NoHit()
-            return 0, ydiff
+            return CollisionType.AIR, 0, ydiff
         else:
             raise NoHit()
 
@@ -159,11 +170,10 @@ def collision(x1, y1, x2, y2, tw, th):
             cy = 0
     return cx, cy
 
-class GameInputMode(Enum):
-    NORMAL = 0,
-    RECORD = 1,
-    PLAY = 2,
-    PLAYSTOP = 3
+TILE_CALLS = [
+    next_hit,
+    CollisionType.SOLID,
+]
 
 class MapScreen():
     def _param(self, x, y):
@@ -172,44 +182,46 @@ class MapScreen():
         except IndexError as e:
             raise IndexError("Out of bounds: {} {}".format(x, y))
 
-    def _first_hit(self, x, y, dx, dy, cur):
+    def _first_hit(self, x, y, dx, dy, curtype):
         nx = 0
         ny = 0
+        curtile = self._param(int(x / self._tw), int(y / self._th))
         while True:
             try:
-                hx, hy = next_hit(x + nx, y + ny,
-                                  x + dx, y + dy,
-                                  self._tw, self._th)
+                call = TILE_CALLS[curtile]
+                if not callable(call):
+                    return call, nx, ny
+                hit, hx, hy = call(x + nx, y + ny,
+                                   x + dx, y + dy,
+                                   self._tw, self._th)
                 nx += hx
                 ny += hy
+                if hit != curtype:
+                    return hit, nx, ny
                 px = int((x + nx) / self._tw)
                 if dx < 0 and (x + nx) % self._tw == 0:
                     px -= 1
                 py = int((y + ny) / self._th)
                 if dy < 0 and (y + ny) % self._th == 0:
                     py -= 1
-                try:
-                    hit = self._param(px, py)
-                except IndexError as e:
-                    raise e
-                if hit != cur:
-                    return hit, nx, ny
+                curtile = self._param(px, py)
             except NoHit:
                 break
-        return None, dx, dy 
+        # don't modify dx or dy to avoid rounding errors
+        return curtype, dx, dy 
 
     def _collision_left(self):
         h, x, y = self._first_hit(self._playerx,
                                   self._playery,
                                   -self._tw, 0,
                                   0)
-        if h is not None and x > -EDGE_FUDGE:
+        if h == CollisionType.SOLID and x > -EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx,
                                   self._playery + PLAYER_HEIGHT,
                                   -self._tw, 0,
                                   0)
-        if h is not None and x > -EDGE_FUDGE:
+        if h == CollisionType.SOLID and x > -EDGE_FUDGE:
             return True
         return False
 
@@ -218,13 +230,13 @@ class MapScreen():
                                   self._playery,
                                   self._tw, 0,
                                   0)
-        if h is not None and x < EDGE_FUDGE:
+        if h == CollisionType.SOLID and x < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery + PLAYER_HEIGHT,
                                   self._tw, 0,
                                   0)
-        if h is not None and x < EDGE_FUDGE:
+        if h == CollisionType.SOLID and x < EDGE_FUDGE:
             return True
         return False
 
@@ -233,13 +245,13 @@ class MapScreen():
                                   self._playery,
                                   0, -self._th,
                                   0)
-        if h is not None and y > -EDGE_FUDGE:
+        if h == CollisionType.SOLID and y > -EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery,
                                   0, -self._th,
                                   0)
-        if h is not None and y > -EDGE_FUDGE:
+        if h == CollisionType.SOLID and y > -EDGE_FUDGE:
             return True
         return False
 
@@ -248,13 +260,13 @@ class MapScreen():
                                   self._playery + PLAYER_HEIGHT,
                                   0, self._th,
                                   0)
-        if h is not None and y < EDGE_FUDGE:
+        if h == CollisionType.SOLID and y < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery + PLAYER_HEIGHT,
                                   0, self._th,
                                   0)
-        if h is not None and y < EDGE_FUDGE:
+        if h == CollisionType.SOLID and y < EDGE_FUDGE:
             return True
         return False
 
@@ -283,19 +295,19 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
                                                      0)
-                        if hb is not None and xb < dx2:
+                        if hb != CollisionType.AIR and xb < dx2:
                             if yb > EDGE_FUDGE:
                                 dy2 = yb - EDGE_FUDGIER
                             elif self._collision_down():
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
-                        if ht is not None and yt < dy2:
+                        if ht != CollisionType.AIR and yt < dy2:
                             if xt > EDGE_FUDGE:
                                 dx2 = xt - EDGE_FUDGIER
                             elif self._collision_right():
                                 dx2 = 0
                                 dx = 0
-                        if hc is not None:
+                        if hc != CollisionType.AIR:
                             if xc < dx2:
                                 if xc > EDGE_FUDGE:
                                     dx2 = xc - EDGE_FUDGIER
@@ -320,20 +332,20 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
                                                      0)
-                        if hb is not None and xb < dx2:
+                        if hb != CollisionType.AIR and xb < dx2:
                             if xb > EDGE_FUDGE:
                                 dx2 = xb - EDGE_FUDGIER
                             elif self._collision_right():
                                 dx2 = 0
                                 dx = 0
                         # greater is less negative
-                        if ht is not None and yt > dy2:
+                        if ht != CollisionType.AIR and yt > dy2:
                             if yt < -EDGE_FUDGE:
                                 dy2 = yt + EDGE_FUDGIER
                             elif self._collision_up():
                                 dy2 = 0
                                 dy = 0
-                        if hc is not None:
+                        if hc != CollisionType.AIR:
                             if xc < dx2:
                                 if xc > EDGE_FUDGE:
                                     dx2 = xc - EDGE_FUDGIER
@@ -355,13 +367,13 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, 0,
                                                      0)
-                        if ht is not None and xt < dx:
+                        if ht != CollisionType.AIR and xt < dx:
                             if xt > EDGE_FUDGE:
                                 dx2 = xt - EDGE_FUDGIER
                             else:
                                 dx2 = 0
                                 dx = 0
-                        if hb is not None and xb < dx:
+                        if hb != CollisionType.AIR and xb < dx:
                             if xb > EDGE_FUDGE:
                                 dx2 = xb - EDGE_FUDGIER
                             else:
@@ -380,19 +392,19 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
                                                      0)
-                        if ht is not None and xt > dx2:
+                        if ht != CollisionType.AIR and xt > dx2:
                             if xt < -EDGE_FUDGE:
                                 dx2 = xt + EDGE_FUDGIER
                             elif self._collision_left():
                                 dx2 = 0
                                 dx = 0
-                        if hb is not None and yb < dy2:
+                        if hb != CollisionType.AIR and yb < dy2:
                             if yb > EDGE_FUDGE:
                                 dy2 = yb - EDGE_FUDGIER
                             elif self._collision_down():
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
-                        if hc is not None:
+                        if hc != CollisionType.AIR:
                             if xc > dx2:
                                 if xc < -EDGE_FUDGE:
                                     dx2 = xc + EDGE_FUDGIER
@@ -417,19 +429,19 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
                                                      0)
-                        if hb is not None and xb > dx2:
+                        if hb != CollisionType.AIR and xb > dx2:
                             if xb < -EDGE_FUDGE:
                                 dx2 = xb + EDGE_FUDGIER
                             elif self._collision_left():
                                 dx2 = 0
                                 dx = 0
-                        if ht is not None and yt > dy2:
+                        if ht != CollisionType.AIR and yt > dy2:
                             if yt < -EDGE_FUDGE:
                                 dy2 = yt + EDGE_FUDGIER
                             elif self._collision_up():
                                 dy2 = 0
                                 dy = 0
-                        if hc is not None:
+                        if hc != CollisionType.AIR:
                             if xc > dx2:
                                 if xc < -EDGE_FUDGE:
                                     dx2 = xc + EDGE_FUDGIER
@@ -450,13 +462,13 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, 0,
                                                      0)
-                        if ht is not None and xt > dx2:
+                        if ht != CollisionType.AIR and xt > dx2:
                             if xt < -EDGE_FUDGE:
                                 dx2 = xt + EDGE_FUDGIER
                             else:
                                 dx2 = 0
                                 dx = 0
-                        if hb is not None and xb > dx2:
+                        if hb != CollisionType.AIR and xb > dx2:
                             if xb < -EDGE_FUDGE:
                                 dx2 = xb + EDGE_FUDGIER
                             else:
@@ -472,13 +484,13 @@ class MapScreen():
                                                      self._playery + PLAYER_HEIGHT,
                                                      0, dy2,
                                                      0)
-                        if hl is not None and yl < dy2:
+                        if hl != CollisionType.AIR and yl < dy2:
                             if yl > EDGE_FUDGE:
                                 dy2 = yl - EDGE_FUDGIER
                             else:
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
-                        if hr is not None and yr < dy2:
+                        if hr != CollisionType.AIR and yr < dy2:
                             if yr > EDGE_FUDGE:
                                 dy2 = yr - EDGE_FUDGIER
                             else:
@@ -492,28 +504,20 @@ class MapScreen():
                                                      self._playery,
                                                      0, dy2,
                                                      0)
-                        if hl is not None and yl > dy2:
+                        if hl != CollisionType.AIR and yl > dy2:
                             if yl < -EDGE_FUDGE:
                                 dy2 = yl + EDGE_FUDGIER
                             else:
                                 dy2 = 0
                                 dy = 0
-                        if hr is not None and yr > dy2:
+                        if hr != CollisionType.AIR and yr > dy2:
                             if yr < -EDGE_FUDGE:
                                 dy2 = yr + EDGE_FUDGIER
                             else:
                                 dy2 = 0
                                 dy = 0
             elif self._pstate == PlayerState.GROUND:
-                hl, xl, yl = self._first_hit(self._playerx,
-                                             self._playery + PLAYER_HEIGHT,
-                                             0, EDGE_FUDGE,
-                                             0)
-                hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                             self._playery + PLAYER_HEIGHT,
-                                             0, EDGE_FUDGE,
-                                             0)
-                if hl is None and hr is None:
+                if not self._collision_down():
                     self._pspeedy = 0
                     self._pstate = PlayerState.AIR
                     continue
@@ -528,13 +532,13 @@ class MapScreen():
                                                  self._playery + PLAYER_HEIGHT,
                                                  dx2, 0,
                                                  0)
-                    if ht is not None and xt > dx:
+                    if ht != CollisionType.AIR and xt > dx:
                         if xt < -EDGE_FUDGE:
                             dx2 = xt + EDGE_FUDGIER
                         else:
                             dx2 = 0
                             dx = 0
-                    if hb is not None and xb > dx:
+                    if hb != CollisionType.AIR and xb > dx:
                         if xb < -EDGE_FUDGE:
                             dx2 = xb + EDGE_FUDGIER
                         else:
@@ -549,13 +553,13 @@ class MapScreen():
                                                  self._playery + PLAYER_HEIGHT,
                                                  dx2, 0,
                                                  0)
-                    if ht is not None and xt < dx:
+                    if ht != CollisionType.AIR and xt < dx:
                         if xt > EDGE_FUDGE:
                             dx2 = xt - EDGE_FUDGIER
                         else:
                             dx2 = 0
                             dx = 0
-                    if hb is not None and xb < dx:
+                    if hb != CollisionType.AIR and xb < dx:
                         if xb > EDGE_FUDGE:
                             dx2 = xb - EDGE_FUDGIER
                         else:
@@ -671,6 +675,7 @@ class MapScreen():
         self._mode = mode
         self._curtime = 0
         self._playstop = False
+        self._file = None
         if self._mode == GameInputMode.PLAYSTOP:
             self._playstop = True
             self._mode = GameInputMode.PLAY
@@ -783,6 +788,7 @@ class MapScreen():
                 if self._step == True:
                     self._step = False
                     self._play_step(time)
+                    self._curtime = self._lasttime
             else:
                 self._curtime += time
                 while self._curtime >= self._nexttime:
@@ -956,15 +962,16 @@ def do_main(window, renderer, pixfmt):
                       layers.FONT_SCALE)
     mode = GameInputMode.NORMAL
     file = None
-    if argv[1] == 'record':
-        mode = GameInputMode.RECORD
-        file = argv[2]
-    elif argv[1] == 'play':
-        mode = GameInputMode.PLAY
-        file = argv[2]
-    elif argv[1] == 'playstop':
-        mode = GameInputMode.PLAYSTOP
-        file = argv[2]
+    if len(argv) >= 3:
+        if argv[1] == 'record':
+            mode = GameInputMode.RECORD
+            file = argv[2]
+        elif argv[1] == 'play':
+            mode = GameInputMode.PLAY
+            file = argv[2]
+        elif argv[1] == 'playstop':
+            mode = GameInputMode.PLAYSTOP
+            file = argv[2]
     mapscreen = MapScreen(state, "maps/Example", mode, file)
     state.active_screen(mapscreen)
 
