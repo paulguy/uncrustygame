@@ -83,9 +83,9 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x1 - x2) / (y1 - y2)
             if slope * ydiff > xdiff:
-                return CollisionType.AIR, -xdiff, -((1 / slope) * xdiff)
+                return -xdiff, -((1 / slope) * xdiff)
             else:
-                return CollisionType.AIR, -(slope * ydiff), -ydiff
+                return -(slope * ydiff), -ydiff
         elif y2 > y1:
             ydiff = (int(y1 / th + 1) * th) - y1
             if ydiff == 0:
@@ -94,13 +94,13 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x1 - x2) / (y2 - y1)
             if slope * ydiff > xdiff:
-                return CollisionType.AIR, -xdiff, (1 / slope) * xdiff
+                return -xdiff, (1 / slope) * xdiff
             else:
-                return CollisionType.AIR, -(slope * ydiff), ydiff
+                return -(slope * ydiff), ydiff
         else:
             if x1 - x2 < xdiff:
                 raise NoHit()
-            return CollisionType.AIR, -xdiff, 0
+            return -xdiff, 0
     if x2 > x1:
         xdiff = (int(x1 / tw + 1) * tw) - x1
         if xdiff == 0:
@@ -113,9 +113,9 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x2 - x1) / (y1 - y2)
             if slope * ydiff > xdiff:
-                return CollisionType.AIR, xdiff, -((1 / slope) * xdiff)
+                return xdiff, -((1 / slope) * xdiff)
             else:
-                return CollisionType.AIR, slope * ydiff, -ydiff
+                return slope * ydiff, -ydiff
         elif y2 > y1:
             ydiff = (int(y1 / th + 1) * th) - y1
             if ydiff == 0:
@@ -124,13 +124,13 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 raise NoHit()
             slope = (x2 - x1) / (y2 - y1)
             if slope * ydiff > xdiff:
-                return CollisionType.AIR, xdiff, (1 / slope) * xdiff
+                return xdiff, (1 / slope) * xdiff
             else:
-                return CollisionType.AIR, slope * ydiff, ydiff
+                return slope * ydiff, ydiff
         else:
             if x2 - x1 < xdiff:
                 raise NoHit()
-            return CollisionType.AIR, xdiff, 0
+            return xdiff, 0
     else:
         if y2 < y1:
             ydiff = y1 - (int(y1 / th) * th)
@@ -138,40 +138,23 @@ def next_hit(x1, y1, x2, y2, tw, th):
                 ydiff = th
             if y1 - y2 < ydiff:
                 raise NoHit()
-            return CollisionType.AIR, 0, -ydiff
+            return 0, -ydiff
         elif y2 > y1:
             ydiff = (int(y1 / th + 1) * th) - y1
             if ydiff == 0:
                 ydiff = th
             if y2 - y1 < ydiff:
                 raise NoHit()
-            return CollisionType.AIR, 0, ydiff
+            return 0, ydiff
         else:
             raise NoHit()
 
-def collision(x1, y1, x2, y2, tw, th):
-    cx = 0
-    cy = 0
-    if x2 < x1:
-        cx = (x1 % tw) - (x1 - x2)
-        if cx > 0:
-            cx = 0
-    elif x2 > x1:
-        cx = (x2 - x1) - (tw - (x1 % tw))
-        if cx < 0:
-            cx = 0
-    if y2 < y1:
-        cy = (y1 % th) - (y1 - y2)
-        if cy > 0:
-            cy = 0
-    elif y2 > y1:
-        cy = (y2 - y1) - (th - (y1 % th))
-        if cy < 0:
-            cy = 0
-    return cx, cy
+def air(x1, y1, x2, y2, tw, th):
+    x, y = next_hit(x1, y1, x2, y2, tw, th)
+    return CollisionType.AIR, x, y
 
 TILE_CALLS = [
-    next_hit,
+    air,
     CollisionType.SOLID,
 ]
 
@@ -208,7 +191,7 @@ class MapScreen():
             except NoHit:
                 break
         # don't modify dx or dy to avoid rounding errors
-        return curtype, dx, dy 
+        return curtype, dx, dy
 
     def _collision_left(self):
         h, x, y = self._first_hit(self._playerx,
@@ -619,8 +602,8 @@ class MapScreen():
         self._dl.replace(self._viewindex, self._view.dl)
         self._tb = textbox.TextBox(self._state.ll,
                                    32 * self._state.font.ts.width(),
-                                   4 * self._state.font.ts.height(),
-                                   32, 4, self._state.font)
+                                   6 * self._state.font.ts.height(),
+                                   32, 6, self._state.font)
         self._tb.internal.colormod(display.make_color(255, 255, 255, 96))
         self._dl.replace(self._tbindex, self._tb.draw)
 
@@ -760,8 +743,8 @@ class MapScreen():
         self._move_player()
         self._update_scroll()
 
-        status, _, _, _ = textbox.wrap_text("{}\n{}\n{}\n{}".format(self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 4)
-        self._tb.clear(0, 0, 32, 4)
+        status, _, _, _ = textbox.wrap_text("{}\n{}\n{}\n{}\n{}\n{}".format(time, self._state.frameTime, self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 6)
+        self._tb.clear(0, 0, 32, 6)
         self._tb.put_text(status)
 
     def _play_step(self, time):
@@ -824,6 +807,7 @@ class GameState():
         self._newscreen = False
         self._resizing = 0.0
         self._extratime = 0.0
+        self._frameTime = 0.0
         self._renders = FULL_RENDERS
         self._font_scale = font_scale
         ts = self._ll.tileset(font_filename, font_width, font_height, "font")
@@ -858,6 +842,10 @@ class GameState():
     @property
     def font(self):
         return self._font
+
+    @property
+    def frameTime(self):
+        return self._frameTime
 
     def active_screen(self, screen):
         self._screen = screen
@@ -905,6 +893,7 @@ class GameState():
             self._input(event)
 
         self._update(timetaken)
+        self._frameTime = time.monotonic() - thisTime
 
         self._lastTime = thisTime
 
