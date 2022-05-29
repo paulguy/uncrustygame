@@ -27,17 +27,18 @@ RES_HEIGHT=480
 VIEW_WIDTH=320
 VIEW_HEIGHT=240
 ERROR_TIME=10.0
-FULL_RENDERS = 2
 
 PLAYER_GFX = "gfx/face.bmp"
 PLAYER_WIDTH=16
 PLAYER_HEIGHT=16
-PLAYER_MAXSPEED=15
+PLAYER_MAXSPEED=6
 PLAYER_JUMP_POWER=5
-PLAYER_ACCEL=6
-PLAYER_GRAVITY=3
-#PLAYER_GRAVITY=0
-PLAYER_BRAKING=3
+PLAYER_ACCEL=20
+PLAYER_AIR_ACCEL=10
+PLAYER_GRAVITY=5
+PLAYER_MAX_FALLSPEED=20
+PLAYER_BRAKING=12
+PLAYER_AIR_BRAKING=2
 PLAYER_MINSPEED=0.001
 EDGE_FUDGE=0.01
 EDGE_FUDGIER=EDGE_FUDGE/10
@@ -68,94 +69,113 @@ class GameInputMode(Enum):
 class NoHit(Exception):
     pass
 
-def next_hit(x1, y1, x2, y2, tw, th):
-    if x2 < x1:
-        xdiff = x1 - (int(x1 / tw) * tw)
+def next_hit(x, y, dx, dy, tw, th, t):
+    if dx < 0.0:
+        xdiff = (int(x / tw) * tw) - x
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
-        if xdiff == 0:
-            xdiff = tw
-        if y2 < y1:
-            ydiff = y1 - (int(y1 / th) * th)
-            if ydiff == 0:
-                ydiff = th
-            if x1 - x2 < xdiff and y1 - y2 < ydiff:
+        if xdiff == 0.0:
+            xdiff = -tw
+        if dy < 0.0:
+            ydiff = (int(y / th) * th) - y
+            if ydiff == 0.0:
+                ydiff = -th
+            if dx > xdiff and dy > ydiff:
                 raise NoHit()
-            slope = (x1 - x2) / (y1 - y2)
-            if slope * ydiff > xdiff:
-                return -xdiff, -((1 / slope) * xdiff)
+            # ray is being cast vertically instead of horizontally so while it
+            # looks wrong, it's not dy / dx
+            slope = dx / dy
+            if slope * ydiff < xdiff:
+                return t, xdiff, (1.0 / slope) * xdiff
             else:
-                return -(slope * ydiff), -ydiff
-        elif y2 > y1:
-            ydiff = (int(y1 / th + 1) * th) - y1
-            if ydiff == 0:
+                return t, slope * ydiff, ydiff
+        elif dy > 0.0:
+            ydiff = ((int(y / th) + 1) * th) - y
+            if ydiff == 0.0:
                 ydiff = th
-            if x1 - x2 < xdiff and y2 - y1 < ydiff:
+            if dx > xdiff and dy < ydiff:
                 raise NoHit()
-            slope = (x1 - x2) / (y2 - y1)
-            if slope * ydiff > xdiff:
-                return -xdiff, (1 / slope) * xdiff
+            slope = dx / dy
+            if slope * ydiff < xdiff:
+                return t, xdiff, (1.0 / slope) * xdiff
             else:
-                return -(slope * ydiff), ydiff
+                return t, slope * ydiff, ydiff
         else:
-            if x1 - x2 < xdiff:
+            if dx > xdiff:
                 raise NoHit()
-            return -xdiff, 0
-    if x2 > x1:
-        xdiff = (int(x1 / tw + 1) * tw) - x1
-        if xdiff == 0:
+            return t, xdiff, 0.0
+    if dx > 0.0:
+        xdiff = ((int(x / tw) + 1) * tw) - x
+        if xdiff == 0.0:
             xdiff = tw
-        if y2 < y1:
-            ydiff = y1 - (int(y1 / th) * th)
-            if ydiff == 0:
-                ydiff = th
-            if x2 - x1 < xdiff and y1 - y2 < ydiff:
+        if dy < 0.0:
+            ydiff = (int(y / th) * th) - y
+            if ydiff == 0.0:
+                ydiff = -th
+            if dx < xdiff and dy > ydiff:
                 raise NoHit()
-            slope = (x2 - x1) / (y1 - y2)
+            slope = dx / dy
             if slope * ydiff > xdiff:
-                return xdiff, -((1 / slope) * xdiff)
+                return t, xdiff, (1.0 / slope) * xdiff
             else:
-                return slope * ydiff, -ydiff
-        elif y2 > y1:
-            ydiff = (int(y1 / th + 1) * th) - y1
-            if ydiff == 0:
+                return t, slope * ydiff, ydiff
+        elif dy > 0.0:
+            ydiff = ((int(y / th) + 1) * th) - y
+            if ydiff == 0.0:
                 ydiff = th
-            if x2 - x1 < xdiff and y2 - y1 < ydiff:
+            if dx < xdiff and dy < ydiff:
                 raise NoHit()
-            slope = (x2 - x1) / (y2 - y1)
+            slope = dx / dy
             if slope * ydiff > xdiff:
-                return xdiff, (1 / slope) * xdiff
+                return t, xdiff, (1.0 / slope) * xdiff
             else:
-                return slope * ydiff, ydiff
+                return t, slope * ydiff, ydiff
         else:
-            if x2 - x1 < xdiff:
+            if dx < xdiff:
                 raise NoHit()
-            return xdiff, 0
+            return t, xdiff, 0.0
     else:
-        if y2 < y1:
-            ydiff = y1 - (int(y1 / th) * th)
-            if ydiff == 0:
-                ydiff = th
-            if y1 - y2 < ydiff:
+        if dy < 0.0:
+            ydiff = (int(y / th) * th) - y
+            if ydiff == 0.0:
+                ydiff = -th
+            if dy > ydiff:
                 raise NoHit()
-            return 0, -ydiff
-        elif y2 > y1:
-            ydiff = (int(y1 / th + 1) * th) - y1
-            if ydiff == 0:
+            return t, 0.0, ydiff
+        elif dy > 0.0:
+            ydiff = ((int(y / th) + 1) * th) - y
+            if ydiff == 0.0:
                 ydiff = th
-            if y2 - y1 < ydiff:
+            if dy < ydiff:
                 raise NoHit()
-            return 0, ydiff
+            return t, 0.0, ydiff
         else:
             raise NoHit()
 
-def air(x1, y1, x2, y2, tw, th):
-    x, y = next_hit(x1, y1, x2, y2, tw, th)
-    return CollisionType.AIR, x, y
+# some highschool math I haven't done in a while and never fully grasped...
+# y = ax + b
+# y = 
+def slope_hit(x, y, dx, dy, tw, th, slope, bias, t1, t2):
+    pass
 
 TILE_CALLS = [
-    air,
+    lambda x, y, dx, dy, tw, th: next_hit(x, y, dx, dy, tw, th, CollisionType.AIR),
     CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID,
+    CollisionType.SOLID # start slopes (not implemented yet)
 ]
 
 class MapScreen():
@@ -175,7 +195,7 @@ class MapScreen():
                 if not callable(call):
                     return call, nx, ny
                 hit, hx, hy = call(x + nx, y + ny,
-                                   x + dx, y + dy,
+                                   dx - nx, dy - ny,
                                    self._tw, self._th)
                 nx += hx
                 ny += hy
@@ -501,7 +521,7 @@ class MapScreen():
                                 dy = 0
             elif self._pstate == PlayerState.GROUND:
                 if not self._collision_down():
-                    self._pspeedy = 0
+                    self._pspeedy = 0.0
                     self._pstate = PlayerState.AIR
                     continue
                 dy = 0
@@ -564,10 +584,10 @@ class MapScreen():
 
         if (self._pspeedx < 0 and movedx >= -EDGE_FUDGE) or \
            (self._pspeedx > 0 and movedx <= EDGE_FUDGE):
-            self._pspeedx = 0
+            self._pspeedx = 0.0
         if (self._pspeedy < 0 and movedy >= -EDGE_FUDGE) or \
            (self._pspeedy > 0 and movedy <= EDGE_FUDGE):
-            self._pspeedy = 0
+            self._pspeedy = 0.0
 
     def _update_scroll(self):
         self._view.scroll(round(self._playerx - self._centerx),
@@ -652,8 +672,8 @@ class MapScreen():
         self._pstate = PlayerState.AIR
         self._pspeedx = 0.0
         self._pspeedy = 0.0
-        self._playerx = settings['player_x']
-        self._playery = settings['player_y']
+        self._playerx = float(settings['player_x'])
+        self._playery = float(settings['player_y'])
         self._move_player()
         self._mode = mode
         self._curtime = 0
@@ -715,20 +735,31 @@ class MapScreen():
                         self._pdirx = 0
 
     def _do_movement(self, time):
+        accel = PLAYER_ACCEL
+        braking = PLAYER_BRAKING
+        if self._pstate == PlayerState.AIR:
+            accel = PLAYER_AIR_ACCEL
+            braking = PLAYER_AIR_BRAKING
         if self._pdirx < 0:
-            if not self._collision_left():
-                self._pspeedx -= time * \
-                    ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
-                    PLAYER_ACCEL
+            if self._pspeedx > 0.0:
+                self._pspeedx /= braking
+            else:
+                if not self._collision_left():
+                    self._pspeedx -= time * \
+                        ((PLAYER_MAXSPEED + self._pspeedx) / PLAYER_MAXSPEED) * \
+                        accel
         elif self._pdirx > 0:
-            if not self._collision_right():
-                self._pspeedx += time * \
-                    ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
-                    PLAYER_ACCEL
+            if self._pspeedx < 0.0:
+                self._pspeedx /= braking
+            else:
+                if not self._collision_right():
+                    self._pspeedx += time * \
+                        ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                        accel
         else:
-            self._pspeedx /= PLAYER_BRAKING
+            self._pspeedx /= braking
         if abs(self._pspeedx) < PLAYER_MINSPEED:
-            self._pspeedx = 0
+            self._pspeedx = 0.0
         if self._pdiry < 0:
             if self._pstate == PlayerState.GROUND:
                 self._pstate = PlayerState.AIR
@@ -736,14 +767,14 @@ class MapScreen():
             self._pdiry = 0
         if self._pstate == PlayerState.AIR:
             self._pspeedy += time * \
-                ((PLAYER_MAXSPEED - self._pspeedy) / PLAYER_MAXSPEED) * \
+                ((PLAYER_MAX_FALLSPEED - self._pspeedy) / PLAYER_MAX_FALLSPEED) * \
                 PLAYER_GRAVITY
         if abs(self._pspeedy) < PLAYER_MINSPEED:
-            self._pspeedy = 0
+            self._pspeedy = 0.0
         self._move_player()
         self._update_scroll()
 
-        status, _, _, _ = textbox.wrap_text("{}\n{}\n{}\n{}\n{}\n{}".format(time, self._state.frameTime, self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 6)
+        status, _, _, _ = textbox.wrap_text("FT:  {:.3}\nCPU: {:.3}\nPX:  {:.3}\nPY:  {:.3}\nPSX: {:.3}\nPSY: {:.3}".format(time, self._state.frameTime, self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 6)
         self._tb.clear(0, 0, 32, 6)
         self._tb.put_text(status)
 
@@ -808,7 +839,6 @@ class GameState():
         self._resizing = 0.0
         self._extratime = 0.0
         self._frameTime = 0.0
-        self._renders = FULL_RENDERS
         self._font_scale = font_scale
         ts = self._ll.tileset(font_filename, font_width, font_height, "font")
         codec = textbox.load_tileset_codec(font_mapname, ts.tiles())
@@ -852,7 +882,6 @@ class GameState():
         self._screen.active()
         self._dl.replace(self._screenindex, self._screen.dl)
         self._newscreen = True
-        self.changed()
 
     def _common_input(self, event):
         if event.type == SDL_QUIT:
@@ -872,15 +901,9 @@ class GameState():
                 self._extratime += time
                 display.clear(self._ll, None, 0, 0, 0, SDL_ALPHA_OPAQUE)
                 self._resizing -= time
-                if self._resizing <= 0.0:
-                    self.changed()
             else:
                 self._screen.update(time + self._extratime)
-                if self._renders <= 0:
-                    self._dl.draw(display.SCREEN, full=False)
-                else:
-                    self._dl.draw(display.SCREEN)
-                    self._renders -= 1
+                self._dl.draw(display.SCREEN, full=False)
                 self._extratime = 0.0
         self._newscreen = False
 
@@ -929,9 +952,6 @@ class GameState():
 
     def tileset(self, filename, width, height):
         return self._tilesets[TilesetDesc(filename, width, height)]
-
-    def changed(self):
-        self._renders = FULL_RENDERS
 
 
 def log_cb_return(priv, string):
