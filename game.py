@@ -82,6 +82,113 @@ def next_hit(x, y, dx, dy, tw, th, t):
                 ydiff = -th
             if dx > xdiff and dy > ydiff:
                 raise NoHit()
+            slope = dy / dx
+            if slope * xdiff < ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        elif dy > 0.0:
+            ydiff = ((int(y / th) + 1) * th) - y
+            if ydiff == 0.0:
+                ydiff = th
+            if dx > xdiff and dy < ydiff:
+                raise NoHit()
+            slope = dy / dx
+            if slope * xdiff > ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        else:
+            if dx > xdiff:
+                raise NoHit()
+            return t, xdiff, 0.0
+    if dx > 0.0:
+        xdiff = ((int(x / tw) + 1) * tw) - x
+        if xdiff == 0.0:
+            xdiff = tw
+        if dy < 0.0:
+            ydiff = (int(y / th) * th) - y
+            if ydiff == 0.0:
+                ydiff = -th
+            if dx < xdiff and dy > ydiff:
+                raise NoHit()
+            slope = dy / dx
+            if slope * xdiff < ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        elif dy > 0.0:
+            ydiff = ((int(y / th) + 1) * th) - y
+            if ydiff == 0.0:
+                ydiff = th
+            if dx < xdiff and dy < ydiff:
+                raise NoHit()
+            slope = dy / dx
+            if slope * xdiff > ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        else:
+            if dx < xdiff:
+                raise NoHit()
+            return t, xdiff, 0.0
+    else:
+        if dy < 0.0:
+            ydiff = (int(y / th) * th) - y
+            if ydiff == 0.0:
+                ydiff = -th
+            if dy > ydiff:
+                raise NoHit()
+            return t, 0.0, ydiff
+        elif dy > 0.0:
+            ydiff = ((int(y / th) + 1) * th) - y
+            if ydiff == 0.0:
+                ydiff = th
+            if dy < ydiff:
+                raise NoHit()
+            return t, 0.0, ydiff
+        else:
+            raise NoHit()
+
+# some highschool math I haven't done in a while and never fully grasped...
+# y = ax + b
+
+# ax + b = cx + d
+# ax + b - cx = d
+# ax - cx = d - b
+# (a - c)*x = d - b
+# x = (d - b) / (a - c)
+
+# xl = (int(x / tw) * tw) - x
+# yt = (int(y / th) * th) - y
+# xr = tw - xl
+# yb = th - yt
+
+# a: player's slope
+# a = dy / dx
+# b: player's bias
+# b = y[tb]
+# c: slope's slope
+# c = a
+# d: slope's bias
+# d = b + (a * x[lr])
+
+# cx = ((b + (a * x[lr])) - y[tb]) / ((dy / dx) - b)
+# cy = (a * cx) + b
+
+def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
+    if dx < 0.0:
+        xdiff = (int(x / tw) * tw) - x
+        # set to tw so when it hits and comes back to here, it'll continue
+        # rather than get stuck
+        if xdiff == 0.0:
+            xdiff = -tw
+        if dy < 0.0:
+            ydiff = (int(y / th) * th) - y
+            if ydiff == 0.0:
+                ydiff = -th
+            if dx > xdiff and dy > ydiff:
+                raise NoHit()
             # ray is being cast vertically instead of horizontally so while it
             # looks wrong, it's not dy / dx
             slope = dx / dy
@@ -123,17 +230,33 @@ def next_hit(x, y, dx, dy, tw, th, t):
             ydiff = ((int(y / th) + 1) * th) - y
             if ydiff == 0.0:
                 ydiff = th
+            
             if dx < xdiff and dy < ydiff:
                 raise NoHit()
             slope = dx / dy
             if slope * ydiff > xdiff:
-                return t, xdiff, (1.0 / slope) * xdiff
+                hit = (1.0 / slope) * xdiff
+                a = 1.0 / a
+                if hit < a * tw + (b * -a):
+                    return t1, xdiff, hit
+                else:
+                    return t2, xdiff, hit
             else:
-                return t, slope * ydiff, ydiff
+                hit = slope * ydiff
+                if hit < a * th + b:
+                    return t1, hit, ydiff
+                else:
+                    return t2, hit, ydiff
         else:
             if dx < xdiff:
                 raise NoHit()
-            return t, xdiff, 0.0
+            # flip the axes to get the intersection with a vertical edge
+            a = 1.0 / a
+            # the bias needs to be changed too
+            if (int(y / th) * th) - y < a * tw + (b * -a):
+                return t1, xdiff, 0.0
+            else:
+                return t2, xdiff, 0.0
     else:
         if dy < 0.0:
             ydiff = (int(y / th) * th) - y
@@ -151,12 +274,6 @@ def next_hit(x, y, dx, dy, tw, th, t):
             return t, 0.0, ydiff
         else:
             raise NoHit()
-
-# some highschool math I haven't done in a while and never fully grasped...
-# y = ax + b
-# y = 
-def slope_hit(x, y, dx, dy, tw, th, slope, bias, t1, t2):
-    pass
 
 TILE_CALLS = [
     lambda x, y, dx, dy, tw, th: next_hit(x, y, dx, dy, tw, th, CollisionType.AIR),
