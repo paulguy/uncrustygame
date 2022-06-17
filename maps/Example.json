@@ -39,7 +39,7 @@
             "y_scale": 2.0
         },
         {
-            "name": "params",
+            "name": "solids",
             "gfx": "gfx/params.bmp",
             "unimap": "",
             "tile_width": 16,

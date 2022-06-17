@@ -16,6 +16,15 @@ import lib.textbox as textbox
 import lib.effects as effects
 import lib.layers as layers
 
+#TODO:
+# Allow player to stand on a slope tip
+# more player movement (following slopes)
+# loading in and displaying multiple maps in the right spots
+#  and unloading oldest off screen maps after a certain pool size is reached
+# player transitioning properly between maps and colliding on both maps
+# camera blocking
+# actors (and all their interactions with the environment around them)
+
 # debugging options
 # enable SDL render batching, no idea why you'd disable it
 RENDERBATCHING=True
@@ -51,11 +60,6 @@ class TilesetDesc():
     width : int
     height : int
 
-class CollisionType(IntEnum):
-    AIR = 0,
-    SOLID = 1,
-    WATER = 2
-
 class PlayerState(Enum):
     AIR = 0,
     GROUND = 1
@@ -71,28 +75,28 @@ class NoHit(Exception):
 
 def next_hit(x, y, dx, dy, tw, th, t):
     if dx < 0.0:
-        xdiff = (int(x / tw) * tw) - x
+        xdiff = -x
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
         if xdiff == 0.0:
             xdiff = -tw
         if dy < 0.0:
-            ydiff = (int(y / th) * th) - y
+            ydiff = -y
             if ydiff == 0.0:
                 ydiff = -th
             if dx > xdiff and dy > ydiff:
-                raise NoHit()
+                return t, dx, dy
             slope = dy / dx
             if slope * xdiff < ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
             else:
                 return t, xdiff, slope * xdiff
         elif dy > 0.0:
-            ydiff = ((int(y / th) + 1) * th) - y
+            ydiff = th - y
             if ydiff == 0.0:
                 ydiff = th
             if dx > xdiff and dy < ydiff:
-                raise NoHit()
+                return t, dx, dy
             slope = dy / dx
             if slope * xdiff > ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
@@ -100,29 +104,29 @@ def next_hit(x, y, dx, dy, tw, th, t):
                 return t, xdiff, slope * xdiff
         else:
             if dx > xdiff:
-                raise NoHit()
+                return t, dx, dy
             return t, xdiff, 0.0
     if dx > 0.0:
-        xdiff = ((int(x / tw) + 1) * tw) - x
+        xdiff = tw - x
         if xdiff == 0.0:
             xdiff = tw
         if dy < 0.0:
-            ydiff = (int(y / th) * th) - y
+            ydiff = -y
             if ydiff == 0.0:
                 ydiff = -th
             if dx < xdiff and dy > ydiff:
-                raise NoHit()
+                return t, dx, dy
             slope = dy / dx
             if slope * xdiff < ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
             else:
                 return t, xdiff, slope * xdiff
         elif dy > 0.0:
-            ydiff = ((int(y / th) + 1) * th) - y
+            ydiff = th - y
             if ydiff == 0.0:
                 ydiff = th
             if dx < xdiff and dy < ydiff:
-                raise NoHit()
+                return t, dx, dy
             slope = dy / dx
             if slope * xdiff > ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
@@ -130,28 +134,30 @@ def next_hit(x, y, dx, dy, tw, th, t):
                 return t, xdiff, slope * xdiff
         else:
             if dx < xdiff:
-                raise NoHit()
+                return t, dx, dy
             return t, xdiff, 0.0
     else:
         if dy < 0.0:
-            ydiff = (int(y / th) * th) - y
+            ydiff = -y
             if ydiff == 0.0:
                 ydiff = -th
             if dy > ydiff:
-                raise NoHit()
+                return t, dx, dy
             return t, 0.0, ydiff
         elif dy > 0.0:
-            ydiff = ((int(y / th) + 1) * th) - y
+            ydiff = th - y
             if ydiff == 0.0:
                 ydiff = th
             if dy < ydiff:
-                raise NoHit()
+                return t, dx, dy
             return t, 0.0, ydiff
         else:
             raise NoHit()
 
 # some highschool math I haven't done in a while and never fully grasped...
 # y = ax + b
+# y - b = ax
+# x = (y - b)/a
 
 # ax + b = cx + d
 # ax + b - cx = d
@@ -159,140 +165,220 @@ def next_hit(x, y, dx, dy, tw, th, t):
 # (a - c)*x = d - b
 # x = (d - b) / (a - c)
 
-# xl = (int(x / tw) * tw) - x
-# yt = (int(y / th) * th) - y
-# xr = tw - xl
-# yb = th - yt
-
 # a: player's slope
 # a = dy / dx
 # b: player's bias
-# b = y[tb]
+# b = y
 # c: slope's slope
 # c = a
-# d: slope's bias
-# d = b + (a * x[lr])
+# d: slope's bias, advanced to the player's position
+# d = b + (a * x)
 
-# cx = ((b + (a * x[lr])) - y[tb]) / ((dy / dx) - b)
-# cy = (a * cx) + b
+# rotate
+# y = ax + b -> x = (1/a)y - (1/a)b
+
+# ix = ((b + (a * x)) - y) / ((dy / dx) - a)
+# iy = ((dy / dx) * ix) + y
 
 def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
+    print("{} {} {} {}".format(x, y, dx, dy))
+    rx = dx
+    ry = dy
     if dx < 0.0:
-        xdiff = (int(x / tw) * tw) - x
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
-        if xdiff == 0.0:
-            xdiff = -tw
+        if x == 0.0:
+            x = tw
+        xdiff = -x
         if dy < 0.0:
-            ydiff = (int(y / th) * th) - y
-            if ydiff == 0.0:
-                ydiff = -th
-            if dx > xdiff and dy > ydiff:
-                raise NoHit()
-            # ray is being cast vertically instead of horizontally so while it
-            # looks wrong, it's not dy / dx
-            slope = dx / dy
-            if slope * ydiff < xdiff:
-                return t, xdiff, (1.0 / slope) * xdiff
-            else:
-                return t, slope * ydiff, ydiff
+            if y == 0.0:
+                y = th
+            ydiff = -y
+            slope = dy / dx
+            try:
+                # calculate intersection between movement and slope
+                ix = ((b + (a * x)) - y) / (slope - a)
+                iy = slope * ix + y
+                # check to see if the intersection is within the tile and also
+                # whether it's within the movement.
+                if ix > dx and ix < 0 and \
+                   iy > dy and iy < 0:
+                    rx = ix
+                    ry = iy
+            except ZeroDivisionError:
+                # paralell lines
+                pass
+            # if the computed movement falls out of bounds, calculate the
+            # movement that would reach the edge of the bounds
+            if rx < xdiff or ry < ydiff:
+                hit = slope * xdiff
+                if hit < 0:
+                    rx = 1.0 / hit
+                    ry = ydiff
+                else:
+                    rx = xdiff
+                    ry = hit
         elif dy > 0.0:
-            ydiff = ((int(y / th) + 1) * th) - y
-            if ydiff == 0.0:
-                ydiff = th
-            if dx > xdiff and dy < ydiff:
-                raise NoHit()
-            slope = dx / dy
-            if slope * ydiff < xdiff:
-                return t, xdiff, (1.0 / slope) * xdiff
-            else:
-                return t, slope * ydiff, ydiff
+            ydiff = th - y
+            slope = dy / dx
+            try:
+                ix = ((b + (a * x)) - y) / (slope - a)
+                iy = slope * ix + y
+                if ix > dx and ix < 0 and \
+                   iy > 0  and iy < dy:
+                    rx = ix
+                    ry = iy
+            except ZeroDivisionError:
+                pass
+            if rx < xdiff or ry > ydiff:
+                hit = slope * xdiff
+                if hit < 0:
+                    rx = 1.0 / hit
+                    ry = ydiff
+                else:
+                    rx = ydiff
+                    ry = hit
         else:
-            if dx > xdiff:
-                raise NoHit()
-            return t, xdiff, 0.0
-    if dx > 0.0:
-        xdiff = ((int(x / tw) + 1) * tw) - x
-        if xdiff == 0.0:
-            xdiff = tw
+            try:
+                # calculate the value of X when crossing a line at Y
+                ix = ((y - b) / a) - x
+                # determine is the Y crossing happened at an X value within the
+                # movement
+                if ix > dx and ix < 0:
+                    rx = ix
+            except ZeroDivisionError:
+                pass
+            if rx < xdiff:
+                rx = xdiff
+    elif dx > 0.0:
+        xdiff = tw - x
         if dy < 0.0:
-            ydiff = (int(y / th) * th) - y
-            if ydiff == 0.0:
-                ydiff = -th
-            if dx < xdiff and dy > ydiff:
-                raise NoHit()
-            slope = dx / dy
-            if slope * ydiff > xdiff:
-                return t, xdiff, (1.0 / slope) * xdiff
-            else:
-                return t, slope * ydiff, ydiff
+            if y == 0.0:
+                y = th
+            ydiff = -y
+            slope = dy / dx
+            try:
+                ix = ((b + (a * x)) - y) / (slope - a)
+                iy = slope * ix + y
+                if ix > 0  and ix < dx and \
+                   iy > dy and iy < 0:
+                    rx = ix
+                    ry = iy
+            except ZeroDivisionError:
+                pass
+            if rx > xdiff or ry < ydiff:
+                hit = slope * xdiff
+                if hit < ydiff:
+                    rx = 1.0 / hit
+                    ry = ydiff
+                else:
+                    rx = xdiff
+                    ry = hit
         elif dy > 0.0:
-            ydiff = ((int(y / th) + 1) * th) - y
-            if ydiff == 0.0:
-                ydiff = th
-            
-            if dx < xdiff and dy < ydiff:
-                raise NoHit()
-            slope = dx / dy
-            if slope * ydiff > xdiff:
-                hit = (1.0 / slope) * xdiff
-                a = 1.0 / a
-                if hit < a * tw + (b * -a):
-                    return t1, xdiff, hit
+            ydiff = th - y
+            slope = dy / dx
+            try:
+                ix = ((b + (a * x)) - y) / (slope - a)
+                iy = slope * ix + y
+                if ix > 0 and ix < dx and \
+                   iy > 0 and iy < dy:
+                    rx = ix
+                    ry = iy
+            except ZeroDivisionError:
+                pass
+            if rx > xdiff or ry > ydiff:
+                hit = slope * xdiff
+                if hit > ydiff:
+                    rx = 1.0 / hit
+                    ry = ydiff
                 else:
-                    return t2, xdiff, hit
-            else:
-                hit = slope * ydiff
-                if hit < a * th + b:
-                    return t1, hit, ydiff
-                else:
-                    return t2, hit, ydiff
+                    rx = xdiff
+                    ry = hit
         else:
-            if dx < xdiff:
-                raise NoHit()
-            # flip the axes to get the intersection with a vertical edge
-            a = 1.0 / a
-            # the bias needs to be changed too
-            if (int(y / th) * th) - y < a * tw + (b * -a):
-                return t1, xdiff, 0.0
-            else:
-                return t2, xdiff, 0.0
+            try:
+                ix = abs((y - b) / a) - x
+                if ix > 0 and ix < dx:
+                    rx = ix
+            except ZeroDivisionError:
+                pass
+            if rx > xdiff:
+                rx = xdiff
     else:
         if dy < 0.0:
-            ydiff = (int(y / th) * th) - y
-            if ydiff == 0.0:
-                ydiff = -th
-            if dy > ydiff:
-                raise NoHit()
-            return t, 0.0, ydiff
+            if y == 0.0:
+                y = th
+            ydiff = -y
+            iy = (a * x + b) - y
+            if iy > dy and iy < 0:
+                ry = iy
+            if ry < ydiff:
+                ry = ydiff
         elif dy > 0.0:
-            ydiff = ((int(y / th) + 1) * th) - y
-            if ydiff == 0.0:
-                ydiff = th
-            if dy < ydiff:
-                raise NoHit()
-            return t, 0.0, ydiff
+            ydiff = th - y
+            iy = (a * x + b) - y
+            if iy > 0 and iy < dy:
+                ry = iy
+            if ry > ydiff:
+                ry = ydiff
         else:
             raise NoHit()
+    if dy < 0.0:
+        if y <= a * x + b:
+            return t1, rx, ry
+        else:
+            return t2, rx, ry
+    else:
+        if y < a * x + b:
+            return t1, rx, ry
+        else:
+            return t2, rx, ry
 
 TILE_CALLS = [
-    lambda x, y, dx, dy, tw, th: next_hit(x, y, dx, dy, tw, th, CollisionType.AIR),
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID,
-    CollisionType.SOLID # start slopes (not implemented yet)
+    lambda x, y, dx, dy, tw, th: \
+        next_hit(x, y, dx, dy, tw, th, False),
+    lambda x, y, dx, dy, tw, th: \
+        next_hit(x, y, dx, dy, tw, th, True),
+    # start slopes
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -1, th, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 1, 0, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -1, th, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 1, 0, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th / 2, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, 0, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, th / 2, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th / 2, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, 0, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, th / 2, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th * 2, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 2, 0, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 2, -th, False, True),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th * 2, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 2, 0, True, False),
+    lambda x, y, dx, dy, tw, th: \
+        slope_hit(x, y, dx, dy, tw, th, 2, -th, True, False)
 ]
 
 class MapScreen():
@@ -302,22 +388,22 @@ class MapScreen():
         except IndexError as e:
             raise IndexError("Out of bounds: {} {}".format(x, y))
 
-    def _first_hit(self, x, y, dx, dy, curtype):
+    def _first_hit(self, x, y, dx, dy, val):
+        print(" {} {} {} {}".format(x, y, dx, dy))
         nx = 0
         ny = 0
         curtile = self._param(int(x / self._tw), int(y / self._th))
         while True:
             try:
-                call = TILE_CALLS[curtile]
-                if not callable(call):
-                    return call, nx, ny
-                hit, hx, hy = call(x + nx, y + ny,
-                                   dx - nx, dy - ny,
-                                   self._tw, self._th)
+                hit, hx, hy = TILE_CALLS[curtile]((x + nx) % self._tw,
+                                                  (y + ny) % self._th,
+                                                  dx - nx, dy - ny,
+                                                  self._tw, self._th)
+                print("{} {} {}".format(hit, hx, hy))
+                if hit != val:
+                    return hit, nx, ny
                 nx += hx
                 ny += hy
-                if hit != curtype:
-                    return hit, nx, ny
                 px = int((x + nx) / self._tw)
                 if dx < 0 and (x + nx) % self._tw == 0:
                     px -= 1
@@ -328,20 +414,20 @@ class MapScreen():
             except NoHit:
                 break
         # don't modify dx or dy to avoid rounding errors
-        return curtype, dx, dy
+        return val, dx, dy
 
     def _collision_left(self):
         h, x, y = self._first_hit(self._playerx,
                                   self._playery,
                                   -self._tw, 0,
-                                  0)
-        if h == CollisionType.SOLID and x > -EDGE_FUDGE:
+                                  False)
+        if h and x > -EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx,
                                   self._playery + PLAYER_HEIGHT,
                                   -self._tw, 0,
-                                  0)
-        if h == CollisionType.SOLID and x > -EDGE_FUDGE:
+                                  False)
+        if h and x > -EDGE_FUDGE:
             return True
         return False
 
@@ -349,14 +435,14 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery,
                                   self._tw, 0,
-                                  0)
-        if h == CollisionType.SOLID and x < EDGE_FUDGE:
+                                  False)
+        if h and x < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery + PLAYER_HEIGHT,
                                   self._tw, 0,
-                                  0)
-        if h == CollisionType.SOLID and x < EDGE_FUDGE:
+                                  False)
+        if h and x < EDGE_FUDGE:
             return True
         return False
 
@@ -364,14 +450,14 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx,
                                   self._playery,
                                   0, -self._th,
-                                  0)
-        if h == CollisionType.SOLID and y > -EDGE_FUDGE:
+                                  False)
+        if h and y > -EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery,
                                   0, -self._th,
-                                  0)
-        if h == CollisionType.SOLID and y > -EDGE_FUDGE:
+                                  False)
+        if h and y > -EDGE_FUDGE:
             return True
         return False
 
@@ -379,14 +465,14 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx,
                                   self._playery + PLAYER_HEIGHT,
                                   0, self._th,
-                                  0)
-        if h == CollisionType.SOLID and y < EDGE_FUDGE:
+                                  False)
+        if h and y < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery + PLAYER_HEIGHT,
                                   0, self._th,
-                                  0)
-        if h == CollisionType.SOLID and y < EDGE_FUDGE:
+                                  False)
+        if h and y < EDGE_FUDGE:
             return True
         return False
 
@@ -406,28 +492,28 @@ class MapScreen():
                         ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hb, xb, yb = self._first_hit(self._playerx,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
-                                                     0)
-                        if hb != CollisionType.AIR and xb < dx2:
+                                                     False)
+                        if hb and xb < dx2:
                             if yb > EDGE_FUDGE:
                                 dy2 = yb - EDGE_FUDGIER
                             elif self._collision_down():
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
-                        if ht != CollisionType.AIR and yt < dy2:
+                        if ht and yt < dy2:
                             if xt > EDGE_FUDGE:
                                 dx2 = xt - EDGE_FUDGIER
                             elif self._collision_right():
                                 dx2 = 0
                                 dx = 0
-                        if hc != CollisionType.AIR:
+                        if hc:
                             if xc < dx2:
                                 if xc > EDGE_FUDGE:
                                     dx2 = xc - EDGE_FUDGIER
@@ -443,29 +529,29 @@ class MapScreen():
                     elif dy2 < 0:
                         ht, xt, yt = self._first_hit(self._playerx, self._playery,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
-                                                     0)
-                        if hb != CollisionType.AIR and xb < dx2:
+                                                     False)
+                        if hb and xb < dx2:
                             if xb > EDGE_FUDGE:
                                 dx2 = xb - EDGE_FUDGIER
                             elif self._collision_right():
                                 dx2 = 0
                                 dx = 0
                         # greater is less negative
-                        if ht != CollisionType.AIR and yt > dy2:
+                        if ht and yt > dy2:
                             if yt < -EDGE_FUDGE:
                                 dy2 = yt + EDGE_FUDGIER
                             elif self._collision_up():
                                 dy2 = 0
                                 dy = 0
-                        if hc != CollisionType.AIR:
+                        if hc:
                             if xc < dx2:
                                 if xc > EDGE_FUDGE:
                                     dx2 = xc - EDGE_FUDGIER
@@ -482,18 +568,18 @@ class MapScreen():
                         ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery,
                                                      dx2, 0,
-                                                     0)
+                                                     False)
                         hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, 0,
-                                                     0)
-                        if ht != CollisionType.AIR and xt < dx:
+                                                     False)
+                        if ht and xt < dx:
                             if xt > EDGE_FUDGE:
                                 dx2 = xt - EDGE_FUDGIER
                             else:
                                 dx2 = 0
                                 dx = 0
-                        if hb != CollisionType.AIR and xb < dx:
+                        if hb and xb < dx:
                             if xb > EDGE_FUDGE:
                                 dx2 = xb - EDGE_FUDGIER
                             else:
@@ -503,28 +589,28 @@ class MapScreen():
                     if dy2 > 0:
                         ht, xt, yt = self._first_hit(self._playerx, self._playery,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hc, xc, yc = self._first_hit(self._playerx,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
-                                                     0)
-                        if ht != CollisionType.AIR and xt > dx2:
+                                                     False)
+                        if ht and xt > dx2:
                             if xt < -EDGE_FUDGE:
                                 dx2 = xt + EDGE_FUDGIER
                             elif self._collision_left():
                                 dx2 = 0
                                 dx = 0
-                        if hb != CollisionType.AIR and yb < dy2:
+                        if hb and yb < dy2:
                             if yb > EDGE_FUDGE:
                                 dy2 = yb - EDGE_FUDGIER
                             elif self._collision_down():
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
-                        if hc != CollisionType.AIR:
+                        if hc:
                             if xc > dx2:
                                 if xc < -EDGE_FUDGE:
                                     dx2 = xc + EDGE_FUDGIER
@@ -541,27 +627,27 @@ class MapScreen():
                         ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hc, xc, yc = self._first_hit(self._playerx, self._playery,
                                                      dx2, dy2,
-                                                     0)
+                                                     False)
                         hb, xb, yb = self._first_hit(self._playerx,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, dy2,
-                                                     0)
-                        if hb != CollisionType.AIR and xb > dx2:
+                                                     False)
+                        if hb and xb > dx2:
                             if xb < -EDGE_FUDGE:
                                 dx2 = xb + EDGE_FUDGIER
                             elif self._collision_left():
                                 dx2 = 0
                                 dx = 0
-                        if ht != CollisionType.AIR and yt > dy2:
+                        if ht and yt > dy2:
                             if yt < -EDGE_FUDGE:
                                 dy2 = yt + EDGE_FUDGIER
                             elif self._collision_up():
                                 dy2 = 0
                                 dy = 0
-                        if hc != CollisionType.AIR:
+                        if hc:
                             if xc > dx2:
                                 if xc < -EDGE_FUDGE:
                                     dx2 = xc + EDGE_FUDGIER
@@ -577,18 +663,18 @@ class MapScreen():
                     else:
                         ht, xt, yt = self._first_hit(self._playerx, self._playery,
                                                      dx2, 0,
-                                                     0)
+                                                     False)
                         hb, xb, yb = self._first_hit(self._playerx,
                                                      self._playery + PLAYER_HEIGHT,
                                                      dx2, 0,
-                                                     0)
-                        if ht != CollisionType.AIR and xt > dx2:
+                                                     False)
+                        if ht and xt > dx2:
                             if xt < -EDGE_FUDGE:
                                 dx2 = xt + EDGE_FUDGIER
                             else:
                                 dx2 = 0
                                 dx = 0
-                        if hb != CollisionType.AIR and xb > dx2:
+                        if hb and xb > dx2:
                             if xb < -EDGE_FUDGE:
                                 dx2 = xb + EDGE_FUDGIER
                             else:
@@ -599,18 +685,18 @@ class MapScreen():
                         hl, xl, yl = self._first_hit(self._playerx,
                                                      self._playery + PLAYER_HEIGHT,
                                                      0, dy2,
-                                                     0)
+                                                     False)
                         hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery + PLAYER_HEIGHT,
                                                      0, dy2,
-                                                     0)
-                        if hl != CollisionType.AIR and yl < dy2:
+                                                     False)
+                        if hl and yl < dy2:
                             if yl > EDGE_FUDGE:
                                 dy2 = yl - EDGE_FUDGIER
                             else:
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
-                        if hr != CollisionType.AIR and yr < dy2:
+                        if hr and yr < dy2:
                             if yr > EDGE_FUDGE:
                                 dy2 = yr - EDGE_FUDGIER
                             else:
@@ -619,18 +705,18 @@ class MapScreen():
                     elif dy2 < 0:
                         hl, xl, yl = self._first_hit(self._playerx, self._playery,
                                                      0, dy2,
-                                                     0)
+                                                     False)
                         hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                      self._playery,
                                                      0, dy2,
-                                                     0)
-                        if hl != CollisionType.AIR and yl > dy2:
+                                                     False)
+                        if hl and yl > dy2:
                             if yl < -EDGE_FUDGE:
                                 dy2 = yl + EDGE_FUDGIER
                             else:
                                 dy2 = 0
                                 dy = 0
-                        if hr != CollisionType.AIR and yr > dy2:
+                        if hr and yr > dy2:
                             if yr < -EDGE_FUDGE:
                                 dy2 = yr + EDGE_FUDGIER
                             else:
@@ -647,18 +733,18 @@ class MapScreen():
                     ht, xt, yt = self._first_hit(self._playerx,
                                                  self._playery,
                                                  dx2, 0,
-                                                 0)
+                                                 False)
                     hb, xb, yb = self._first_hit(self._playerx,
                                                  self._playery + PLAYER_HEIGHT,
                                                  dx2, 0,
-                                                 0)
-                    if ht != CollisionType.AIR and xt > dx:
+                                                 False)
+                    if ht and xt > dx:
                         if xt < -EDGE_FUDGE:
                             dx2 = xt + EDGE_FUDGIER
                         else:
                             dx2 = 0
                             dx = 0
-                    if hb != CollisionType.AIR and xb > dx:
+                    if hb and xb > dx:
                         if xb < -EDGE_FUDGE:
                             dx2 = xb + EDGE_FUDGIER
                         else:
@@ -668,18 +754,18 @@ class MapScreen():
                     ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                  self._playery,
                                                  dx2, 0,
-                                                 0)
+                                                 False)
                     hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
                                                  self._playery + PLAYER_HEIGHT,
                                                  dx2, 0,
-                                                 0)
-                    if ht != CollisionType.AIR and xt < dx:
+                                                 False)
+                    if ht and xt < dx:
                         if xt > EDGE_FUDGE:
                             dx2 = xt - EDGE_FUDGIER
                         else:
                             dx2 = 0
                             dx = 0
-                    if hb != CollisionType.AIR and xb < dx:
+                    if hb and xb < dx:
                         if xb > EDGE_FUDGE:
                             dx2 = xb - EDGE_FUDGIER
                         else:
@@ -750,7 +836,7 @@ class MapScreen():
         self._params = None
         # get the params tilemap out
         for num, desc in enumerate(self._descs):
-            if desc.name == 'params':
+            if desc.name == 'solids':
                 self._params = (self._descs[num], self._maps[num])
                 del self._descs[num]
                 del self._maps[num]
@@ -891,6 +977,8 @@ class MapScreen():
         self._move_player()
         self._update_scroll()
 
+        if self._mode == GameInputMode.PLAY:
+            print("--- {} {}".format(time, self._state.frameTime))
         status, _, _, _ = textbox.wrap_text("FT:  {:.3}\nCPU: {:.3}\nPX:  {:.3}\nPY:  {:.3}\nPSX: {:.3}\nPSY: {:.3}".format(time, self._state.frameTime, self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 6)
         self._tb.clear(0, 0, 32, 6)
         self._tb.put_text(status)

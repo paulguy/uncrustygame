@@ -17,6 +17,7 @@ import lib.effects as effects
 import lib.layers as layers
 
 #TODO:
+# fix tilemap copy
 # mouse support
 
 # debugging options
