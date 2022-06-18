@@ -236,7 +236,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
                     rx = 1.0 / hit
                     ry = ydiff
                 else:
-                    rx = ydiff
+                    rx = xdiff
                     ry = hit
         else:
             try:
