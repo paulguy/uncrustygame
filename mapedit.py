@@ -17,7 +17,6 @@ import lib.effects as effects
 import lib.layers as layers
 
 #TODO:
-# fix tilemap copy
 # mouse support
 
 # debugging options
@@ -496,7 +495,13 @@ class ProjectScreen():
         self._titletb.clear()
         put_centered_line(self._titletb, s, 0, self._fmw)
 
-    def _add_editor(self, desc, tilemap=None, flags=None, colormod=None):
+    def _add_editor(self, desc, extradescparams=None,
+                    tilemap=None, flags=None, colormod=None):
+        self._descs.append(desc)
+        if extradescparams is None:
+            self._extradescparams.append(dict())
+        else:
+            self._extradescparams.append(extradescparams)
         self._editors.append(EditScreen(self._state, self, desc, tilemap, flags, colormod))
         if self._menu is not None:
             self._menu.insert_item(len(self._descs) - 1, desc.name, onActivate=self._open_tilemap)
@@ -522,7 +527,7 @@ class ProjectScreen():
         self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, spacing=2, rel=self._titletb.layer)
         for desc in self._descs:
             self._menu.add_item(desc.name, onActivate=self._open_tilemap)
-        self._menu.add_item("New Tilemap", onActivate=self._new_tilemap)
+        self._menu.add_item("Create Tilemap", onActivate=self._new_tilemap)
         self._menu.add_item("UI Scale", value=str(self._state.font_scale), maxlen=4, onEnter=self._set_scale)
         self._menu.add_item("Preview Manager", onActivate=self._open_layers)
         self._menu.add_item("Project Name", value=self._name, maxlen=255, onEnter=self._setname)
@@ -538,8 +543,8 @@ class ProjectScreen():
 
     def _load(self):
         try:
-            self._settings, self._descs, maps, ldescs, \
-                self._extradescparams, self._extralayerparams = \
+            self._settings, descs, maps, ldescs, \
+                extradescparams, extralayerparams = \
                 layers.load_map(self._name)
         except Exception as e:
             print(e)
@@ -560,20 +565,24 @@ class ProjectScreen():
             self._layers.set_scroll(pscrollx, pscrolly)
         except KeyError:
             pass
-        for num, desc in enumerate(self._descs):
-            self._add_editor(desc,
+        for num, desc in enumerate(descs):
+            self._add_editor(desc, extradescparams[num],
                              tilemap=maps[num][0],
                              flags=maps[num][1],
                              colormod=maps[num][2])
-        for layer in ldescs:
-            self._layers.add_layer(layer)
+            # make sure loaded editors aren't marked as changed initially
+            self._editors[num].saved()
+        for num, layer in enumerate(ldescs):
+            self._layers.add_layer(layer, extralayerparams[num])
 
     def __init__(self, state, name=None):
         self._state = state
         self._descs = list()
+        self._extradescparams = list()
         self._editors = list()
         self._selected = 0
         self._quitting = False
+        self._adding = False
         self._saving = False
         self._deleting = False
         self._moving = -1
@@ -624,12 +633,10 @@ class ProjectScreen():
         if self._quitting:
             self._state.stop()
         self.resize()
-        if len(self._descs) > len(self._editors):
-            # if menu was backed out of without saving, delete the desc
-            del self._descs[-1]
-        elif self._deleting:
+        if self._deleting:
             self._deleting = False
             del self._descs[self._selected]
+            del self._extradescparams[self._selected]
             del self._editors[self._selected]
             self._menu.remove(self._selected)
             self._update_menu()
@@ -739,6 +746,14 @@ class ProjectScreen():
             self._descs.insert(sel, desc)
             self._editors.insert(sel, editor)
             self._extradescparams.insert(sel, extras)
+            # so they'll save in their new positions
+            lowest = moving
+            highest = sel
+            if sel < moving:
+                lowest = sel
+                highest = moving
+            for num in range(lowest, highest + 1):
+                self._editors[num].changed()
             self._menu.insert_item(sel, desc.name, onActivate=self._open_tilemap)
             self._update_menu()
             self._layers.swap_tilemaps(moving, sel)
@@ -754,9 +769,11 @@ class ProjectScreen():
                     self._set_error("Couldn't open tilemap: {}".format(e))
 
     def _new_tilemap(self, priv, sel):
-        self._descs.append(layers.TilemapDesc())
+        self._adding = True
         try:
-            self._open_settings(len(self._descs) - 1)
+            tilemapscreen = TilemapScreen(self._state, self,
+                                          layers.TilemapDesc)
+            self._state.active_screen(tilemapscreen)
         except Exception as e:
             print(e)
             print_tb(e.__traceback__)
@@ -779,8 +796,10 @@ class ProjectScreen():
         return str(val)
 
     def apply(self, desc, force=False):
-        if self._selected >= len(self._editors):
+        if self._adding:
+            self._adding = False
             self._add_editor(desc)
+            self._selected = len(self._descs) - 1
             self._update_menu()
         else:
             self._editors[self._selected].modify(desc, force)
@@ -793,44 +812,24 @@ class ProjectScreen():
     def edit(self):
         self._state.active_screen(self._editors[self._selected])
 
-    def set_wscale(self, scale):
-        if self._selected >= len(self._editors):
-            self._descs[self._selected].wscale = scale
-        else:
-            self._editors[self._selected].set_wscale(scale)
-            self._descs[self._selected].wscale = self._editors[self._selected].wscale
-
-    def set_hscale(self, scale):
-        if self._selected >= len(self._editors):
-            self._descs[self._selected].hscale = scale
-        else:
-            self._editors[self._selected].set_hscale(scale)
-            self._descs[self._selected].hscale = self._editors[self._selected].hscale
-
-    @property
-    def wscale(self):
-        return self._descs[self._selected].wscale
-
-    @property
-    def hscale(self):
-        return self._descs[self._selected].hscale
-
     def delete(self):
         self._deleting = True
 
     def move(self):
-        if self._selected >= len(self._editors):
+        if self._adding:
             raise ValueError("Item not created yet, settings must be Applied at least once.")
         self._moving = self._selected
 
     def copy(self):
-        if self._selected >= len(self._editors):
+        if self._adding:
             raise ValueError("Item not created yet, settings must be Applied at least once.")
         desc = copy.deepcopy(self._descs[self._selected])
-        self._add_editor(desc,
+        extradescparams = copy.deepcopy(self._extradescparams[self._selected])
+        self._add_editor(desc, extradescparams,
             tilemap=copy.copy(self._editors[self._selected].tilemap),
             flags=copy.copy(self._editors[self._selected].flags),
             colormod=copy.copy(self._editors[self._selected].colormod))
+        self._update_menu()
 
     def _open_layers(self, priv, sel):
         self._state.active_screen(self._layers)
@@ -863,7 +862,7 @@ class ProjectScreen():
         except OSError:
             pass
         for num, editor in enumerate(self._editors):
-            if editor.changed:
+            if editor.was_changed:
                 try:
                     filename = "{} tilemap{}.bin".format(self._name, num)
                     file = open(filename, 'r')
@@ -922,7 +921,7 @@ class ProjectScreen():
                 mode = 'POSITION'
             elif layer.mode == layers.ScrollMode.LAYER:
                 mode = 'LAYER'
-            ldata = copy.copy(self._extralayerparams[num])
+            ldata = copy.copy(self._layers.extras[num])
             ldata['name'] = layer.name
             ldata['tilemap'] = layer.tilemap
             ldata['relative'] = layer.relative
@@ -942,7 +941,7 @@ class ProjectScreen():
         with open("{}.json".format(self._name), 'w') as outfile:
             json.dump(savedata, outfile, indent=4)
         for num, editor in enumerate(self._editors):
-            if editor.changed:
+            if editor.was_changed:
                 with open("{} tilemap{}.bin".format(self._name, num), 'wb') as outfile:
                     editor.tilemap.tofile(outfile)
                 with open("{} flags{}.bin".format(self._name, num), 'wb') as outfile:
@@ -950,11 +949,6 @@ class ProjectScreen():
                 with open("{} colormod{}.bin".format(self._name, num), 'wb') as outfile:
                     editor.colormod.tofile(outfile)
                 editor.saved()
-
-    def swap_layers(self, src, dst):
-        extras = self._extralayerparams[src]
-        del self._extralayerparams[src]
-        self._extralayerparams[dst] = extras
 
 class TilemapScreen():
     def _build_screen(self):
@@ -983,10 +977,10 @@ class TilemapScreen():
         self._menu.add_item("Tile Height", value=str(self._tmdesc.th), maxlen=4, onEnter=self._settileheight)
         self._menu.add_item("Map Width", value=str(self._tmdesc.mw), maxlen=4, onEnter=self._setmapwidth)
         self._menu.add_item("Map Height", value=str(self._tmdesc.mh), maxlen=4, onEnter=self._setmapheight)
-        self._menu.add_item("View X Scale", value=str(self._caller.wscale), maxlen=5, onEnter=self._set_wscale)
-        self._menu.add_item("View Y Scale", value=str(self._caller.hscale), maxlen=5, onEnter=self._set_hscale)
-        self._menu.add_item("Move", onActivate=self._move)
+        self._menu.add_item("View X Scale", value=str(self._tmdesc.wscale), maxlen=5, onEnter=self._set_wscale)
+        self._menu.add_item("View Y Scale", value=str(self._tmdesc.hscale), maxlen=5, onEnter=self._set_hscale)
         self._menu.add_item("Delete", onActivate=self._delete)
+        self._menu.add_item("Move", onActivate=self._move)
         self._menu.add_item("Copy", onActivate=self._copy)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
@@ -1166,17 +1160,7 @@ class TilemapScreen():
             val = float(val)
         except ValueError:
             return None
-        try:
-            self._caller.set_wscale(val)
-        except Exception as e:
-            print(e)
-            print_tb(e.__traceback__)
-            if isinstance(e, cg.CrustyException):
-                self._set_error("Couldn't set scale: {}: {}".format(e, get_error()))
-            else:
-                self._set_error("Couldn't set scale: {}".format(e))
-            return None
-        self._tmdesc.wscale = self._caller.wscale
+        self._tmdesc.wscale = val
         return str(self._caller.wscale)
 
     def _set_hscale(self, priv, sel, val):
@@ -1184,17 +1168,7 @@ class TilemapScreen():
             val = float(val)
         except ValueError:
             return None
-        try:
-            self._caller.set_hscale(val)
-        except Exception as e:
-            print(e)
-            print_tb(e.__traceback__)
-            if isinstance(e, cg.CrustyException):
-                self._set_error("Couldn't set scale: {}: {}".format(e, get_error()))
-            else:
-                self._set_error("Couldn't set scale: {}".format(e))
-            return None
-        self._tmdesc.hscale = self._caller.hscale
+        self._tmdesc.hscale = val
         return str(self._caller.hscale)
 
     def set_option(self, sel):
@@ -1475,32 +1449,6 @@ class EditScreen():
         self._border.layer.relative(self._stm.layer)
         self._dl.replace(self._borderindex, self._border.draw)
 
-    def set_wscale(self, scale):
-        if scale < 1.0:
-            raise ValueError("Scale too small.")
-        if scale != self._tmdesc.wscale:
-            self._tmdesc.wscale = scale
-            vw, _ = self._state.window
-            self._vw = int(vw / self._tmdesc.wscale / self._tmdesc.tw)
-            self._make_stm()
-
-    def set_hscale(self, scale):
-        if scale < 1.0:
-            raise ValueError("Scale too small.")
-        if scale != self._tmdesc.hscale:
-            self._tmdesc.hscale = scale
-            _, vh = self._state.window
-            self._vh = int(vh / self._tmdesc.hscale / self._tmdesc.th)
-            self._make_stm()
-
-    @property
-    def wscale(self):
-        return self._tmdesc.wscale
-
-    @property
-    def hscale(self):
-        return self._tmdesc.hscale
-
     def _build_screen(self):
         vw, vh = self._state.window
         self._fw = self._state.font.ts.width()
@@ -1544,7 +1492,7 @@ class EditScreen():
         self._errorbox = None
         self._errorh = 0
         self._codec = None
-        self._changed = False
+        self._changed = True
         self._tmdesc = None
         self._tsdesc = None
         self._fw = self._state.font.ts.width()
@@ -2071,13 +2019,14 @@ class EditScreen():
                         self._dl.replace(self._borderindex, None)
                         self._border = None
                 elif event.key.keysym.sym == SDLK_p:
-                    x = self._clipboard.x
-                    y = self._clipboard.y
-                    self._clipboard.x = self._curx
-                    self._clipboard.y = self._cury
-                    self._apply_change(self._clipboard)
-                    self._clipboard.x = x
-                    self._clipboard.y = y
+                    if self._clipboard is not None:
+                        x = self._clipboard.x
+                        y = self._clipboard.y
+                        self._clipboard.x = self._curx
+                        self._clipboard.y = self._cury
+                        self._apply_change(self._clipboard)
+                        self._clipboard.x = x
+                        self._clipboard.y = y
                 elif event.key.keysym.sym == SDLK_u:
                     if event.key.keysym.mod & KMOD_SHIFT != 0:
                         self._do_redo()
@@ -2177,8 +2126,11 @@ class EditScreen():
         return self._colormod
 
     @property
-    def changed(self):
+    def was_changed(self):
         return self._changed
+
+    def changed(self):
+        self._changed = True
 
     def saved(self):
         self._changed = False
@@ -2563,7 +2515,7 @@ class LayersScreen():
         self._menu = textbox.Menu(self._state.ll, self._state.font, self._fmw - 2, self._fmh - 3, None, rel=self._titletb.layer)
         for desc in self._descs:
             self._menu.add_item(desc.name, onActivate=self._open_layer)
-        self._menu.add_item("New Layer", onActivate=self._new_layer)
+        self._menu.add_item("Create Layer", onActivate=self._new_layer)
         self._menu.add_item("Show Preview", onActivate=self._show)
         self._menu.add_item("", value="Preview Screen Controls")
         self._menu.add_item("Arrows", value="Adjust Position")
@@ -2579,6 +2531,7 @@ class LayersScreen():
         self._state = state
         self._caller = caller
         self._descs = list()
+        self._extras = list()
         self._selected = 0
         self._deleting = False
         self._moving = -1
@@ -2619,6 +2572,7 @@ class LayersScreen():
         if self._deleting:
             self._deleting = False
             del self._descs[self._selected]
+            del self._extras[self._selected]
             for desc in self._descs:
                 if desc.relative == self._selected:
                     desc.relative = -1
@@ -2697,14 +2651,16 @@ class LayersScreen():
             self._moving = -1
             self._set_banner(LayersScreen.DEFAULT_BANNER)
             desc = self._descs[moving]
+            extras = self._extras[moving]
             del self._descs[moving]
+            del self._extras[moving]
             self._menu.remove(moving)
             if sel > moving:
                 sel -= 1
             self._descs.insert(sel, desc)
+            self._extras.insert(sel, extras)
             self._menu.insert_item(sel, desc.name, onActivate=self._open_layer)
             self._update_menu()
-            self._caller.swap_layers(moving, sel)
         else:
             try:
                 self._open_settings(sel)
@@ -2716,13 +2672,14 @@ class LayersScreen():
                 else:
                     self._set_error("Couldn't open layer: {}".format(e))
 
-    def add_layer(self, desc):
+    def add_layer(self, desc, extras):
         self._descs.append(desc)
+        self._extras.append(extras)
         self._menu.insert_item(len(self._descs) - 1, self._descs[-1].name, onActivate=self._open_layer)
         self._update_menu()
 
     def _new_layer(self, priv, sel):
-        self.add_layer(layers.LayerDesc())
+        self.add_layer(layers.LayerDesc(), dict())
         self._open_settings(len(self._descs) - 1)
 
     def _show(self, priv, sel):
@@ -2765,6 +2722,10 @@ class LayersScreen():
         return self._descs
 
     @property
+    def extras(self):
+        return self._extras
+
+    @property
     def tmdescs(self):
         return self._caller.descs
 
@@ -2780,6 +2741,8 @@ class LayersScreen():
         for desc in self._descs:
             if desc.tilemap == tm:
                 desc.tilemap = -1
+            elif desc.tilemap > tm:
+                desc.tilemap -= 1
 
     def swap_tilemaps(self, src, dst):
         mappings = list(range(len(self._caller.descs)))
@@ -2888,8 +2851,8 @@ class LayerScreen():
         self._menu.add_item("Y Scroll", value=str(self._ldesc.scrolly), maxlen=5, onEnter=self._set_scrolly)
         self._menu.add_item("Colormod", onActivate=self._set_color)
         self._menu.add_item("Blend Mode", value=LayerScreen.get_blend_mode(self._ldesc.blendmode), maxlen=32, onActivate=self._toggle_blend_mode)
-        self._menu.add_item("Move", onActivate=self._move)
         self._menu.add_item("Delete", onActivate=self._delete)
+        self._menu.add_item("Move", onActivate=self._move)
         self._menu.update()
         mlayer, self._cursorl = self._menu.layers
         mlayer.pos(0, self._fh * 2)

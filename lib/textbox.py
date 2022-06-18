@@ -542,24 +542,38 @@ class Menu():
                 self._accept_value(val)
 
     def home(self):
-        self._selection = 0
-        self._update_cursor()
-
-    def end(self):
-        self._selection = len(self._entries) -1
-        self._update_cursor()
-
-    def page_up(self):
-        self._selection -= self._visibleitems
-        if self._selection < 0:
+        if self._curvalue_u is not None:
+            self._curpos = 0
+        else:
             self._selection = 0
         self._update_cursor()
 
-    def page_down(self):
-        self._selection += self._visibleitems
-        if self._selection > len(self._entries) - 1:
-            self._selection = len(self._entries) - 1
+    def end(self):
+        if self._curvalue_u is not None:
+            space = len(self._curvalue_u) - 1
+            for num in range(len(self._curvalue_u) - 1, -1, -1):
+                if self._curvalue_u[num] == ' ':
+                    space = num
+                else:
+                    break
+            self._curpos = space
+        else:
+            self._selection = len(self._entries) -1
         self._update_cursor()
+
+    def page_up(self):
+        if self._curvalue_u is None:
+            self._selection -= self._visibleitems
+            if self._selection < 0:
+                self._selection = 0
+            self._update_cursor()
+
+    def page_down(self):
+        if self._curvalue_u is None:
+            self._selection += self._visibleitems
+            if self._selection > len(self._entries) - 1:
+                self._selection = len(self._entries) - 1
+            self._update_cursor()
 
     def update_value(self, num, val):
         if self._valtbs[num] is None:

@@ -2,22 +2,11 @@
     "player_x": 176,
     "player_y": 223,
     "ui_scale": 2.0,
-    "preview_scroll_x": -5.285477647557855,
-    "preview_scroll_y": 78.80490253958851,
+    "preview_scroll_x": -2.8660252683330327,
+    "preview_scroll_y": 2.4158940098714083,
     "tilemaps": [
         {
             "name": "bg",
-            "gfx": "gfx/tiles.bmp",
-            "unimap": "",
-            "tile_width": 16,
-            "tile_height": 16,
-            "map_width": 32,
-            "map_height": 32,
-            "x_scale": 2.0,
-            "y_scale": 2.0
-        },
-        {
-            "name": "lights",
             "gfx": "gfx/tiles.bmp",
             "unimap": "",
             "tile_width": 16,
@@ -39,8 +28,30 @@
             "y_scale": 2.0
         },
         {
+            "name": "fg",
+            "gfx": "gfx/tiles.bmp",
+            "unimap": "",
+            "tile_width": 16,
+            "tile_height": 16,
+            "map_width": 32,
+            "map_height": 32,
+            "x_scale": 2.0,
+            "y_scale": 2.0
+        },
+        {
             "name": "solids",
             "gfx": "gfx/params.bmp",
+            "unimap": "",
+            "tile_width": 16,
+            "tile_height": 16,
+            "map_width": 32,
+            "map_height": 32,
+            "x_scale": 2.0,
+            "y_scale": 2.0
+        },
+        {
+            "name": "lights",
+            "gfx": "gfx/tiles.bmp",
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
@@ -69,7 +80,7 @@
         },
         {
             "name": "shadows",
-            "tilemap": 2,
+            "tilemap": 1,
             "relative": -1,
             "view_width": 512,
             "view_height": 512,
@@ -84,8 +95,24 @@
             "blend_mode": 4
         },
         {
+            "name": "fg",
+            "tilemap": 2,
+            "relative": -1,
+            "view_width": 512,
+            "view_height": 512,
+            "x_scale": 2.0,
+            "y_scale": 2.0,
+            "mode": "LAYER",
+            "x_pos": 0,
+            "y_pos": 0,
+            "x_scroll": 0,
+            "y_scroll": 0,
+            "colormod": 4294967295,
+            "blend_mode": 0
+        },
+        {
             "name": "lights",
-            "tilemap": 1,
+            "tilemap": 4,
             "relative": -1,
             "view_width": 512,
             "view_height": 512,

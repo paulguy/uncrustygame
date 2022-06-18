@@ -107,12 +107,12 @@ def load_map(name):
             pass
         newdescs.append(newdesc)
     layers = list()
-    newlayers = list()
     try:
         layers = savedata['layers']
         del savedata['layers']
     except KeyError:
         pass
+    newlayers = list()
     for layer in layers:
         newlayer = LayerDesc()
         try:
