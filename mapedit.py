@@ -2655,8 +2655,6 @@ class LayersScreen():
             del self._descs[moving]
             del self._extras[moving]
             self._menu.remove(moving)
-            if sel > moving:
-                sel -= 1
             self._descs.insert(sel, desc)
             self._extras.insert(sel, extras)
             self._menu.insert_item(sel, desc.name, onActivate=self._open_layer)
