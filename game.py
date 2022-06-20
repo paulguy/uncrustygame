@@ -31,10 +31,10 @@ RENDERBATCHING=True
 # enable tracing of display list processing
 TRACEVIDEO=False
 
-RES_WIDTH=640
-RES_HEIGHT=480
-VIEW_WIDTH=320
-VIEW_HEIGHT=240
+RES_WIDTH=800
+RES_HEIGHT=600
+VIEW_WIDTH=400
+VIEW_HEIGHT=300
 ERROR_TIME=10.0
 
 PLAYER_GFX = "gfx/face.bmp"
@@ -198,7 +198,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             try:
                 # calculate intersection between movement and slope
                 ix = ((b + (a * x)) - y) / (slope - a)
-                iy = slope * ix + y
+                iy = slope * ix
                 # check to see if the intersection is within the tile and also
                 # whether it's within the movement.
                 if ix > dx and ix < 0 and \
@@ -213,7 +213,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             if rx < xdiff or ry < ydiff:
                 hit = slope * xdiff
                 if hit < 0:
-                    rx = 1.0 / hit
+                    rx = (1.0 / slope) * ydiff
                     ry = ydiff
                 else:
                     rx = xdiff
@@ -223,7 +223,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             slope = dy / dx
             try:
                 ix = ((b + (a * x)) - y) / (slope - a)
-                iy = slope * ix + y
+                iy = slope * ix
                 if ix > dx and ix < 0 and \
                    iy > 0  and iy < dy:
                     rx = ix
@@ -233,7 +233,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             if rx < xdiff or ry > ydiff:
                 hit = slope * xdiff
                 if hit < 0:
-                    rx = 1.0 / hit
+                    rx = (1.0 / slope) * ydiff
                     ry = ydiff
                 else:
                     rx = xdiff
@@ -259,7 +259,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             slope = dy / dx
             try:
                 ix = ((b + (a * x)) - y) / (slope - a)
-                iy = slope * ix + y
+                iy = slope * ix
                 if ix > 0  and ix < dx and \
                    iy > dy and iy < 0:
                     rx = ix
@@ -269,7 +269,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             if rx > xdiff or ry < ydiff:
                 hit = slope * xdiff
                 if hit < ydiff:
-                    rx = 1.0 / hit
+                    rx = (1.0 / slope) * ydiff
                     ry = ydiff
                 else:
                     rx = xdiff
@@ -279,7 +279,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             slope = dy / dx
             try:
                 ix = ((b + (a * x)) - y) / (slope - a)
-                iy = slope * ix + y
+                iy = slope * ix
                 if ix > 0 and ix < dx and \
                    iy > 0 and iy < dy:
                     rx = ix
@@ -289,7 +289,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             if rx > xdiff or ry > ydiff:
                 hit = slope * xdiff
                 if hit > ydiff:
-                    rx = 1.0 / hit
+                    rx = (1.0 / slope) * ydiff
                     ry = ydiff
                 else:
                     rx = xdiff
@@ -322,13 +322,13 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
                 ry = ydiff
         else:
             raise NoHit()
-    if dy < 0.0:
-        if y <= a * x + b:
+    if y > a * x + b:
+        if y + ry < a * (x + rx) + b:
             return t1, rx, ry
         else:
             return t2, rx, ry
     else:
-        if y < a * x + b:
+        if y + ry <= a * (x + rx) + b:
             return t1, rx, ry
         else:
             return t2, rx, ry

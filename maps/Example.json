@@ -79,22 +79,6 @@
             "blend_mode": 0
         },
         {
-            "name": "shadows",
-            "tilemap": 1,
-            "relative": -1,
-            "view_width": 512,
-            "view_height": 512,
-            "x_scale": 2.0,
-            "y_scale": 2.0,
-            "mode": "LAYER",
-            "x_pos": 0,
-            "y_pos": 0,
-            "x_scroll": 0,
-            "y_scroll": 0,
-            "colormod": 4294967102,
-            "blend_mode": 4
-        },
-        {
             "name": "fg",
             "tilemap": 2,
             "relative": -1,
@@ -109,6 +93,22 @@
             "y_scroll": 0,
             "colormod": 4294967295,
             "blend_mode": 0
+        },
+        {
+            "name": "shadows",
+            "tilemap": 1,
+            "relative": -1,
+            "view_width": 512,
+            "view_height": 512,
+            "x_scale": 2.0,
+            "y_scale": 2.0,
+            "mode": "LAYER",
+            "x_pos": 0,
+            "y_pos": 0,
+            "x_scroll": 0,
+            "y_scroll": 0,
+            "colormod": 4294967102,
+            "blend_mode": 4
         },
         {
             "name": "lights",
