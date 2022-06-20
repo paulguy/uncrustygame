@@ -18,7 +18,7 @@
         },
         {
             "name": "shadows",
-            "gfx": "gfx/tiles.bmp",
+            "gfx": "gfx/lighting.bmp",
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
@@ -51,7 +51,7 @@
         },
         {
             "name": "lights",
-            "gfx": "gfx/tiles.bmp",
+            "gfx": "gfx/lighting.bmp",
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
