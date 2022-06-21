@@ -2,7 +2,7 @@
     "player_x": 176,
     "player_y": 223,
     "ui_scale": 2.0,
-    "preview_scroll_x": -2.8660252683330327,
+    "preview_scroll_x": 86.24945575743914,
     "preview_scroll_y": 2.4158940098714083,
     "tilemaps": [
         {
@@ -11,7 +11,7 @@
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
-            "map_width": 32,
+            "map_width": 64,
             "map_height": 32,
             "x_scale": 2.0,
             "y_scale": 2.0
@@ -22,7 +22,7 @@
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
-            "map_width": 32,
+            "map_width": 64,
             "map_height": 32,
             "x_scale": 2.0,
             "y_scale": 2.0
@@ -33,7 +33,7 @@
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
-            "map_width": 32,
+            "map_width": 64,
             "map_height": 32,
             "x_scale": 2.0,
             "y_scale": 2.0
@@ -44,7 +44,7 @@
             "unimap": "",
             "tile_width": 16,
             "tile_height": 16,
-            "map_width": 32,
+            "map_width": 64,
             "map_height": 32,
             "x_scale": 2.0,
             "y_scale": 2.0

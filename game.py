@@ -18,7 +18,7 @@ import lib.layers as layers
 
 #TODO:
 # Allow player to stand on a slope tip
-# more player movement (following slopes)
+# more player movement (following slopes, avoiding bonking on slopes)
 # loading in and displaying multiple maps in the right spots
 #  and unloading oldest off screen maps after a certain pool size is reached
 # player transitioning properly between maps and colliding on both maps
