@@ -1771,7 +1771,9 @@ class EditScreen():
                         else:
                             self._tile = self._tilemap[self._cury * self._tmdesc.mw + self._curx]
                             self._color = self._colormod[self._cury * self._tmdesc.mw + self._curx]
+                            self._red, self._green, self._blue, self._alpha = display.unmake_color(self._color)
                             self._attrib = self._flags[self._cury * self._tmdesc.mw + self._curx]
+                            self._hflip, self._vflip, self._rotate = display.unmake_attrib(self._attrib)
                             self._update_tile()
                             self._update_red()
                             self._update_green()
