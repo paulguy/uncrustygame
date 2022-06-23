@@ -73,17 +73,17 @@ class GameInputMode(Enum):
 class NoHit(Exception):
     pass
 
-def next_hit(x, y, dx, dy, tw, th, t):
+def solid_hit(x, y, dx, dy, tw, th, t):
     if dx < 0.0:
-        xdiff = -x
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
-        if xdiff == 0.0:
-            xdiff = -tw
+        if x == 0.0:
+            x = tw
+        xdiff = -x
         if dy < 0.0:
+            if y == 0.0:
+                y = th
             ydiff = -y
-            if ydiff == 0.0:
-                ydiff = -th
             if dx > xdiff and dy > ydiff:
                 return t, dx, dy
             slope = dy / dx
@@ -93,8 +93,6 @@ def next_hit(x, y, dx, dy, tw, th, t):
                 return t, xdiff, slope * xdiff
         elif dy > 0.0:
             ydiff = th - y
-            if ydiff == 0.0:
-                ydiff = th
             if dx > xdiff and dy < ydiff:
                 return t, dx, dy
             slope = dy / dx
@@ -108,12 +106,10 @@ def next_hit(x, y, dx, dy, tw, th, t):
             return t, xdiff, 0.0
     if dx > 0.0:
         xdiff = tw - x
-        if xdiff == 0.0:
-            xdiff = tw
         if dy < 0.0:
+            if y == 0.0:
+                y = th
             ydiff = -y
-            if ydiff == 0.0:
-                ydiff = -th
             if dx < xdiff and dy > ydiff:
                 return t, dx, dy
             slope = dy / dx
@@ -123,8 +119,6 @@ def next_hit(x, y, dx, dy, tw, th, t):
                 return t, xdiff, slope * xdiff
         elif dy > 0.0:
             ydiff = th - y
-            if ydiff == 0.0:
-                ydiff = th
             if dx < xdiff and dy < ydiff:
                 return t, dx, dy
             slope = dy / dx
@@ -138,21 +132,159 @@ def next_hit(x, y, dx, dy, tw, th, t):
             return t, xdiff, 0.0
     else:
         if dy < 0.0:
+            if y == 0.0:
+                y = th
             ydiff = -y
-            if ydiff == 0.0:
-                ydiff = -th
             if dy > ydiff:
                 return t, dx, dy
             return t, 0.0, ydiff
         elif dy > 0.0:
             ydiff = th - y
-            if ydiff == 0.0:
-                ydiff = th
             if dy < ydiff:
                 return t, dx, dy
             return t, 0.0, ydiff
         else:
             raise NoHit()
+
+def box_hit(x, y, dx, dy, tw, th, xb, yb, edge, t1, t2, t3, t4):
+    rx = dx
+    ry = dy
+    o1 = t1
+    o2 = t2
+    o3 = t3
+    o4 = t4
+    # assure the leading edge detects the collision with the part of the box
+    # which isn't necessarily in the way of the ray, this assumes the sprite is
+    # the tile size or larger!
+    # pass None for no change, and just cast the ray.
+    if edge == SpriteEdge.BottomLeft:
+        if x < xb:
+            t1 = o1 or o2
+            t3 = o3 or o4
+        if y > yb:
+            t3 = o1 or o3
+            t4 = o2 or o4
+    elif edge == SpriteEdge.Bottom:
+        t1 = o1 or o2
+        t2 = t1
+        t3 = o3 or o4
+        t4 = t3
+    elif edge == SpriteEdge.BottomRight:
+        if x > xb:
+            t2 = o1 or o2
+            t4 = o3 or o4
+        if y > yb:
+            t3 = o1 or o3
+            t4 = o4 or o2
+    if dx < 0.0:
+        # set to tw so when it hits and comes back to here, it'll continue
+        # rather than get stuck
+        if x == 0.0:
+            x = tw
+        xdiff = -x
+        if dy < 0.0:
+            if y == 0.0:
+                y = th
+            ydiff = -y
+            slope = dy / dx
+            if x < xb:
+                if y < yb:
+                    if dx < xdiff and dy < ydiff:
+                        if slope * xdiff < ydiff:
+                            rx = (1.0 / slope) * ydiff
+                            ry = ydiff
+                        else:
+                            rx = xdiff
+                            ty = slope * xdiff
+                else:
+                    if dx < xdiff and y + dy < yb:
+                        if y + (slope * xdiff) < yb:
+                            rx = (1.0 / slope) * (yb - y)
+                            ry = ydiff
+                        else:
+                            rx = xdiff
+                            ry = slope * xdiff
+            else:
+                if y < yb:
+                    if x + dx < bx and dy < ydiff:
+                        if slope * xdiff < ydiff:
+                            rx = (1.0 / slope) * ydiff
+                            ry = ydiff
+                        else:
+                            rx = yb - y
+                            rx = slope * rx
+                else:
+                    if x + dx < bx and y + dy < by:
+                        if y + (slope * xdiff) < yb:
+                            rx = (1.0 / slope) * (yb - y)
+                            ry = ydiff
+                        else:
+                            rx = yb - y
+                            ry = slope * rx
+        elif dy > 0.0:
+            ydiff = th - y
+            if dx > xdiff and dy < ydiff:
+                return t, dx, dy
+            slope = dy / dx
+            if slope * xdiff > ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        else:
+            if dx > xdiff:
+                return t, dx, dy
+            return t, xdiff, 0.0
+    if dx > 0.0:
+        xdiff = tw - x
+        if dy < 0.0:
+            if y == 0.0:
+                y = th
+            ydiff = -y
+            if dx < xdiff and dy > ydiff:
+                return t, dx, dy
+            slope = dy / dx
+            if slope * xdiff < ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        elif dy > 0.0:
+            ydiff = th - y
+            if dx < xdiff and dy < ydiff:
+                return t, dx, dy
+            slope = dy / dx
+            if slope * xdiff > ydiff:
+                return t, (1.0 / slope) * ydiff, ydiff
+            else:
+                return t, xdiff, slope * xdiff
+        else:
+            if dx < xdiff:
+                return t, dx, dy
+            return t, xdiff, 0.0
+    else:
+        if dy < 0.0:
+            if y == 0.0:
+                y = th
+            ydiff = -y
+            if dy > ydiff:
+                return t, dx, dy
+            return t, 0.0, ydiff
+        elif dy > 0.0:
+            ydiff = th - y
+            if dy < ydiff:
+                return t, dx, dy
+            return t, 0.0, ydiff
+        else:
+            raise NoHit()
+
+class SpriteEdge(Enum):
+    TopLeft = 0,
+    Top = 1,
+    TopRight = 2,
+    Right = 3,
+    BottomRight = 4,
+    Bottom = 5,
+    BottomLeft = 6,
+    Left = 7
 
 # some highschool math I haven't done in a while and never fully grasped...
 # y = ax + b
@@ -180,10 +312,31 @@ def next_hit(x, y, dx, dy, tw, th, t):
 # ix = ((b + (a * x)) - y) / ((dy / dx) - a)
 # iy = ((dy / dx) * ix) + y
 
-def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
+def slope_hit(x, y, dx, dy, tw, th, a, b, edge, t1, t2):
     print("{} {} {} {}".format(x, y, dx, dy))
     rx = dx
     ry = dy
+    # if the leading edge of the sprite is towards the "point" of a slope,
+    # treat the collision as a rectangle rather than a slope so the corner
+    # aligning with the top of the slope won't pass by the slope
+    if a > 0:
+        if edge == SpriteEdge.TopLeft or \
+           edge == SpriteEdge.Top or \
+           edge == SpriteEdge.Left:
+            pass
+        elif edge == SpriteEdge.BottomRight or \
+             edge == SpriteEdge.Bottom or \
+             edge == SpriteEdge.Right:
+            pass
+    else: # a <= 0:
+        if edge == SpriteEdge.TopRight or \
+           edge == SpriteEdge.Top or \
+           edge == SpriteEdge.Right:
+            pass
+        elif edge == SpriteEdge.BottomLeft or \
+             edge == SpriteEdge.Bottom or \
+             edge == SpriteEdge.Left:
+            pass
     if dx < 0.0:
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
@@ -232,7 +385,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
                 pass
             if rx < xdiff or ry > ydiff:
                 hit = slope * xdiff
-                if hit < 0:
+                if hit > ydiff:
                     rx = (1.0 / slope) * ydiff
                     ry = ydiff
                 else:
@@ -268,7 +421,7 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
                 pass
             if rx > xdiff or ry < ydiff:
                 hit = slope * xdiff
-                if hit < ydiff:
+                if hit < 0:
                     rx = (1.0 / slope) * ydiff
                     ry = ydiff
                 else:
@@ -322,6 +475,9 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
                 ry = ydiff
         else:
             raise NoHit()
+        """
+        This might be overkill and it seems to work otherwise and i'm not sure
+        what this was originally solving
     if y > a * x + b:
         if y + ry < a * (x + rx) + b:
             return t1, rx, ry
@@ -332,53 +488,78 @@ def slope_hit(x, y, dx, dy, tw, th, a, b, t1, t2):
             return t1, rx, ry
         else:
             return t2, rx, ry
+       """ 
+    if y > a * x + b:
+        return t2, rx, ry
+    else:
+        return t1, rx, ry
 
 TILE_CALLS = [
-    lambda x, y, dx, dy, tw, th: \
-        next_hit(x, y, dx, dy, tw, th, False),
-    lambda x, y, dx, dy, tw, th: \
-        next_hit(x, y, dx, dy, tw, th, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        solid_hit(x, y, dx, dy, tw, th, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        solid_hit(x, y, dx, dy, tw, th, True),
     # start slopes
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -1, th, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 1, 0, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -1, th, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 1, 0, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -0.5, th, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -0.5, th / 2, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 0.5, 0, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 0.5, th / 2, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -0.5, th, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -0.5, th / 2, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 0.5, 0, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 0.5, th / 2, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -2, th, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -2, th * 2, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 2, 0, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 2, -th, False, True),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -2, th, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, -2, th * 2, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 2, 0, True, False),
-    lambda x, y, dx, dy, tw, th: \
-        slope_hit(x, y, dx, dy, tw, th, 2, -th, True, False)
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -1, th, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 1, 0, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -1, th, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 1, 0, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th / 2, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, 0, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, th / 2, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -0.5, th / 2, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, 0, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 0.5, th / 2, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th * 2, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 2, 0, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 2, -th, edge,
+                  False, True),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, -2, th * 2, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 2, 0, edge,
+                  True, False),
+    lambda x, y, dx, dy, tw, th, edge: \
+        slope_hit(x, y, dx, dy, tw, th, 2, -th, edge,
+                  True, False)
 ]
 
 class MapScreen():
@@ -388,7 +569,7 @@ class MapScreen():
         except IndexError as e:
             raise IndexError("Out of bounds: {} {}".format(x, y))
 
-    def _first_hit(self, x, y, dx, dy, val):
+    def _first_hit(self, x, y, dx, dy, val, edge):
         print(" {} {} {} {}".format(x, y, dx, dy))
         nx = 0
         ny = 0
@@ -398,7 +579,8 @@ class MapScreen():
                 hit, hx, hy = TILE_CALLS[curtile]((x + nx) % self._tw,
                                                   (y + ny) % self._th,
                                                   dx - nx, dy - ny,
-                                                  self._tw, self._th)
+                                                  self._tw, self._th,
+                                                  edge)
                 print("{} {} {}".format(hit, hx, hy))
                 if hit != val:
                     return hit, nx, ny
@@ -420,13 +602,13 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx,
                                   self._playery,
                                   -self._tw, 0,
-                                  False)
+                                  False, SpriteEdge.TopLeft)
         if h and x > -EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx,
                                   self._playery + PLAYER_HEIGHT,
                                   -self._tw, 0,
-                                  False)
+                                  False, SpriteEdge.BottomLeft)
         if h and x > -EDGE_FUDGE:
             return True
         return False
@@ -435,13 +617,13 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery,
                                   self._tw, 0,
-                                  False)
+                                  False, SpriteEdge.TopRight)
         if h and x < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery + PLAYER_HEIGHT,
                                   self._tw, 0,
-                                  False)
+                                  False, SpriteEdge.BottomRight)
         if h and x < EDGE_FUDGE:
             return True
         return False
@@ -450,13 +632,13 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx,
                                   self._playery,
                                   0, -self._th,
-                                  False)
+                                  False, SpriteEdge.TopLeft)
         if h and y > -EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery,
                                   0, -self._th,
-                                  False)
+                                  False, SpriteEdge.TopRight)
         if h and y > -EDGE_FUDGE:
             return True
         return False
@@ -465,13 +647,13 @@ class MapScreen():
         h, x, y = self._first_hit(self._playerx,
                                   self._playery + PLAYER_HEIGHT,
                                   0, self._th,
-                                  False)
+                                  False, SpriteEdge.BottomLeft)
         if h and y < EDGE_FUDGE:
             return True
         h, x, y = self._first_hit(self._playerx + PLAYER_WIDTH,
                                   self._playery + PLAYER_HEIGHT,
                                   0, self._th,
-                                  False)
+                                  False, SpriteEdge.BottomRight)
         if h and y < EDGE_FUDGE:
             return True
         return False
@@ -489,18 +671,24 @@ class MapScreen():
             if self._pstate == PlayerState.AIR:
                 if dx2 > 0:
                     if dy2 > 0:
-                        ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery,
-                                                     dx2, dy2,
-                                                     False)
-                        hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, dy2,
-                                                     False)
-                        hb, xb, yb = self._first_hit(self._playerx,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, dy2,
-                                                     False)
+                        ht, xt, yt = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.TopRight)
+                        hc, xc, yc = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.BottomRight)
+                        hb, xb, yb = \
+                            self._first_hit(self._playerx,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.BottomLeft)
                         if hb and xb < dx2:
                             if yb > EDGE_FUDGE:
                                 dy2 = yb - EDGE_FUDGIER
@@ -527,17 +715,23 @@ class MapScreen():
                                     dy2 = 0
                                     self._pstate = PlayerState.GROUND
                     elif dy2 < 0:
-                        ht, xt, yt = self._first_hit(self._playerx, self._playery,
-                                                     dx2, dy2,
-                                                     False)
-                        hc, xc, yc = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery,
-                                                     dx2, dy2,
-                                                     False)
-                        hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, dy2,
-                                                     False)
+                        ht, xt, yt = \
+                            self._first_hit(self._playerx, self._playery,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.TopLeft)
+                        hc, xc, yc = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.TopRight)
+                        hb, xb, yb = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.BottomRight)
                         if hb and xb < dx2:
                             if xb > EDGE_FUDGE:
                                 dx2 = xb - EDGE_FUDGIER
@@ -565,14 +759,18 @@ class MapScreen():
                                     dy2 = 0
                                     dy = 0
                     else:
-                        ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery,
-                                                     dx2, 0,
-                                                     False)
-                        hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, 0,
-                                                     False)
+                        ht, xt, yt = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery,
+                                            dx2, 0,
+                                            False,
+                                            SpriteEdge.TopRight)
+                        hb, xb, yb = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, 0,
+                                            False,
+                                            SpriteEdge.BottomRight)
                         if ht and xt < dx:
                             if xt > EDGE_FUDGE:
                                 dx2 = xt - EDGE_FUDGIER
@@ -587,17 +785,23 @@ class MapScreen():
                                 dx = 0
                 elif dx2 < 0:
                     if dy2 > 0:
-                        ht, xt, yt = self._first_hit(self._playerx, self._playery,
-                                                     dx2, dy2,
-                                                     False)
-                        hc, xc, yc = self._first_hit(self._playerx,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, dy2,
-                                                     False)
-                        hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, dy2,
-                                                     False)
+                        ht, xt, yt = \
+                            self._first_hit(self._playerx, self._playery,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.TopLeft)
+                        hc, xc, yc = \
+                            self._first_hit(self._playerx,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.BottomLeft)
+                        hb, xb, yb = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.BottomRight)
                         if ht and xt > dx2:
                             if xt < -EDGE_FUDGE:
                                 dx2 = xt + EDGE_FUDGIER
@@ -624,17 +828,23 @@ class MapScreen():
                                     dy2 = 0
                                     self._pstate = PlayerState.GROUND
                     elif dy2 < 0:
-                        ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery,
-                                                     dx2, dy2,
-                                                     False)
-                        hc, xc, yc = self._first_hit(self._playerx, self._playery,
-                                                     dx2, dy2,
-                                                     False)
-                        hb, xb, yb = self._first_hit(self._playerx,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, dy2,
-                                                     False)
+                        ht, xt, yt = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.TopRight)
+                        hc, xc, yc = \
+                            self._first_hit(self._playerx, self._playery,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.TopLeft)
+                        hb, xb, yb = \
+                            self._first_hit(self._playerx,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, dy2,
+                                            False,
+                                            SpriteEdge.BottomLeft)
                         if hb and xb > dx2:
                             if xb < -EDGE_FUDGE:
                                 dx2 = xb + EDGE_FUDGIER
@@ -661,13 +871,17 @@ class MapScreen():
                                     dy2 = 0
                                     dy = 0
                     else:
-                        ht, xt, yt = self._first_hit(self._playerx, self._playery,
-                                                     dx2, 0,
-                                                     False)
-                        hb, xb, yb = self._first_hit(self._playerx,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     dx2, 0,
-                                                     False)
+                        ht, xt, yt = \
+                            self._first_hit(self._playerx, self._playery,
+                                            dx2, 0,
+                                            False,
+                                            SpriteEdge.TopLeft)
+                        hb, xb, yb = \
+                            self._first_hit(self._playerx,
+                                            self._playery + PLAYER_HEIGHT,
+                                            dx2, 0,
+                                            False,
+                                            SpriteEdge.BottomLeft)
                         if ht and xt > dx2:
                             if xt < -EDGE_FUDGE:
                                 dx2 = xt + EDGE_FUDGIER
@@ -682,14 +896,18 @@ class MapScreen():
                                 dx = 0
                 else:
                     if dy2 > 0:
-                        hl, xl, yl = self._first_hit(self._playerx,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     0, dy2,
-                                                     False)
-                        hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery + PLAYER_HEIGHT,
-                                                     0, dy2,
-                                                     False)
+                        hl, xl, yl = \
+                            self._first_hit(self._playerx,
+                                            self._playery + PLAYER_HEIGHT,
+                                            0, dy2,
+                                            False,
+                                            SpriteEdge.BottomLeft)
+                        hr, xr, yr = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery + PLAYER_HEIGHT,
+                                            0, dy2,
+                                            False,
+                                            SpriteEdge.BottomRight)
                         if hl and yl < dy2:
                             if yl > EDGE_FUDGE:
                                 dy2 = yl - EDGE_FUDGIER
@@ -703,13 +921,17 @@ class MapScreen():
                                 dy2 = 0
                                 self._pstate = PlayerState.GROUND
                     elif dy2 < 0:
-                        hl, xl, yl = self._first_hit(self._playerx, self._playery,
-                                                     0, dy2,
-                                                     False)
-                        hr, xr, yr = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                     self._playery,
-                                                     0, dy2,
-                                                     False)
+                        hl, xl, yl = \
+                            self._first_hit(self._playerx, self._playery,
+                                            0, dy2,
+                                            False,
+                                            SpriteEdge.TopLeft)
+                        hr, xr, yr = \
+                            self._first_hit(self._playerx + PLAYER_WIDTH,
+                                            self._playery,
+                                            0, dy2,
+                                            False,
+                                            SpriteEdge.TopRight)
                         if hl and yl > dy2:
                             if yl < -EDGE_FUDGE:
                                 dy2 = yl + EDGE_FUDGIER
@@ -730,14 +952,18 @@ class MapScreen():
                 dy = 0
                 dy2 = 0
                 if dx < 0:
-                    ht, xt, yt = self._first_hit(self._playerx,
-                                                 self._playery,
-                                                 dx2, 0,
-                                                 False)
-                    hb, xb, yb = self._first_hit(self._playerx,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, 0,
-                                                 False)
+                    ht, xt, yt = \
+                        self._first_hit(self._playerx,
+                                        self._playery,
+                                        dx2, 0,
+                                        False,
+                                        SpriteEdge.TopLeft)
+                    hb, xb, yb = \
+                        self._first_hit(self._playerx,
+                                        self._playery + PLAYER_HEIGHT,
+                                        dx2, 0,
+                                        False,
+                                        SpriteEdge.BottomLeft)
                     if ht and xt > dx:
                         if xt < -EDGE_FUDGE:
                             dx2 = xt + EDGE_FUDGIER
@@ -751,14 +977,18 @@ class MapScreen():
                             dx2 = 0
                             dx = 0
                 elif dx > 0:
-                    ht, xt, yt = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery,
-                                                 dx2, 0,
-                                                 False)
-                    hb, xb, yb = self._first_hit(self._playerx + PLAYER_WIDTH,
-                                                 self._playery + PLAYER_HEIGHT,
-                                                 dx2, 0,
-                                                 False)
+                    ht, xt, yt = \
+                        self._first_hit(self._playerx + PLAYER_WIDTH,
+                                        self._playery,
+                                        dx2, 0,
+                                        False,
+                                        SpriteEdge.TopRight)
+                    hb, xb, yb = \
+                        self._first_hit(self._playerx + PLAYER_WIDTH,
+                                        self._playery + PLAYER_HEIGHT,
+                                        dx2, 0,
+                                        False,
+                                        SpriteEdge.BottomRight)
                     if ht and xt < dx:
                         if xt > EDGE_FUDGE:
                             dx2 = xt - EDGE_FUDGIER
