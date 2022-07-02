@@ -25,6 +25,8 @@ from lib.collision import SpriteEdge, first_hit
 # player transitioning properly between maps and colliding on both maps
 # camera blocking
 # actors (and all their interactions with the environment around them)
+# jump-through platforms
+# water physics
 
 # debugging options
 # enable SDL render batching, no idea why you'd disable it

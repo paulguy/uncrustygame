@@ -15,6 +15,7 @@ class SpriteEdge(Enum):
 
 def _solid_hit(x, y, dx, dy, tw, th, t):
     if dx < 0.0:
+        slope = dy / dx
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
         if x == 0.0:
@@ -26,7 +27,6 @@ def _solid_hit(x, y, dx, dy, tw, th, t):
             ydiff = -y
             if dx > xdiff and dy > ydiff:
                 return t, dx, dy
-            slope = dy / dx
             if slope * xdiff < ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
             else:
@@ -35,7 +35,6 @@ def _solid_hit(x, y, dx, dy, tw, th, t):
             ydiff = th - y
             if dx > xdiff and dy < ydiff:
                 return t, dx, dy
-            slope = dy / dx
             if slope * xdiff > ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
             else:
@@ -45,6 +44,7 @@ def _solid_hit(x, y, dx, dy, tw, th, t):
                 return t, dx, 0.0
             return t, xdiff, 0.0
     if dx > 0.0:
+        slope = dy / dx
         xdiff = tw - x
         if dy < 0.0:
             if y == 0.0:
@@ -52,7 +52,6 @@ def _solid_hit(x, y, dx, dy, tw, th, t):
             ydiff = -y
             if dx < xdiff and dy > ydiff:
                 return t, dx, dy
-            slope = dy / dx
             if slope * xdiff < ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
             else:
@@ -61,7 +60,6 @@ def _solid_hit(x, y, dx, dy, tw, th, t):
             ydiff = th - y
             if dx < xdiff and dy < ydiff:
                 return t, dx, dy
-            slope = dy / dx
             if slope * xdiff > ydiff:
                 return t, (1.0 / slope) * ydiff, ydiff
             else:
@@ -87,6 +85,7 @@ def _solid_hit(x, y, dx, dy, tw, th, t):
             raise _NoHit()
 
 def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
+    print("{} {}".format(dx, dy))
     rx = dx
     ry = dy
     o1 = t1
@@ -127,8 +126,7 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
         t2 = o1 or o2
         t3 = o1 or o3
     if dx < 0.0:
-        # set to tw so when it hits and comes back to here, it'll continue
-        # rather than get stuck
+        slope = dy / dx
         if x == 0.0:
             x = tw
         xdiff = -x
@@ -136,9 +134,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
             if y == 0.0:
                 y = th
             ydiff = -y
-            slope = dy / dx
-            if x < xb:
-                if y < yb: # top left
+            if x <= xb:
+                if y <= yb: # top left
                     if dx < xdiff or dy < ydiff:
                         if slope * xdiff < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -149,13 +146,13 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                 else: # bottom left
                     if dx < xdiff or y + dy < yb:
                         if y + (slope * xdiff) < yb:
-                            ry = by - y
+                            ry = yb - y
                             rx = (1.0 / slope) * ry
                         else:
                             rx = xdiff
                             ry = slope * xdiff
             else:
-                if y < yb: # top right
+                if y <= yb: # top right
                     if x + dx < xb or dy < ydiff:
                         if slope * (xb - x) < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -173,8 +170,7 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * rx
         elif dy > 0.0:
             ydiff = th - y
-            slope = dy / dx
-            if x < xb:
+            if x <= xb:
                 if y < yb:
                     if dx < xdiff or y + dy > yb:
                         if slope * xdiff > yb:
@@ -209,22 +205,23 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xb - x
                             ry = slope * rx
         else:
-            if x < xb:
+            if x <= xb:
                 if dx < xdiff:
                     rx = xdiff
             else:
                 if x + dx < xb:
                     rx = xb - x
-    if dx > 0.0:
+    elif dx > 0.0:
+        slope = dy / dx
         xdiff = tw - x
         if dy < 0.0:
             if y == 0.0:
                 y = th
             ydiff = -y
             if x < xb:
-                if y < yb:
+                if y <= yb:
                     if x + dx > xb or dy < ydiff:
-                        if slope * xb - x < ydiff:
+                        if slope * (xb - x) < ydiff:
                             rx = (1.0 / slope) * ydiff
                             ry = ydiff
                         else:
@@ -233,13 +230,13 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                 else:
                     if x + dx > xb or y + dy < yb:
                         if y + (slope * (xb - x)) < yb:
-                            ry = by - y
+                            ry = yb - y
                             rx = (1.0 / slope) * ry
                         else:
                             rx = xb - x
                             ry = slope * rx
             else:
-                if y < yb:
+                if y <= yb:
                     if dx > xdiff or dy < ydiff:
                         if slope * xdiff < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -257,24 +254,66 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * xdiff
         elif dy > 0.0:
             ydiff = th - y
-            # TODO
+            if x < xb:
+                if y < yb:
+                    if x + dx > xb or y + dy > yb:
+                        if y + (slope * (xb - x)) > yb:
+                            ry = yb - y
+                            rx = (1.0 / slope) * ry
+                        else:
+                            rx = xb - x
+                            ty = slope * rx
+                else:
+                    if x + dx > xb or dy > ydiff:
+                        if slope * (xb - x) > ydiff:
+                            rx = (1.0 / slope) * ydiff
+                            ry = ydiff
+                        else:
+                            rx = xb - x
+                            ry = slope * rx
+            else:
+                if y < yb:
+                    if dx > xdiff or y + dy > yb:
+                        if y + (slope * xdiff) > yb:
+                            ry = yb - y
+                            rx = (1.0 / slope) * ry
+                        else:
+                            rx = xdiff
+                            ry = slope * xdiff
+                else:
+                    if dx > xdiff or dy > ydiff:
+                        if slope * xdiff > ydiff:
+                            rx = (1.0 / slope) * ydiff
+                            ry = ydiff
+                        else:
+                            rx = xdiff
+                            ry = slope * xdiff
         else:
-            if dx < xdiff:
-                return t, dx, dy
-            return t, xdiff, 0.0
+            if x < xb:
+                if x + dx > xb:
+                    rx = xb - x
+            else:
+                if dx > xdiff:
+                    rx = xdiff
     else:
         if dy < 0.0:
             if y == 0.0:
                 y = th
             ydiff = -y
-            if dy > ydiff:
-                return t, dx, dy
-            return t, 0.0, ydiff
+            if y <= yb:
+                if dy <= ydiff:
+                    ry = ydiff
+            else:
+                if y + dy < yb:
+                    ry = yb - y
         elif dy > 0.0:
             ydiff = th - y
-            if dy < ydiff:
-                return t, dx, dy
-            return t, 0.0, ydiff
+            if y < yb:
+                if y + dy > yb:
+                    ry = yb - y
+            else:
+                if dy > ydiff:
+                    ry = ydiff
         else:
             raise _NoHit()
     if x < xb:
@@ -354,6 +393,7 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
                                 t1, t1, t2, t2)
                             """
     if dx < 0.0:
+        slope = dy / dx
         # set to tw so when it hits and comes back to here, it'll continue
         # rather than get stuck
         if x == 0.0:
@@ -363,7 +403,6 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
             if y == 0.0:
                 y = th
             ydiff = -y
-            slope = dy / dx
             try:
                 # calculate intersection between movement and slope
                 ix = ((b + (a * x)) - y) / (slope - a)
@@ -389,7 +428,6 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
                     ry = hit
         elif dy > 0.0:
             ydiff = th - y
-            slope = dy / dx
             try:
                 ix = ((b + (a * x)) - y) / (slope - a)
                 iy = slope * ix
@@ -420,12 +458,12 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
             if rx < xdiff:
                 rx = xdiff
     elif dx > 0.0:
+        slope = dy / dx
         xdiff = tw - x
         if dy < 0.0:
             if y == 0.0:
                 y = th
             ydiff = -y
-            slope = dy / dx
             try:
                 ix = ((b + (a * x)) - y) / (slope - a)
                 iy = slope * ix
@@ -445,7 +483,6 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
                     ry = hit
         elif dy > 0.0:
             ydiff = th - y
-            slope = dy / dx
             try:
                 ix = ((b + (a * x)) - y) / (slope - a)
                 iy = slope * ix
@@ -618,6 +655,8 @@ def first_hit(x, y, dx, dy, tw, th, val, edge, buffer, bw):
                                               dx - nx, dy - ny,
                                               tw, th, edge)
             print("{} {} {}".format(hit, hx, hy))
+            if hx == 0.0 and hy == 0.0:
+                raise Exception("Hit with no motion, would get stick!")
             if hit != val:
                 return hit, nx, ny
             nx += hx
@@ -633,6 +672,7 @@ def first_hit(x, y, dx, dy, tw, th, val, edge, buffer, bw):
             except IndexError:
                 raise IndexError("Out of bounds: {} {}", px, py)
         except _NoHit:
+            print("nohit")
             break
     # don't modify dx or dy to avoid rounding errors
     return val, dx, dy
