@@ -1,6 +1,7 @@
 import crustygame as cg
 import json
 import array
+import copy
 from dataclasses import dataclass
 from enum import Enum
 import lib.display as display
@@ -45,6 +46,84 @@ class LayerDesc():
     scrolly : int = 0
     colormod : int = 2**32-1 # 0xFFFFFFFF opaque white
     blendmode : int = cg.TILEMAP_BLENDMODE_BLEND
+
+def get_filename(name):
+    return "{}.json".format(name)
+
+def get_tilemap_name(name, num):
+    return "{} tilemap{}.bin".format(name, num)
+
+def get_flags_name(name, num):
+    return "{} flags{}.bin".format(name, num)
+
+def get_colormod_name(name, num):
+    return "{} colormod{}.bin".format(name, num)
+
+def save_map(name, extraglobal, mapdescs, maps, layerdescs,
+             extradescparams, extralayerparams):
+    if len(maps) != len(mapdescs):
+        raise ValueError("Unequal number of maps and map descriptors.")
+    if extradescparams is not None and len(mapdescs) != len(extradescparams):
+        raise ValueError("Unequal number of maps and extra map params.")
+    if extralayerparams is not None and len(layerdescs) != len(extralayerparams):
+        raise ValueError("Unequal number of layers and extra layer params.")
+    savedata = copy.copy(extraglobal)
+    tilemaps = list()
+    for num, mapdesc in enumerate(mapdescs):
+        md = dict()
+        if extradescparams is not None and \
+           extradescparams[num] is not None:
+            md = copy.copy(extradescparams[num])
+        md['name'] = mapdesc.name
+        md['gfx'] = mapdesc.filename
+        md['unimap'] = mapdesc.mapname
+        md['tile_width'] = mapdesc.tw
+        md['tile_height'] = mapdesc.th
+        md['map_width'] = mapdesc.mw
+        md['map_height'] = mapdesc.mh
+        md['x_scale'] = mapdesc.wscale
+        md['y_scale'] = mapdesc.hscale
+        tilemaps.append(md)
+    savedata['tilemaps'] = tilemaps
+    layerslist = list()
+    for num, layerdesc in enumerate(layerdescs):
+        ld = dict()
+        if extralayerparams is not None and \
+           extralayerparams[num] is not None:
+            ld = copy.copy(extralayerparams[num])
+        mode = 'NONE'
+        if layerdesc.mode == ScrollMode.POSITION:
+            mode = 'POSITION'
+        elif layerdesc.mode == ScrollMode.LAYER:
+            mode = 'LAYER'
+        ld['name'] = layerdesc.name
+        ld['tilemap'] = layerdesc.tilemap
+        ld['relative'] = layerdesc.relative
+        ld['view_width'] = layerdesc.vw
+        ld['view_height'] = layerdesc.vh
+        ld['x_scale'] = layerdesc.scalex
+        ld['y_scale'] = layerdesc.scaley
+        ld['mode'] = mode
+        ld['x_pos'] = layerdesc.posx
+        ld['y_pos'] = layerdesc.posy
+        ld['x_scroll'] = layerdesc.scrollx
+        ld['y_scroll'] = layerdesc.scrolly
+        ld['colormod'] = layerdesc.colormod
+        ld['blend_mode'] = layerdesc.blendmode
+        layerslist.append(ld)
+    savedata['layers'] = layerslist
+    with open(get_filename(name), 'w') as outfile:
+        json.dump(savedata, outfile, indent=4)
+    for num, tilemap in enumerate(maps):
+        if tilemap[0] is not None:
+            with open(get_tilemap_name(name, num), 'wb') as outfile:
+                tilemap[0].tofile(outfile)
+        if tilemap[1] is not None:
+            with open(get_flags_name(name, num), 'wb') as outfile:
+                tilemap[1].tofile(outfile)
+        if tilemap[2] is not None:
+            with open(get_colormod_name(name, num), 'wb') as outfile:
+                tilemap[2].tofile(outfile)
 
 def load_map(name):
     data = ""

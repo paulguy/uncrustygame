@@ -158,6 +158,14 @@ def cursor_dims(tw, th, twscale, thscale, fw, fh, fscale):
         curheight = 2
     return curwidth, curheight
 
+def check_for_file(filename):
+    try:
+        file = open(filename, "r")
+        file.close()
+        return True
+    except OSError:
+        return False
+
 class Sidebar():
     SIDEBAR_COLOR=display.make_color(255, 255, 255, 96)
 
@@ -553,15 +561,12 @@ class ProjectScreen():
             return
         try:
             self._state.set_scale(self._settings['ui_scale'])
-            del self._settings['ui_scale']
         except KeyError:
             pass
         pscrollx, pscrolly = self._layers.scroll_pos
         try:
             pscrollx = self._settings['preview_scroll_x']
-            del self._settings['preview_scroll_x']
             pscrolly = self._settings['preview_scroll_y']
-            del self._settings['preview_scroll_y']
             self._layers.set_scroll(pscrollx, pscrolly)
         except KeyError:
             pass
@@ -630,6 +635,9 @@ class ProjectScreen():
         mlayer.pos(0, self._fh * 2)
 
     def active(self):
+        # if adding a tilemap was backed out of without applying, this will
+        # still be True and cause issues later...
+        self._adding = False
         if self._quitting:
             self._state.stop()
         self.resize()
@@ -645,7 +653,7 @@ class ProjectScreen():
             self._set_banner("Move where?")
         elif self._saving:
             self._saving = False
-            self._do_save()
+            self._do_save(force=True)
 
     def set_option(self, sel):
         if sel != 0:
@@ -772,18 +780,16 @@ class ProjectScreen():
         self._adding = True
         try:
             tilemapscreen = TilemapScreen(self._state, self,
-                                          layers.TilemapDesc)
+                                          layers.TilemapDesc())
             self._state.active_screen(tilemapscreen)
         except Exception as e:
+            self._adding = False
             print(e)
             print_tb(e.__traceback__)
             if isinstance(e, cg.CrustyException):
                 self._set_error("Couldn't open tilemap: {}: {}".format(e, get_error()))
             else:
                 self._set_error("Couldn't open tilemap: {}".format(e))
-            # this could be -1 but keep it consistent in meaning with the call
-            # to _open_settings() above.
-            del self._descs[len(self._descs) - 1]
 
     def _set_scale(self, priv, sel, val):
         try:
@@ -799,6 +805,7 @@ class ProjectScreen():
         if self._adding:
             self._adding = False
             self._add_editor(desc)
+            # move cursor to the "Create" option
             self._selected = len(self._descs) - 1
             self._update_menu()
         else:
@@ -849,43 +856,45 @@ class ProjectScreen():
         self._name = name
         return self._name
 
-    def _get_filename(self):
-        return "{}.json".format(self._name)
-
-    def _save(self, priv, sel):
+    def _do_save(self, force=False):
         flist = list()
-        try:
-            filename = self._get_filename()
-            file = open(filename, "r")
-            file.close()
+        tmlist = list()
+        filename = layers.get_filename(self._name)
+        if check_for_file(filename):
             flist.append(filename)
-        except OSError:
-            pass
         for num, editor in enumerate(self._editors):
+            tmlist.append([None, None, None])
             if editor.was_changed:
-                try:
-                    filename = "{} tilemap{}.bin".format(self._name, num)
-                    file = open(filename, 'r')
-                    file.close()
+                filename = layers.get_tilemap_name(self._name, num)
+                if check_for_file(filename):
                     flist.append(filename)
-                except OSError:
-                    pass
-                try:
-                    filename = "{} flags{}.bin".format(self._name, num)
-                    file = open(filename, 'r')
-                    file.close()
+                    tmlist[-1][0] = editor.tilemap
+                    tmlist[-1][1] = editor.flags
+                    tmlist[-1][2] = editor.colormod
+                filename = layers.get_flags_name(self._name, num)
+                if check_for_file(filename):
                     flist.append(filename)
-                except OSError:
-                    pass
-                try:
-                    filename = "{} colormod{}.bin".format(self._name, num)
-                    file = open(filename, 'r')
-                    file.close()
+                    tmlist[-1][0] = editor.tilemap
+                    tmlist[-1][1] = editor.flags
+                    tmlist[-1][2] = editor.colormod
+                filename = layers.get_colormod_name(self._name, num)
+                if check_for_file(filename):
                     flist.append(filename)
-                except OSError:
-                    pass
-        if len(flist) == 0:
-            self._do_save()
+                    tmlist[-1][0] = editor.tilemap
+                    tmlist[-1][1] = editor.flags
+                    tmlist[-1][2] = editor.colormod
+        if len(flist) == 0 or force:
+            self._settings['ui_scale'] = self._state.font_scale
+            pscrollx, pscrolly = self._layers.scroll_pos
+            self._settings['preview_scroll_x'] = pscrollx
+            self._settings['preview_scroll_y'] = pscrolly
+            layers.save_map(self._name, self._settings,
+                            self._descs, tmlist,
+                            self._layers.layers,
+                            self._extradescparams,
+                            self._layers.extras)
+            for editor in self._editors:
+                editor.saved()
         else:
             self._saving = True
             liststr = "{}".format(flist[0])
@@ -894,61 +903,8 @@ class ProjectScreen():
             prompt = PromptScreen(self._state, self, "Save?", ("yes", "no"), message="The following files exist and would be overwritten: {}".format(liststr), default=1)
             self._state.active_screen(prompt)
 
-    def _do_save(self):
-        savedata = copy.copy(self._settings)
-        savedata['ui_scale'] = self._state.font_scale
-        pscrollx, pscrolly = self._layers.scroll_pos
-        savedata['preview_scroll_x'] = pscrollx
-        savedata['preview_scroll_y'] = pscrolly
-        tilemaps = list()
-        for num, desc in enumerate(self._descs):
-            tmdata = copy.copy(self._extradescparams[num])
-            tmdata['name'] = desc.name
-            tmdata['gfx'] = desc.filename
-            tmdata['unimap'] = desc.mapname
-            tmdata['tile_width'] = desc.tw
-            tmdata['tile_height'] = desc.th
-            tmdata['map_width'] = desc.mw
-            tmdata['map_height'] = desc.mh
-            tmdata['x_scale'] = desc.wscale
-            tmdata['y_scale'] = desc.hscale
-            tilemaps.append(tmdata)
-        savedata['tilemaps'] = tilemaps
-        layerslist = list()
-        for num, layer in enumerate(self._layers.layers):
-            mode = 'NONE'
-            if layer.mode == layers.ScrollMode.POSITION:
-                mode = 'POSITION'
-            elif layer.mode == layers.ScrollMode.LAYER:
-                mode = 'LAYER'
-            ldata = copy.copy(self._layers.extras[num])
-            ldata['name'] = layer.name
-            ldata['tilemap'] = layer.tilemap
-            ldata['relative'] = layer.relative
-            ldata['view_width'] = layer.vw
-            ldata['view_height'] = layer.vh
-            ldata['x_scale'] = layer.scalex
-            ldata['y_scale'] = layer.scaley
-            ldata['mode'] = mode
-            ldata['x_pos'] = layer.posx
-            ldata['y_pos'] = layer.posy
-            ldata['x_scroll'] = layer.scrollx
-            ldata['y_scroll'] = layer.scrolly
-            ldata['colormod'] = layer.colormod
-            ldata['blend_mode'] = layer.blendmode
-            layerslist.append(ldata)
-        savedata['layers'] = layerslist
-        with open("{}.json".format(self._name), 'w') as outfile:
-            json.dump(savedata, outfile, indent=4)
-        for num, editor in enumerate(self._editors):
-            if editor.was_changed:
-                with open("{} tilemap{}.bin".format(self._name, num), 'wb') as outfile:
-                    editor.tilemap.tofile(outfile)
-                with open("{} flags{}.bin".format(self._name, num), 'wb') as outfile:
-                    editor.flags.tofile(outfile)
-                with open("{} colormod{}.bin".format(self._name, num), 'wb') as outfile:
-                    editor.colormod.tofile(outfile)
-                editor.saved()
+    def _save(self, priv, sel):
+        self._do_save()
 
 class TilemapScreen():
     def _build_screen(self):
