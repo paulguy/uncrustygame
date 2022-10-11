@@ -39,6 +39,7 @@ RES_HEIGHT=600
 VIEW_WIDTH=400
 VIEW_HEIGHT=300
 ERROR_TIME=10.0
+DEFAULT_MAP="maps/Example"
 
 PLAYER_GFX = "gfx/face.bmp"
 PLAYER_WIDTH=16
@@ -63,20 +64,21 @@ class TilesetDesc():
     width : int
     height : int
 
-class PlayerState(Enum):
+class PlayerState(IntEnum):
     AIR = 0,
     GROUND = 1
 
 class GameInputMode(Enum):
     NORMAL = 0,
     RECORD = 1,
-    PLAY = 2,
-    PLAYSTOP = 3
+    RECORDPAUSE = 2,
+    PLAY = 3,
+    PLAYSTOP = 4
 
 class MapScreen():
     def _first_hit(self, x, y, dx, dy, val, edge):
         return first_hit(x, y, dx, dy, self._tw, self._th, val, edge,
-                         self._params[1][0], self._params[0].mw)
+                         self._solids[1][0], self._solids[0].mw)
 
     def _collision_left(self):
         h, x, y = self._first_hit(self._playerx,
@@ -481,6 +483,8 @@ class MapScreen():
                         else:
                             dx2 = 0
                             dx = 0
+            else:
+                raise ValueError("Invalid player state: {}".format(self._pstate))
 
             self._playerx += dx2
             self._playery += dy2
@@ -510,10 +514,10 @@ class MapScreen():
     def _read_demo_line(self):
         try:
             self._nexttime, self._nextpdirx, self._nextpdiry = \
-                self._file.readline().split()
+                self._demofile.readline().split()
         except ValueError:
-            self._file.close()
-            self._file = None
+            self._demofile.close()
+            self._demofile = None
             self._mode = GameInputMode.NORMAL
             return
         self._nexttime = float(self._nexttime)
@@ -540,14 +544,41 @@ class MapScreen():
         self._tb.internal.colormod(display.make_color(255, 255, 255, 96))
         self._dl.replace(self._tbindex, self._tb.draw)
 
-    def __init__(self, state, name, mode=GameInputMode.NORMAL, file=None):
+    def _get_demo_filename(self):
+        return "{}.demo".format(self._demoname)
+
+    def __init__(self, state, name, mode=GameInputMode.NORMAL, demoname=None):
         self._state = state
-        settings, self._descs, self._maps, self._layers, _, _ = layers.load_map(name)
-        self._params = None
+        self._curtime = 0.0
+        self._mode = mode
+        self._playstop = False
+        self._pause = False
+        self._mapname = name
+        self._demoname = demoname
+        self._demofile = None
+        if self._mode == GameInputMode.PLAYSTOP:
+            self._playstop = True
+            self._mode = GameInputMode.PLAY
+        elif self._mode == GameInputMode.RECORD:
+            # start from the beginning, avoid saving maps from a recording
+            # from the beginning.
+            self._demofile = open(self._get_demo_filename(), 'w')
+        elif self._mode == GameInputMode.RECORDPAUSE:
+            self._pause = True
+            self._mode = GameInputMode.RECORD
+        if self._mode == GameInputMode.PLAY:
+            if self._demoname is None:
+                self._demoname = self._mapname
+            self._demofile = open(self._get_demo_filename(), 'r')
+            self._lasttime = 0
+            self._step = False
+            self._read_demo_line()
+        settings, self._descs, self._maps, self._layers, _, _ = layers.load_map(self._mapname)
+        self._solids = None
         # get the params tilemap out
         for num, desc in enumerate(self._descs):
             if desc.name == 'solids':
-                self._params = (self._descs[num], self._maps[num])
+                self._solids = (self._descs[num], self._maps[num])
                 del self._descs[num]
                 del self._maps[num]
                 # take out layers which display this tilemap
@@ -565,10 +596,10 @@ class MapScreen():
                     elif layer.tilemap > num:
                         layer.tilemap -= 1
                 break
-        if self._params is None:
-            raise ValueError("No 'params' map found.")
-        self._tw = self._params[0].tw
-        self._th = self._params[0].th
+        if self._solids is None:
+            raise ValueError("No 'solids' map found.")
+        self._tw = self._solids[0].tw
+        self._th = self._solids[0].th
         for layer in self._layers:
             layer.scalex = 1.0
             layer.scaley = 1.0
@@ -579,34 +610,35 @@ class MapScreen():
         playertm.map(0, 0, 1, 1, 1, array.array('I', (0,)))
         playertm.update()
         self._playerl = playertm.layer("Player Layer")
-        self._view = None
-        self._pdirx = 0
-        self._pdiry = 0
-        self._pstate = PlayerState.AIR
-        self._pspeedx = 0.0
-        self._pspeedy = 0.0
+        # maybe have some global state container later i guess.
+        try:
+            self._pdirx = int(settings['player_dir_x'])
+        except KeyError:
+            self._pdirx = 0
+        try:
+            self._pdiry = int(settings['player_dir_y'])
+        except KeyError:
+            self._pdiry = 0
+        try:
+            self._pstate = PlayerState(int(settings['player_state']))
+        except KeyError:
+            self._pstate = PlayerState.AIR
+        try:
+            self._pspeedx = float(settings['player_speed_x'])
+        except KeyError:
+            self._pspeedx = 0.0
+        try:
+            self._pspeedy = float(settings['player_speed_y'])
+        except KeyError:
+            self._pspeedy = 0.0
         self._playerx = float(settings['player_x'])
         self._playery = float(settings['player_y'])
         self._move_player()
-        self._mode = mode
-        self._curtime = 0
-        self._playstop = False
-        self._file = None
-        if self._mode == GameInputMode.PLAYSTOP:
-            self._playstop = True
-            self._mode = GameInputMode.PLAY
-        if self._mode == GameInputMode.RECORD:
-            self._file = open(file, 'w')
-        elif self._mode == GameInputMode.PLAY:
-            self._file = open(file, 'r')
-            self._lasttime = 0
-            self._pause = False
-            self._step = False
-            self._read_demo_line()
         self._dl = display.DisplayList(self._state.ll)
         self._viewindex = self._dl.append(None)
         self._dl.append(self._playerl)
         self._tbindex = self._dl.append(None)
+        self._view = None
         self._build_screen()
 
     def active(self):
@@ -620,7 +652,7 @@ class MapScreen():
         if self._mode == GameInputMode.PLAY:
             if event.type == SDL_KEYDOWN:
                 if event.key.keysym.sym == SDLK_ESCAPE:
-                    self._file.close()
+                    self._demofile.close()
                     self._state.stop()
                 elif event.key.keysym.sym == SDLK_PERIOD:
                     self._pause = True
@@ -636,8 +668,8 @@ class MapScreen():
                 elif event.key.keysym.sym == SDLK_SPACE:
                     self._pdiry = -1
                 elif event.key.keysym.sym == SDLK_ESCAPE:
-                    if self._file is not None:
-                        self._file.close()
+                    if self._demofile is not None:
+                        self._demofile.close()
                     self._state.stop()
             elif event.type == SDL_KEYUP:
                 if event.key.keysym.sym == SDLK_LEFT:
@@ -646,8 +678,20 @@ class MapScreen():
                 elif event.key.keysym.sym == SDLK_RIGHT:
                     if self._pdirx > 0:
                         self._pdirx = 0
+        if self._mode == GameInputMode.RECORD:
+            if event.type == SDL_KEYDOWN and event.key.repeat == 0:
+                if event.key.keysym.sym == SDLK_r:
+                    if not self._pause:
+                        self._pause = True
+                        self._demofile.close()
+                        self._demofile = None
+                    else:
+                        self._pause = False
 
     def _do_movement(self, time):
+        if self._mode == GameInputMode.PLAY:
+            print("--- {} {}".format(time, self._state.frameTime))
+
         accel = PLAYER_ACCEL
         braking = PLAYER_BRAKING
         if self._pstate == PlayerState.AIR:
@@ -657,18 +701,16 @@ class MapScreen():
             if self._pspeedx > 0.0:
                 self._pspeedx /= braking
             else:
-                if not self._collision_left():
-                    self._pspeedx -= time * \
-                        ((PLAYER_MAXSPEED + self._pspeedx) / PLAYER_MAXSPEED) * \
-                        accel
+                self._pspeedx -= time * \
+                    ((PLAYER_MAXSPEED + self._pspeedx) / PLAYER_MAXSPEED) * \
+                    accel
         elif self._pdirx > 0:
             if self._pspeedx < 0.0:
                 self._pspeedx /= braking
             else:
-                if not self._collision_right():
-                    self._pspeedx += time * \
-                        ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
-                        accel
+                self._pspeedx += time * \
+                    ((PLAYER_MAXSPEED - self._pspeedx) / PLAYER_MAXSPEED) * \
+                    accel
         else:
             self._pspeedx /= braking
         if abs(self._pspeedx) < PLAYER_MINSPEED:
@@ -687,8 +729,6 @@ class MapScreen():
         self._move_player()
         self._update_scroll()
 
-        if self._mode == GameInputMode.PLAY:
-            print("--- {} {}".format(time, self._state.frameTime))
         status, _, _, _ = textbox.wrap_text("FT:  {:.3}\nCPU: {:.3}\nPX:  {:.3}\nPY:  {:.3}\nPSX: {:.3}\nPSY: {:.3}".format(time, self._state.frameTime, self._playerx, self._playery, self._pspeedx, self._pspeedy), 32, 6)
         self._tb.clear(0, 0, 32, 6)
         self._tb.put_text(status)
@@ -708,10 +748,29 @@ class MapScreen():
 
     def update(self, time):
         if self._mode == GameInputMode.RECORD:
-            self._curtime += time
-            self._file.write("{} {} {}\n".format(self._curtime,
-                                                 self._pdirx,
-                                                 self._pdiry))
+            if not self._pause:
+                if self._demofile is None:
+                    self._demofile = open(self._get_demo_filename(), 'w')
+                    settings = dict()
+                    settings['player_dir_x'] = self._pdirx
+                    settings['player_dir_y'] = self._pdiry
+                    settings['player_state'] = self._pstate.value
+                    settings['player_speed_x'] = self._pspeedx
+                    settings['player_speed_y'] = self._pspeedy
+                    settings['player_x'] = self._playerx
+                    settings['player_y'] = self._playery
+                    descs = self._descs.copy()
+                    descs.append(self._solids[0])
+                    maps = self._maps.copy()
+                    maps.append(self._solids[1])
+                    layers.save_map(self._demoname, settings,
+                                    descs, maps, self._layers,
+                                    None, None)
+                    self._curtime = 0.0
+                self._curtime += time
+                self._demofile.write("{} {} {}\n".format(self._curtime,
+                                                         self._pdirx,
+                                                         self._pdiry))
         elif self._mode == GameInputMode.PLAY:
             if self._pause:
                 if self._step == True:
@@ -885,18 +944,35 @@ def do_main(window, renderer, pixfmt):
                       layers.FONT_WIDTH, layers.FONT_HEIGHT,
                       layers.FONT_SCALE)
     mode = GameInputMode.NORMAL
-    file = None
-    if len(argv) >= 3:
-        if argv[1] == 'record':
-            mode = GameInputMode.RECORD
-            file = argv[2]
-        elif argv[1] == 'play':
-            mode = GameInputMode.PLAY
-            file = argv[2]
-        elif argv[1] == 'playstop':
-            mode = GameInputMode.PLAYSTOP
-            file = argv[2]
-    mapscreen = MapScreen(state, "maps/Example", mode, file)
+    mapfile = DEFAULT_MAP
+    demofile = None
+    try:
+        if len(argv) == 2:
+            mapfile = argv[1]
+        elif len(argv) >= 3:
+            demofile = argv[2]
+            if argv[1] == 'record':
+                mapfile = argv[3]
+                mode = GameInputMode.RECORD
+            elif argv[1] == 'recordpause':
+                mapfile = argv[3]
+                mode = GameInputMode.RECORDPAUSE
+            elif argv[1] == 'play':
+                mapfile = demofile
+                if len(argv) > 3:
+                    mapfile = argv[3]
+                mode = GameInputMode.PLAY
+            elif argv[1] == 'playstop':
+                mapfile = demofile
+                if len(argv) > 3:
+                    mapfile = argv[3]
+                mode = GameInputMode.PLAYSTOP
+            else:
+                raise ValueError("Invalid mode {}".format(argv[1]))
+    except IndexError:
+        raise ValueError("Record modes need a demo file name and a map file name.")
+
+    mapscreen = MapScreen(state, mapfile, mode, demofile)
     state.active_screen(mapscreen)
 
     while state.running:

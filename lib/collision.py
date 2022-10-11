@@ -88,43 +88,20 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
     print("{} {}".format(dx, dy))
     rx = dx
     ry = dy
-    o1 = t1
-    o2 = t2
-    o3 = t3
-    o4 = t4
     # assure the leading edge detects the collision with the part of the box
     # which isn't necessarily in the way of the ray, this assumes the sprite is
     # the tile size or larger!
     # pass None for no change, and just cast the ray.
     if edge == SpriteEdge.Bottom or edge == SpriteEdge.Top:
-        t1 = o1 or o2
+        t1 = t1 or t2
         t2 = t1
-        t3 = o3 or o4
+        t3 = t3 or t4
         t4 = t3
     elif edge == SpriteEdge.Left or edge == SpriteEdge.Right:
         t1 = o1 or o3
         t3 = t1
-        t2 = o2 or o4
+        t2 = t2 or t4
         t4 = t2
-    elif edge == SpriteEdge.TopLeft:
-        # i know this is a bit redundant but it makes what its doing a little
-        # more obvious, which is, combining the rows and columns of the topleft
-        # quadrant together
-        t1 = (o1 or o2) or (o1 or o3)
-        t2 = o2 or o4
-        t3 = o3 or o4
-    elif edge == SpriteEdge.TopRight:
-        t2 = (o1 or o2) or (o2 or o4)
-        t1 = o1 or o3
-        t4 = o3 or o4
-    elif edge == SpriteEdge.BottomLeft:
-        t3 = (o1 or o3) or (o3 or o4)
-        t1 = o1 or o2
-        t4 = o2 or o4
-    elif edge == SpriteEdge.BottomRight:
-        t4 = (o2 or o4) or (o3 or o4)
-        t2 = o1 or o2
-        t3 = o1 or o3
     if dx < 0.0:
         slope = dy / dx
         if x == 0.0:
@@ -134,8 +111,16 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
             if y == 0.0:
                 y = th
             ydiff = -y
+            if edge == SpriteEdge.BottomLeft:
+                t3 = t1 or t3
+                t4 = t2 or t4
+            elif edge == SpriteEdge.TopRight:
+                t2 = t1 or t2
+                t4 = t3 or t4
             if x <= xb:
                 if y <= yb: # top left
+                    if edge == SpriteEdge.TopLeft:
+                        t1 = t1 or t2 or t3
                     if dx < xdiff or dy < ydiff:
                         if slope * xdiff < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -144,6 +129,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xdiff
                             ty = slope * xdiff
                 else: # bottom left
+                    if edge == SpriteEdge.TopLeft:
+                        t3 = t3 or t4
                     if dx < xdiff or y + dy < yb:
                         if y + (slope * xdiff) < yb:
                             ry = yb - y
@@ -153,6 +140,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * xdiff
             else:
                 if y <= yb: # top right
+                    if edge == SpriteEdge.TopLeft:
+                        t2 = t2 or t4
                     if x + dx < xb or dy < ydiff:
                         if slope * (xb - x) < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -170,8 +159,16 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * rx
         elif dy > 0.0:
             ydiff = th - y
+            if edge == SpriteEdge.TopLeft:
+                t3 = t1 or t3
+                t4 = t2 or t4
+            elif edge == SpriteEdge.BottomRight:
+                t2 = t1 or t2
+                t4 = t3 or t4
             if x <= xb:
                 if y < yb:
+                    if edge == SpriteEdge.BottomLeft:
+                        t1 = t1 or t2
                     if dx < xdiff or y + dy > yb:
                         if slope * xdiff > yb:
                             ry = yb - y
@@ -180,6 +177,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xdiff
                             ty = slope * xdiff
                 else:
+                    if edge == SpriteEdge.BottomLeft:
+                        t3 = t1 or t3 or t4
                     if dx < xdiff or dy > ydiff:
                         if slope * xdiff > ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -190,13 +189,15 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
             else:
                 if y < yb:
                     if x + dx < xb or y + dy > yb:
-                        if slope * (xb - x) > yb:
+                        if slope * (xb - x) + y > yb:
                             ry = yb - y
                             rx = (1.0 / slope) * ry
                         else:
                             rx = xb - x
                             ry = slope * rx
                 else:
+                    if edge == SpriteEdge.BottomLeft:
+                        t4 = t2 or t4
                     if x + dx < xb or dy > ydiff:
                         if slope * (xb - x) > ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -205,6 +206,12 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xb - x
                             ry = slope * rx
         else:
+            if edge == SpriteEdge.TopLeft:
+                t1 = t1 or t3
+                t2 = t2 or t4
+            elif edge == SpriteEdge.BottomLeft:
+                t3 = t1 or t3
+                t4 = t2 or t4
             if x <= xb:
                 if dx < xdiff:
                     rx = xdiff
@@ -218,8 +225,16 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
             if y == 0.0:
                 y = th
             ydiff = -y
+            if edge == SpriteEdge.TopLeft:
+                t1 = t1 or t2
+                t3 = t3 or t4
+            elif edge == SpriteEdge.BottomRight:
+                t3 = t1 or t3
+                t4 = t2 or t4
             if x < xb:
                 if y <= yb:
+                    if edge == SpriteEdge.TopRight:
+                        t1 = t1 or t3
                     if x + dx > xb or dy < ydiff:
                         if slope * (xb - x) < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -237,6 +252,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * rx
             else:
                 if y <= yb:
+                    if edge == SpriteEdge.TopRight:
+                        t2 = t1 or t2 or t4
                     if dx > xdiff or dy < ydiff:
                         if slope * xdiff < ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -245,6 +262,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xdiff
                             ry = slope * xdiff
                 else:
+                    if edge == SpriteEdge.TopRight:
+                        t4 = t3 or t4
                     if dx > xdiff or y + dy < yb:
                         if y + (slope * xdiff) < yb:
                             ry = yb - y
@@ -254,6 +273,12 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * xdiff
         elif dy > 0.0:
             ydiff = th - y
+            if edge == SpriteEdge.BottomLeft:
+                t1 = t1 or t2
+                t3 = t3 or t4
+            elif edge == SpriteEdge.TopRight:
+                t1 = t1 or t3
+                t2 = t2 or t4
             if x < xb:
                 if y < yb:
                     if x + dx > xb or y + dy > yb:
@@ -264,6 +289,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xb - x
                             ty = slope * rx
                 else:
+                    if edge == SpriteEdge.BottomRight:
+                        t3 = t1 or t3
                     if x + dx > xb or dy > ydiff:
                         if slope * (xb - x) > ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -273,6 +300,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             ry = slope * rx
             else:
                 if y < yb:
+                    if edge == SpriteEdge.BottomRight:
+                        t2 = t1 or t2
                     if dx > xdiff or y + dy > yb:
                         if y + (slope * xdiff) > yb:
                             ry = yb - y
@@ -281,6 +310,8 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xdiff
                             ry = slope * xdiff
                 else:
+                    if edge == SpriteEdge.BottomRight:
+                        t4 = t2 or t3 or t4
                     if dx > xdiff or dy > ydiff:
                         if slope * xdiff > ydiff:
                             rx = (1.0 / slope) * ydiff
@@ -289,6 +320,12 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                             rx = xdiff
                             ry = slope * xdiff
         else:
+            if edge == SpriteEdge.TopRight:
+                t1 = t1 or t3
+                t2 = t2 or t4
+            elif edge == SpriteEdge.BottomRight:
+                t3 = t1 or t3
+                t4 = t2 or t4
             if x < xb:
                 if x + dx > xb:
                     rx = xb - x
@@ -300,14 +337,26 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
             if y == 0.0:
                 y = th
             ydiff = -y
+            if edge == SpriteEdge.TopLeft:
+                t1 = t1 or t2
+                t3 = t3 or t4
+            elif edge == SpriteEdge.TopRight:
+                t2 = t1 or t2
+                t4 = t3 or t4
             if y <= yb:
-                if dy <= ydiff:
+                if dy < ydiff:
                     ry = ydiff
             else:
                 if y + dy < yb:
                     ry = yb - y
         elif dy > 0.0:
             ydiff = th - y
+            if edge == SpriteEdge.BottomLeft:
+                t1 = t1 or t2
+                t3 = t3 or t4
+            elif edge == SpriteEdge.BottomRight:
+                t2 = t1 or t2
+                t4 = t3 or t4
             if y < yb:
                 if y + dy > yb:
                     ry = yb - y
@@ -316,16 +365,52 @@ def _box_hit(x, y, dx, dy, tw, th, edge, xb, yb, t1, t2, t3, t4):
                     ry = ydiff
         else:
             raise _NoHit()
-    if x < xb:
-        if y < yb:
-            return t1, rx, ry
+    if dx < 0:
+        if dy < 0:
+            if x <= xb:
+                if y <= yb:
+                    return t1, rx, ry
+                else:
+                    return t3, rx, ry
+            else:
+                if y <= yb:
+                    return t2, rx, ry
+                else:
+                    return t4, rx, ry
         else:
-            return t2, rx, ry
+            if x <= xb:
+                if y < yb:
+                    return t1, rx, ry
+                else:
+                    return t3, rx, ry
+            else:
+                if y < yb:
+                    return t2, rx, ry
+                else:
+                    return t4, rx, ry
     else:
-        if y < yb:
-            return t3, rx, ry
+        if dy < 0:
+            if x < xb:
+                if y <= yb:
+                    return t1, rx, ry
+                else:
+                    return t3, rx, ry
+            else:
+                if y <= yb:
+                    return t2, rx, ry
+                else:
+                    return t4, rx, ry
         else:
-            return t4, rx, ry
+            if x < xb:
+                if y < yb:
+                    return t1, rx, ry
+                else:
+                    return t3, rx, ry
+            else:
+                if y < yb:
+                    return t2, rx, ry
+                else:
+                    return t4, rx, ry
 
 # some highschool math I haven't done in a while and never fully grasped...
 # y = ax + b
@@ -360,7 +445,6 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
     # if the leading edge of the sprite is towards the "point" of a slope,
     # treat the collision as a rectangle rather than a slope so the corner
     # aligning with the top of the slope won't pass by the slope
-    """
     if a > 0:
         if edge == SpriteEdge.TopLeft or \
            edge == SpriteEdge.Top or \
@@ -368,30 +452,33 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
            edge == SpriteEdge.BottomRight or \
            edge == SpriteEdge.Bottom or \
            edge == SpriteEdge.Right:
-            if a > th / tw:
+            if a == 1.0:
+                return _solid_hit(x, y, dx, dy, tw, th, True)
+            elif a > th / tw:
                 return _box_hit(x, y, dx, dy, tw, th, edge,
-                                (th - b) / a, 0.5,
+                                (th - b) / a, th * 0.5,
                                 t2, t1, t2, t1)
             else:
                 return _box_hit(x, y, dx, dy, tw, th, edge,
-                                0.5, (tw * a) + b,
+                                tw * 0.5, (tw * a) + b,
                                 t1, t1, t2, t2)
-    else: # a <= 0:
+    elif a < 0:
         if edge == SpriteEdge.TopRight or \
            edge == SpriteEdge.Top or \
            edge == SpriteEdge.Right or \
            edge == SpriteEdge.BottomLeft or \
            edge == SpriteEdge.Bottom or \
            edge == SpriteEdge.Left:
-            if a < -th / tw:
+            if a == -1.0:
+                return _solid_hit(x, y, dx, dy, tw, th, True)
+            elif a < -th / tw:
                 return _box_hit(x, y, dx, dy, tw, th, edge,
-                                b / a, 0.5,
+                                b / a, th * 0.5,
                                 t2, t1, t2, t1)
             else:
                 return _box_hit(x, y, dx, dy, tw, th, edge,
-                                0.5, b,
+                                tw * 0.5, b,
                                 t1, t1, t2, t2)
-                            """
     if dx < 0.0:
         slope = dy / dx
         # set to tw so when it hits and comes back to here, it'll continue
@@ -528,9 +615,6 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
                 ry = ydiff
         else:
             raise _NoHit()
-        """
-        This might be overkill and it seems to work otherwise and i'm not sure
-        what this was originally solving
     if y > a * x + b:
         if y + ry < a * (x + rx) + b:
             return t1, rx, ry
@@ -541,11 +625,6 @@ def _slope_hit(x, y, dx, dy, tw, th, edge, a, b, t1, t2):
             return t1, rx, ry
         else:
             return t2, rx, ry
-       """ 
-    if y > a * x + b:
-        return t2, rx, ry
-    else:
-        return t1, rx, ry
 
 TILE_CALLS = [
     lambda x, y, dx, dy, tw, th, edge: \
@@ -616,28 +695,28 @@ TILE_CALLS = [
     # start basic partial blocks
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, True, False, True, False),
+                 tw * 0.5, th * 0.5, True, False, True, False),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, False, True, False, True),
+                 tw * 0.5, th * 0.5, False, True, False, True),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, True, True, False, False),
+                 tw * 0.5, th * 0.5, True, True, False, False),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, False, False, True, True),
+                 tw * 0.5, th * 0.5, False, False, True, True),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, True, False, False, False),
+                 tw * 0.5, th * 0.5, True, False, False, False),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, False, True, False, False),
+                 tw * 0.5, th * 0.5, False, True, False, False),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, False, False, True, False),
+                 tw * 0.5, th * 0.5, False, False, True, False),
     lambda x, y, dx, dy, tw, th, edge: \
         _box_hit(x, y, dx, dy, tw, th, edge,
-                 0.5, 0.5, False, False, False, True),
+                 tw * 0.5, th * 0.5, False, False, False, True),
 ]
 
 def first_hit(x, y, dx, dy, tw, th, val, edge, buffer, bw):
